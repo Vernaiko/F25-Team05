@@ -1,3 +1,5 @@
 from django.shortcuts import render
 
-# Create your views here.
+# Rendering the home login page:
+def homepage(request):
+    return render(request, 'homepage.html')
