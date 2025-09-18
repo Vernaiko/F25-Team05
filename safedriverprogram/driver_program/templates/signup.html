@@ -4,24 +4,50 @@
 
 {% block content %}
 
-<div class="field">
-    <label class="label">Username</label>
-    <div class="control">
-        <input class="input" type="text" placeholder="Enter a username">
+<form action="{% url 'signup' %}" method="POST" enctype="multipart/form-data">
+    {% csrf_token %}
+
+    <div class="field">
+        <label class="label">Username</label>
+        <div class="control">
+            <input class="input" type="text" name="username" placeholder="Enter a username" required>
+        </div>
     </div>
-    <label class="label">Email</label>
-    <div class="control">
-        <input class="input" type="email" placeholder="Enter your email">
+
+    <div class="field">
+        <label class="label">Email</label>
+        <div class="control">
+            <input class="input" type="email" name="email" placeholder="Enter your email" required>
+        </div>
     </div>
-    <label class="label">Password</label>
-    <div class="control">
-        <input class="input" type="password" placeholder="Enter a password">
+
+    <div class="field">
+        <label class="label">Password</label>
+        <div class="control">
+            <input class="input" type="password" name="password" placeholder="Enter a password" required>
+        </div>
     </div>
-    <div class="control">
-        <input class="input" type="password" placeholder="Re-enter your password">
+
+    <div class="field">
+        <label class="label">Confirm Password</label>
+        <div class="control">
+            <input class="input" type="password" name="password2" placeholder="Re-enter your password" required>
+        </div>
     </div>
-    <div class="control" style="margin-top: 1em;">
-        <button class="button is-link">Sign Up</button>
+
+    <!-- ✅ Profile picture upload -->
+    <div class="field">
+        <label class="label">Profile Picture</label>
+        <div class="control">
+            <input class="input" type="file" name="avatar" accept="image/*">
+        </div>
     </div>
+
+    <div class="field" style="margin-top: 1em;">
+        <div class="control">
+            <button class="button is-link" type="submit">Sign Up</button>
+        </div>
+    </div>
+</form>
 
 {% endblock %}
