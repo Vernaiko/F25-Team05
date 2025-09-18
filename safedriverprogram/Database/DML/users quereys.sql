@@ -139,3 +139,38 @@ UPDATE users
 SET first_name = %s, last_name = %s, phone_number = %s, 
     address = %s, avatar_image = %s, updated_at = CURRENT_TIMESTAMP 
 WHERE userID = %s AND is_active = true;
+-- ...existing code...
+
+-- 6. FORGOT USERNAME/Email/phonenumber on login QUERIES
+-- Retrieve username by email:
+SELECT username, first_name, last_name 
+FROM users 
+WHERE email = %s AND is_active = true;
+
+-- Retrieve username by phone number:
+SELECT username, first_name, last_name 
+FROM users 
+WHERE phone_number = %s AND is_active = true;
+
+-- Retrieve username by email or phone number (combined query):
+SELECT username, first_name, last_name, email, phone_number
+FROM users 
+WHERE (email = %s OR phone_number = %s) AND is_active = true;
+
+-- Check if email exists for username recovery:
+SELECT COUNT(*) as count, username
+FROM users 
+WHERE email = %s AND is_active = true
+GROUP BY username;
+
+-- Check if phone number exists for username recovery:
+SELECT COUNT(*) as count, username
+FROM users 
+WHERE phone_number = %s AND is_active = true
+GROUP BY username;
+
+-- Get user details for username recovery verification:
+SELECT userID, username, email, phone_number, first_name, last_name
+FROM users 
+WHERE email = %s AND is_active = true;
+
