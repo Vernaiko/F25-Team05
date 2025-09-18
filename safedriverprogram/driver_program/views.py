@@ -9,3 +9,6 @@ def login_page(request):
 
 def signup_page(request):
     return render(request, 'signup.html')
+
+def account_page(request):
+    return render(request, 'account_page.html')
