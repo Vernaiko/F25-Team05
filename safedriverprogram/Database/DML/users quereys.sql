@@ -6,10 +6,18 @@
 -- Check user credentials (username/email and password)
 -- Query for login by username:
 
+-- ==============================================
+-- USER AUTHENTICATION QUERIES FOR DJANGO
+-- ==============================================
+
+-- 1. USER LOGIN QUERIES
+-- Check user credentials (username/email and password)
+-- Query for login by username:
+
 SELECT userID, username, email, password_hash, first_name, last_name, 
        account_type, is_active, is_email_verified, last_login_at
 FROM users 
-WHERE username = %s AND is_active = true;
+WHERE username = %s AND password_hash = SHA2(%s, 256) AND is_active = true;
 
 
 -- Query for login by email:
@@ -17,8 +25,20 @@ WHERE username = %s AND is_active = true;
 SELECT userID, username, email, password_hash, first_name, last_name, 
        account_type, is_active, is_email_verified, last_login_at
 FROM users 
-WHERE email = %s AND is_active = true;
+WHERE email = %s AND password_hash = SHA2(%s, 256) AND is_active = true;
 
+-- Alternative login queries that separate credential check from password verification:
+-- Get user credentials by username (for separate password verification):
+SELECT userID, username, email, password_hash, first_name, last_name, 
+       account_type, is_active, is_email_verified, last_login_at
+FROM users 
+WHERE username = %s AND is_active = true;
+
+-- Get user credentials by email (for separate password verification):
+SELECT userID, username, email, password_hash, first_name, last_name, 
+       account_type, is_active, is_email_verified, last_login_at
+FROM users 
+WHERE email = %s AND is_active = true;
 
 -- Update last login timestamp after successful login:
 
@@ -37,11 +57,10 @@ WHERE userID = %s;
 
 
 -- 3. ACCOUNT CREATION QUERIES
--- Insert new user account:
+-- Insert new user account with encrypted password:
 INSERT INTO users (username, email, password_hash, first_name, last_name, 
                    phone_number, address, account_type, DOB, is_active, is_email_verified)
-VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, true, false);
-*/
+VALUES (%s, %s, SHA2(%s, 256), %s, %s, %s, %s, %s, %s, true, false);
 
 -- Check if username already exists:
 
@@ -83,10 +102,10 @@ WHERE prt.token = %s
   AND u.is_active = true;
 
 
--- Update password with reset token:
+-- Update password with reset token (encrypts new password):
 
 UPDATE users 
-SET password_hash = %s, updated_at = CURRENT_TIMESTAMP 
+SET password_hash = SHA2(%s, 256), updated_at = CURRENT_TIMESTAMP 
 WHERE userID = %s AND is_active = true;
 
 
@@ -139,7 +158,16 @@ UPDATE users
 SET first_name = %s, last_name = %s, phone_number = %s, 
     address = %s, avatar_image = %s, updated_at = CURRENT_TIMESTAMP 
 WHERE userID = %s AND is_active = true;
--- ...existing code...
+
+-- Update user password (encrypts new password):
+UPDATE users 
+SET password_hash = SHA2(%s, 256), updated_at = CURRENT_TIMESTAMP 
+WHERE userID = %s AND is_active = true;
+
+-- Verify current password for password change:
+SELECT COUNT(*) as count
+FROM users 
+WHERE userID = %s AND password_hash = SHA2(%s, 256) AND is_active = true;
 
 -- 6. FORGOT USERNAME/Email/phonenumber on login QUERIES
 -- Retrieve username by email:
