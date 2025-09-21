@@ -1,9 +1,35 @@
+from .models import Profile
+from django import forms
 from django.shortcuts import render
-
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.contrib.auth import update_session_auth_hash
+from django.contrib.auth.models import User
 
+
+# Form to allow drivers to add or update their delivery address in their profile
+class DeliveryAddressForm(forms.ModelForm):
+    class Meta:
+        model = Profile
+        fields = ['delivery_address']
+        widgets = {
+            'delivery_address': forms.Textarea(attrs={
+                'rows': 2,
+                'placeholder': 'Enter your delivery address'
+            })
+        }
+
+# Form for editing account info (phone, address, delivery address)
+class EditAccountForm(forms.ModelForm):
+    class Meta:
+        model = Profile
+        fields = ['phone_number', 'address', 'delivery_address']
+        widgets = {
+            'phone_number': forms.TextInput(attrs={'placeholder': 'Enter phone number'}),
+            'address': forms.Textarea(attrs={'rows': 2, 'placeholder': 'Enter your address'}),
+            'delivery_address': forms.Textarea(attrs={'rows': 2, 'placeholder': 'Enter your delivery address'}),
+        }
+        
 # Rendering the home login page:
 def homepage(request):
     return render(request, 'homepage.html')
@@ -22,8 +48,20 @@ def account_page(request):
 
 #@login_required
 def edit_account(request):
-    # For now, just render a placeholder template
-    return render(request, 'edit_account.html', {'user': request.user})
+    # Ensure user has a profile object
+    profile, created = Profile.objects.get_or_create(user=request.user)
+
+    if request.method == 'POST':
+        form = EditAccountForm(request.POST, instance=profile)
+        if form.is_valid():
+            form.save()
+            messages.success(request, "Account info updated successfully.")
+            return redirect('account')  # Redirect to account page after saving
+        else:
+            messages.error(request, "Please correct the errors below.")
+    else:
+        form = EditAccountForm(instance=profile)
+    return render(request, 'edit_account.html', {'form': form})
 
 
 # NEW Change Password View
@@ -51,3 +89,5 @@ def change_password(request):
 
         messages.success(request, "Password updated successfully.")
         return render(request, 'account_page.html', {'user': request.user})
+    
+    

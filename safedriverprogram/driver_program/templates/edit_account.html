@@ -1,6 +1,52 @@
 {% extends 'base.html' %}
 
+{% block title %}Edit Account{% endblock %}
+
 {% block content %}
-<h1>Edit Account Page</h1>
-<p>This is a placeholder for editing your account.</p>
+<section class="section">
+    <div class="container">
+        <h1 class="title has-text-centered">Edit Account</h1>
+        <div class="columns is-centered">
+            <div class="column is-half">
+                <form method="POST">
+                    {% csrf_token %}
+                    {{ form.non_field_errors }}
+                    
+                    <div class="field">
+                        {{ form.phone_number.label_tag }}
+                        <div class="control">
+                            {{ form.phone_number }}
+                        </div>
+                        {{ form.phone_number.errors }}
+                    </div>
+
+                    <div class="field">
+                        {{ form.address.label_tag }}
+                        <div class="control">
+                            {{ form.address }}
+                        </div>
+                        {{ form.address.errors }}
+                    </div>
+
+                    <div class="field">
+                        {{ form.delivery_address.label_tag }}
+                        <div class="control">
+                            {{ form.delivery_address }}
+                        </div>
+                        {{ form.delivery_address.errors }}
+                    </div>
+
+                    <div class="field is-grouped is-grouped-right">
+                        <div class="control">
+                            <button class="button is-primary is-rounded" type="submit">
+                                <span class="icon"><i class="fas fa-save"></i></span>
+                                <span>Save Changes</span>
+                            </button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</section>
 {% endblock %}
