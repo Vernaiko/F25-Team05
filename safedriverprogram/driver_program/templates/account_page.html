@@ -4,5 +4,70 @@
 
 {% block content %}
 <!--Write HTML for Account Page Here-->
-
+<section class="section">
+    <div class="container">
+        <h1 class="title has-text-centered">My Account</h1>
+        <div class="columns is-centered">
+            <div class="column is-half"> <!-- User Avatar -->
+                <div class="has-text-centered mb-4"> {% if user.avatar_image %} <figure
+                        class="image is-128x128 is-inline-block"> <img class="is-rounded" src="{{ user.avatar_image }}"
+                            alt="User Avatar"> </figure> {% else %} <span class="icon is-large"> <i
+                            class="fas fa-user-circle fa-5x"></i> </span> {% endif %} </div> <!-- User Info Card -->
+                <div class="card mb-5">
+                    <div class="card-content">
+                        <p><strong>User ID:</strong> {{ user.userID }}</p>
+                        <p><strong>Username:</strong> {{ user.username }}</p>
+                        <p><strong>Email:</strong> {{ user.email }}</p>
+                        <p><strong>First Name:</strong> {{ user.first_name }}</p>
+                        <p><strong>Last Name:</strong> {{ user.last_name }}</p>
+                        <p><strong>Phone Number:</strong> {{ user.phone_number }}</p>
+                        <p><strong>Address:</strong> {{ user.address }}</p>
+                        <p><strong>Account Type:</strong> {{ user.account_type|title }}</p>
+                        <p><strong>Date of Birth:</strong> {{ user.DOB }}</p>
+                        <p><strong>Active:</strong> {% if user.is_active %} <span class="tag is-success">Active</span>
+                            {% else %} <span class="tag is-danger">Inactive</span> {% endif %} </p>
+                        <p><strong>Email Verified:</strong> {% if user.is_email_verified %} <span
+                                class="tag is-success">Verified</span> {% else %} <span class="tag is-warning">Not
+                                Verified</span> {% endif %} </p>
+                        <p><strong>Last Login:</strong> {{ user.last_login_at }}</p>
+                        <p><strong>Account Created:</strong> {{ user.created_at }}</p>
+                        <p><strong>Last Updated:</strong> {{ user.updated_at }}</p>
+                    </div>
+                </div> <!-- Edit Account Button -->
+                <div class="has-text-centered mb-5"> <a href="{% url 'edit_account' %}"
+                        class="button is-info is-rounded"> <span class="icon"><i class="fas fa-edit"></i></span>
+                        <span>Edit Account</span> </a> </div> <!-- Change Password Form -->
+                <div class="card">
+                    <header class="card-header">
+                        <p class="card-header-title">Change Password</p>
+                    </header>
+                    <div class="card-content">
+                        <form method="POST" action="{% url 'change_password' %}"> {% csrf_token %} <div class="field">
+                                <label class="label">Current Password</label>
+                                <div class="control has-icons-left"> <input class="input" type="password"
+                                        name="current_password" required> <span class="icon is-small is-left"><i
+                                            class="fas fa-lock"></i></span> </div>
+                            </div>
+                            <div class="field"> <label class="label">New Password</label>
+                                <div class="control has-icons-left"> <input class="input" type="password"
+                                        name="new_password" required> <span class="icon is-small is-left"><i
+                                            class="fas fa-key"></i></span> </div>
+                            </div>
+                            <div class="field"> <label class="label">Confirm New Password</label>
+                                <div class="control has-icons-left"> <input class="input" type="password"
+                                        name="confirm_password" required> <span class="icon is-small is-left"><i
+                                            class="fas fa-key"></i></span> </div>
+                            </div>
+                            <div class="field is-grouped is-grouped-right">
+                                <div class="control"> <button class="button is-primary is-rounded"> <span
+                                            class="icon"><i class="fas fa-save"></i></span> <span>Update Password</span>
+                                    </button> </div>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
 {% endblock %}
