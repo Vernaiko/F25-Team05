@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Database Connection Status</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f5f5f5;
+            margin: 0;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            padding-bottom: 20px;
+            border-bottom: 2px solid #eee;
+        }
+        
+        .status-badge {
+            display: inline-block;
+            padding: 8px 16px;
+            border-radius: 20px;
+            color: white;
+            font-weight: bold;
+            margin: 10px 0;
+        }
+        
+        .status-connected {
+            background-color: #28a745;
+        }
+        
+        .status-failed {
+            background-color: #dc3545;
+        }
+        
+        .status-unknown {
+            background-color: #6c757d;
+        }
+        
+        .info-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin: 20px 0;
+        }
+        
+        .info-card {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            border-left: 4px solid #007bff;
+        }
+        
+        .info-card h3 {
+            margin-top: 0;
+            color: #333;
+            border-bottom: 1px solid #ddd;
+            padding-bottom: 10px;
+        }
+        
+        .info-item {
+            margin: 8px 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .info-label {
+            font-weight: bold;
+            color: #555;
+        }
+        
+        .info-value {
+            color: #333;
+            font-family: monospace;
+            background: #e9ecef;
+            padding: 2px 6px;
+            border-radius: 3px;
+        }
+        
+        .table-list {
+            max-height: 200px;
+            overflow-y: auto;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        
+        .table-item {
+            padding: 8px;
+            border-bottom: 1px solid #eee;
+            display: flex;
+            justify-content: space-between;
+        }
+        
+        .table-item:last-child {
+            border-bottom: none;
+        }
+        
+        .error-section {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 15px;
+            border-radius: 4px;
+            margin: 20px 0;
+            border-left: 4px solid #dc3545;
+        }
+        
+        .error-list {
+            margin: 0;
+            padding-left: 20px;
+        }
+        
+        .refresh-btn {
+            background: #007bff;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        
+        .refresh-btn:hover {
+            background: #0056b3;
+        }
+        
+        .timestamp {
+            text-align: center;
+            color: #666;
+            font-style: italic;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Database Connection Status</h1>
+            <div class="status-badge 
+                {% if status.connection_status == 'Connected' %}status-connected
+                {% elif status.connection_status == 'Failed' %}status-failed
+                {% else %}status-unknown{% endif %}">
+                {{ status.connection_status }}
+            </div>
+        </div>
+
+        {% if status.errors %}
+        <div class="error-section">
+            <h3>❌ Errors Detected</h3>
+            <ul class="error-list">
+                {% for error in status.errors %}
+                <li>{{ error }}</li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+
+        <div class="info-grid">
+            <!-- Database Information -->
+            <div class="info-card">
+                <h3>🗄️ Database Information</h3>
+                <div class="info-item">
+                    <span class="info-label">Engine:</span>
+                    <span class="info-value">{{ status.database_info.engine }}</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Database Name:</span>
+                    <span class="info-value">{{ status.database_info.name }}</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Host:</span>
+                    <span class="info-value">{{ status.database_info.host }}</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Port:</span>
+                    <span class="info-value">{{ status.database_info.port }}</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">User:</span>
+                    <span class="info-value">{{ status.database_info.user }}</span>
+                </div>
+                {% if status.database_info.version %}
+                <div class="info-item">
+                    <span class="info-label">Version:</span>
+                    <span class="info-value">{{ status.database_info.version }}</span>
+                </div>
+                {% endif %}
+            </div>
+
+            <!-- Performance Metrics -->
+            {% if status.performance_metrics %}
+            <div class="info-card">
+                <h3>⚡ Performance Metrics</h3>
+                {% for key, value in status.performance_metrics.items %}
+                <div class="info-item">
+                    <span class="info-label">{{ key|title }}:</span>
+                    <span class="info-value">{{ value }}</span>
+                </div>
+                {% endfor %}
+                {% if status.write_test %}
+                <div class="info-item">
+                    <span class="info-label">Write Test:</span>
+                    <span class="info-value">{{ status.write_test }}</span>
+                </div>
+                {% endif %}
+            </div>
+            {% endif %}
+
+            <!-- Table Information -->
+            {% if status.table_info %}
+            <div class="info-card">
+                <h3>📋 Table Information</h3>
+                <div class="info-item">
+                    <span class="info-label">Total Tables:</span>
+                    <span class="info-value">{{ status.table_info.total_tables }}</span>
+                </div>
+                <div class="info-item">
+                    <span class="info-label">Users Table:</span>
+                    <span class="info-value">
+                        {% if status.table_info.users_table_exists %}✅ Exists{% else %}❌ Missing{% endif %}
+                    </span>
+                </div>
+                {% if status.table_info.users_count is not None %}
+                <div class="info-item">
+                    <span class="info-label">Users Count:</span>
+                    <span class="info-value">{{ status.table_info.users_count }}</span>
+                </div>
+                {% endif %}
+                
+                {% if status.table_info.tables %}
+                <h4>Available Tables:</h4>
+                <div class="table-list">
+                    {% for table in status.table_info.tables %}
+                    <div class="table-item">
+                        <span>{{ table.name }}</span>
+                        <span>{{ table.rows }} rows</span>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+            </div>
+            {% endif %}
+        </div>
+
+        <div style="text-align: center; margin-top: 30px;">
+            <button class="refresh-btn" onclick="window.location.reload()">
+                🔄 Refresh Status
+            </button>
+            <a href="/" style="margin-left: 10px; color: #007bff; text-decoration: none;">
+                🏠 Back to Home
+            </a>
+        </div>
+
+        <div class="timestamp">
+            Last Updated: {{ status.timestamp }}
+        </div>
+    </div>
+
+    <!-- Debug Information (Remove in production) -->
+    <div style="margin-top: 50px; padding: 20px; background: #f0f0f0; border-radius: 5px;">
+        <h4>Debug Info:</h4>
+        <p><strong>Status Object:</strong> {{ status }}</p>
+        <p><strong>Connection Status:</strong> {{ status.connection_status }}</p>
+        <p><strong>Errors:</strong> {{ status.errors }}</p>
+    </div>
+</body>
+</html>
