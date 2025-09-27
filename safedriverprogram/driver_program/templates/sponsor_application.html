@@ -1,0 +1,58 @@
+{% extends 'base.html' %}
+
+{% block title %}Sponsor Application Form{% endblock %}
+
+{% block content %}
+
+<form action="{% url 'sponsor_application' %}" method="POST" enctype="multipart/form-data">
+    {% csrf_token %}
+
+    <div class="field">
+        <label class="label">First and Last Name</label>
+        <div class="control">
+            <input class="input" type="text" name="username" placeholder="Enter your full name" required>
+        </div>
+    </div>
+
+    <div class="field">
+        <label class="label">Email</label>
+        <div class="control">
+            <input class="input" type="email" name="email" placeholder="Enter your email" required>
+        </div>
+    </div>
+
+    <div class="field">
+        <label class="label">Password</label>
+        <div class="control">
+            <input class="input" type="password" name="password" placeholder="Enter a password" required>
+        </div>
+    </div>
+
+    <div class="field">
+        <label class="label">Confirm Password</label>
+        <div class="control">
+            <input class="input" type="password" name="password2" placeholder="Re-enter your password" required>
+        </div>
+    </div>
+
+    <div class="field">
+        <label class="label">Sponsor Organization</label>
+        <div class="control">
+            <div class="select is-fullwidth">
+                <select name="sponsor_org" required>
+                    <option value="">Select an organization</option>
+                    <option value="OrgA">Organization A</option>
+                    <option value="OrgB">Organization B</option>
+                </select>
+            </div>
+        </div>
+    </div>
+
+    <div class="field" style="margin-top: 1em;">
+        <div class="control">
+            <button class="button is-link" href="{% url 'success' %}" type="submit">Submit Application</button>
+        </div>
+    </div>
+</form>
+
+{% endblock %}

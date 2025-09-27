@@ -1,0 +1,13 @@
+{% extends 'base.html' %}
+
+{% block title %}Sponsor Application Form{% endblock %}
+
+{% block content %}
+<div class="notification is-primary">
+    <h1 class="title">Application Submitted Successfully!</h1>
+    <p>Thank you for applying to be a sponsor in the Safe Driver Program. We will review your application and get back to you shortly.</p>
+    <br>
+    <a class="button is-link" href="{% url 'homepage' %}">Return to Homepage</a>
+</div>
+
+{% endblock %}

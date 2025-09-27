@@ -44,6 +44,12 @@ def login_page(request):
 def signup_page(request):
     return render(request, 'signup.html')
 
+def sponsor_application(request):
+    return render(request, 'sponsor_application.html')
+
+def application_success(request):
+    return render(request, 'application_success.html')
+
 # Updated Account Page View (passes user to template)
 #@login_required
 def account_page(request):
