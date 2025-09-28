@@ -1,6 +1,6 @@
 {% extends 'base.html' %}
 
-{% block title %}Login{% endblock %}
+{% block title %}My Account{% endblock %}
 
 {% block content %}
 <!--Write HTML for Account Page Here-->
@@ -38,6 +38,15 @@
                                 <span class="tag is-warning">Not set</span>
                             {% endif %}
                         </p>
+
+                        <!-- Manage Addresses Button -->
+                        <div class="has-text-centered mb-5">
+                            <a href="{% url 'manage_addresses' %}" class="button is-primary is-rounded">
+                                <span class="icon"><i class="fas fa-map-marker-alt"></i></span>
+                                <span>Manage Addresses</span>
+                            </a>
+                        </div>
+
                         <p><strong>Account Type:</strong> {{ user.account_type|title }}</p>
                         <p><strong>Date of Birth:</strong> {{ user.DOB }}</p>
                         <p><strong>Active:</strong> 
@@ -110,3 +119,4 @@
     </div>
 </section>
 {% endblock %}
+

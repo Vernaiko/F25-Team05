@@ -1,6 +1,6 @@
-from .models import Profile
+from .models import Profile, DeliveryAddress
 from django import forms
-from django.shortcuts import render, redirect  # Add redirect import
+from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.contrib.auth import update_session_auth_hash
@@ -10,6 +10,10 @@ from django.db import connection
 from django.conf import settings
 import time
 import sys
+
+# ---------------------------
+# FORMS
+# ---------------------------
 
 # Form to allow drivers to add or update their delivery address in their profile
 class DeliveryAddressForm(forms.ModelForm):
@@ -34,6 +38,29 @@ class EditAccountForm(forms.ModelForm):
             'delivery_address': forms.Textarea(attrs={'rows': 2, 'placeholder': 'Enter your delivery address'}),
         }
         
+
+# Forms for delivery address management (CRUD)
+class AddDeliveryAddressForm(forms.ModelForm):
+    class Meta:
+        model = DeliveryAddress
+        fields = ['address']
+        widgets = {
+            'address': forms.Textarea(attrs={'rows': 2, 'placeholder': 'Enter new delivery address'})
+        }
+
+
+class EditDeliveryAddressForm(forms.ModelForm):
+    class Meta:
+        model = DeliveryAddress
+        fields = ['address']
+        widgets = {
+            'address': forms.Textarea(attrs={'rows': 2, 'placeholder': 'Update your delivery address'})
+        }
+
+# ---------------------------
+# BASIC PAGES
+# ---------------------------
+
 # Rendering the home login page:
 def homepage(request):
     return render(request, 'homepage.html')
@@ -50,28 +77,33 @@ def sponsor_application(request):
 def application_success(request):
     return render(request, 'application_success.html')
 
+# ---------------------------
+# ACCOUNT PAGES
+# ---------------------------
+
 # Updated Account Page View (passes user to template)
 #@login_required
 def account_page(request):
     return render(request, 'account_page.html', {'user': request.user})
 
-#@login_required
+@login_required
 def edit_account(request):
-    # Ensure user has a profile object
-    profile, created = Profile.objects.get_or_create(user=request.user)
+     # Ensure user has a profile object
+     profile, created = Profile.objects.get_or_create(user=request.user)
 
-    if request.method == 'POST':
-        form = EditAccountForm(request.POST, instance=profile)
-        if form.is_valid():
-            form.save()
-            messages.success(request, "Account info updated successfully.")
-            return redirect('account')  # Redirect to account page after saving
-        else:
+     if request.method == 'POST':
+         form = EditAccountForm(request.POST, instance=profile)
+         if form.is_valid():
+             form.save()
+             messages.success(request, "Account info updated successfully.")
+             return redirect('account')  # Redirect to account page after saving
+         else:
             messages.error(request, "Please correct the errors below.")
-    else:
-        form = EditAccountForm(instance=profile)
-    return render(request, 'edit_account.html', {'form': form})
+     else:
+         form = EditAccountForm(instance=profile)
+     return render(request, 'edit_account.html', {'form': form})
 
+    
 # NEW Change Password View
 @login_required
 def change_password(request):
@@ -97,6 +129,10 @@ def change_password(request):
 
         messages.success(request, "Password updated successfully.")
         return render(request, 'account_page.html', {'user': request.user})
+
+# ---------------------------
+# DATABASE STATUS PAGE
+# ---------------------------
 
 def database_status(request):
     """View to display database connection status"""
@@ -187,3 +223,52 @@ def database_status(request):
     
     # Return the render with debug
     return render(request, 'database_status.html', {'status': status_data})
+
+# ---------------------------
+# DELIVERY ADDRESS CRUD VIEWS
+# ---------------------------
+
+# View to manage all delivery addresses (list + add new)
+#@login_required
+def manage_addresses(request):
+    addresses = DeliveryAddress.objects.filter(user=request.user)
+
+    if request.method == 'POST' and 'add_address' in request.POST:
+        add_form = AddDeliveryAddressForm(request.POST)
+        if add_form.is_valid():
+            new_address = add_form.save(commit=False)
+            new_address.user = request.user
+            new_address.save()
+            messages.success(request, "New delivery address added!")
+            return redirect('manage_addresses')
+    else:
+        add_form = AddDeliveryAddressForm()
+
+    return render(request, 'manage_addresses.html', {
+        'addresses': addresses,
+        'add_form': add_form
+    })
+
+# View to edit a delivery address
+#@login_required
+def edit_address(request, address_id):
+    address_obj = get_object_or_404(DeliveryAddress, id=address_id, user=request.user)
+    if request.method == 'POST':
+        form = EditDeliveryAddressForm(request.POST, instance=address_obj)
+        if form.is_valid():
+            form.save()
+            messages.success(request, "Address updated successfully!")
+            return redirect('manage_addresses')
+    else:
+        form = EditDeliveryAddressForm(instance=address_obj)
+    return render(request, 'edit_address.html', {'form': form})
+
+# View to delete a delivery address
+#@login_required
+def delete_address(request, address_id):
+    address_obj = get_object_or_404(DeliveryAddress, id=address_id, user=request.user)
+    if request.method == 'POST':
+        address_obj.delete()
+        messages.success(request, "Address deleted successfully!")
+        return redirect('manage_addresses')
+    return render(request, 'delete_address.html', {'address': address_obj})

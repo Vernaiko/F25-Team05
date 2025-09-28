@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h2>My Delivery Addresses</h2>
+
+<!-- List all addresses -->
+<ul>
+    {% for address in addresses %}
+        <li>
+            {{ address.address }}
+            <a href="{% url 'edit_address' address.id %}">Edit</a> |
+            <a href="{% url 'delete_address' address.id %}">Delete</a>
+        </li>
+    {% empty %}
+        <li>No delivery addresses added yet.</li>
+    {% endfor %}
+</ul>
+
+<hr>
+
+<!-- Add new address form -->
+<h3>Add New Delivery Address</h3>
+<form method="POST">
+    {% csrf_token %}
+    {{ add_form.as_p }}
+    <button type="submit" name="add_address">Add Address</button>
+</form>
+
+{% endblock %}

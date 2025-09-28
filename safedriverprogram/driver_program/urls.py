@@ -11,4 +11,7 @@ urlpatterns = [
     path('database_status/', views.database_status, name='database_status'),
     path('sponsor-application/', views.sponsor_application, name='sponsor_application'),
     path('application-success/', views.application_success, name='success'),
+    path('addresses/', views.manage_addresses, name='manage_addresses'),
+    path('addresses/edit/<int:address_id>/', views.edit_address, name='edit_address'),
+    path('addresses/delete/<int:address_id>/', views.delete_address, name='delete_address'),
 ]
