@@ -1,15 +1,79 @@
 {% extends 'base.html' %}
 
-{% block title %}Safe Driver Program{% endblock %}
+{% block title %}Safe Driver Program - Home{% endblock %}
 
 {% block content %}
-    <section class="hero is-dark is-medium">
-        <div class="hero-body">
-            <div class="container has-text-centered">
-                <h1 class="title is-1">Safe Driver Program</h1>
-                <h2 class="subtitle is-4">Incentivizing You to Stay Safe</h2>
-            </div>
-        </div>
-    </section>
+<div class="hero is-primary">
+  <div class="hero-body">
+    <div class="container has-text-centered">
+      <h1 class="title">
+        Welcome to the Safe Driver Program
+      </h1>
+      <h2 class="subtitle">
+        Promoting safer roads through driver rewards and community sponsorship
+      </h2>
+    </div>
+  </div>
+</div>
 
+<div class="container" style="margin-top: 2rem;">
+  <div class="columns">
+    <div class="column">
+      <div class="card">
+        <div class="card-content">
+          <div class="media">
+            <div class="media-left">
+              <figure class="image is-48x48">
+                <i class="fas fa-car fa-2x has-text-primary"></i>
+              </figure>
+            </div>
+            <div class="media-content">
+              <p class="title is-4">For Drivers</p>
+              <p class="subtitle is-6">Join our program and earn rewards for safe driving</p>
+            </div>
+          </div>
+          <div class="content">
+            <p>Track your driving record, participate in safety programs, and get rewarded for maintaining a clean driving history.</p>
+            {% if not request.session.is_authenticated %}
+              <p><strong>Contact an administrator to get started!</strong></p>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <div class="column">
+      <div class="card">
+        <div class="card-content">
+          <div class="media">
+            <div class="media-left">
+              <figure class="image is-48x48">
+                <i class="fas fa-handshake fa-2x has-text-success"></i>
+              </figure>
+            </div>
+            <div class="media-content">
+              <p class="title is-4">For Sponsors</p>
+              <p class="subtitle is-6">Support safe driving in your community</p>
+            </div>
+          </div>
+          <div class="content">
+            <p>Partner with us to promote road safety and support responsible drivers in your area.</p>
+            <a href="{% url 'sponsor_application' %}" class="button is-success">
+              <span class="icon"><i class="fas fa-paper-plane"></i></span>
+              <span>Apply to Sponsor</span>
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  
+  {% if request.session.is_authenticated %}
+    <div class="notification is-info">
+      <p><strong>Welcome back, {{ request.session.first_name }}!</strong></p>
+      <p>You are logged in as a {{ request.session.account_type }}. 
+         <a href="{% url 'account_page' %}">Visit your account page</a> to manage your profile.</p>
+    </div>
+  {% endif %}
+</div>
 {% endblock %}

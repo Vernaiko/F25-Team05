@@ -1,122 +1,207 @@
 {% extends 'base.html' %}
 
-{% block title %}My Account{% endblock %}
+{% block title %}My Account - Safe Driver Program{% endblock %}
 
 {% block content %}
-<!--Write HTML for Account Page Here-->
-<section class="section">
-    <div class="container">
-        <h1 class="title has-text-centered">My Account</h1>
-        <div class="columns is-centered">
-            <div class="column is-half"> 
-                <!-- User Avatar -->
-                <div class="has-text-centered mb-4"> 
-                    {% if user.avatar_image %} 
-                        <figure class="image is-128x128 is-inline-block"> 
-                            <img class="is-rounded" src="{{ user.avatar_image }}" alt="User Avatar"> 
-                        </figure> 
-                    {% else %} 
-                        <span class="icon is-large"> <i class="fas fa-user-circle fa-5x"></i> </span> 
-                    {% endif %} 
-                </div> 
-                
-                <!-- User Info Card -->
-                <div class="card mb-5">
-                    <div class="card-content">
-                        <p><strong>User ID:</strong> {{ user.userID }}</p>
-                        <p><strong>Username:</strong> {{ user.username }}</p>
-                        <p><strong>Email:</strong> {{ user.email }}</p>
-                        <p><strong>First Name:</strong> {{ user.first_name }}</p>
-                        <p><strong>Last Name:</strong> {{ user.last_name }}</p>
-                        <p><strong>Phone Number:</strong> {{ user.phone_number }}</p>
-                        <p><strong>Address:</strong> {{ user.address }}</p>
-                        <!-- Delivery Address -->
-                        <p><strong>Delivery Address:</strong>
-                            {% if user.profile.delivery_address %}
-                                {{ user.profile.delivery_address }}
-                            {% else %}
-                                <span class="tag is-warning">Not set</span>
-                            {% endif %}
-                        </p>
-
-                        <!-- Manage Addresses Button -->
-                        <div class="has-text-centered mb-5">
-                            <a href="{% url 'manage_addresses' %}" class="button is-primary is-rounded">
-                                <span class="icon"><i class="fas fa-map-marker-alt"></i></span>
-                                <span>Manage Delivery Addresses</span>
-                            </a>
-                        </div>
-
-                        <p><strong>Account Type:</strong> {{ user.account_type|title }}</p>
-                        <p><strong>Date of Birth:</strong> {{ user.DOB }}</p>
-                        <p><strong>Active:</strong> 
-                            {% if user.is_active %} <span class="tag is-success">Active</span>
-                            {% else %} <span class="tag is-danger">Inactive</span> 
-                            {% endif %} 
-                        </p>
-                        <p><strong>Email Verified:</strong> 
-                            {% if user.is_email_verified %} <span class="tag is-success">Verified</span> 
-                            {% else %} <span class="tag is-warning">Not Verified</span> 
-                            {% endif %} 
-                        </p>
-                        <p><strong>Last Login:</strong> {{ user.last_login_at }}</p>
-                        <p><strong>Account Created:</strong> {{ user.created_at }}</p>
-                        <p><strong>Last Updated:</strong> {{ user.updated_at }}</p>
-                    </div>
-                </div> 
-
-                <!-- Edit Account Button -->
-                <div class="has-text-centered mb-5"> 
-                    <a href="{% url 'edit_account' %}" class="button is-info is-rounded"> 
-                        <span class="icon"><i class="fas fa-edit"></i></span>
-                        <span>Edit Account</span> 
-                    </a> 
-                </div> 
-
-                <!-- Change Password Form -->
-                <div class="card">
-                    <header class="card-header">
-                        <p class="card-header-title">Change Password</p>
-                    </header>
-                    <div class="card-content">
-                        <form method="POST" action="{% url 'change_password' %}"> 
-                            {% csrf_token %} 
-                            <div class="field">
-                                <label class="label">Current Password</label>
-                                <div class="control has-icons-left"> 
-                                    <input class="input" type="password" name="current_password" required> 
-                                    <span class="icon is-small is-left"><i class="fas fa-lock"></i></span> 
-                                </div>
-                            </div>
-                            <div class="field"> 
-                                <label class="label">New Password</label>
-                                <div class="control has-icons-left"> 
-                                    <input class="input" type="password" name="new_password" required> 
-                                    <span class="icon is-small is-left"><i class="fas fa-key"></i></span> 
-                                </div>
-                            </div>
-                            <div class="field"> 
-                                <label class="label">Confirm New Password</label>
-                                <div class="control has-icons-left"> 
-                                    <input class="input" type="password" name="confirm_password" required> 
-                                    <span class="icon is-small is-left"><i class="fas fa-key"></i></span> 
-                                </div>
-                            </div>
-                            <div class="field is-grouped is-grouped-right">
-                                <div class="control"> 
-                                    <button class="button is-primary is-rounded"> 
-                                        <span class="icon"><i class="fas fa-save"></i></span> 
-                                        <span>Update Password</span>
-                                    </button> 
-                                </div>
-                            </div>
-                        </form>
-                    </div>
-                </div>
-
+<div class="container">
+  <div class="columns is-centered">
+    <div class="column is-two-thirds">
+      <div class="box">
+        <h1 class="title has-text-centered">
+          <span class="icon is-large">
+            <i class="fas fa-user-circle fa-2x"></i>
+          </span>
+          <br>
+          My Account
+        </h1>
+        
+        {% if user %}
+        <div class="content">
+          <!-- Personal Information Section -->
+          <div class="box has-background-light">
+            <h2 class="subtitle">
+              <span class="icon has-text-primary">
+                <i class="fas fa-user"></i>
+              </span>
+              Personal Information
+            </h2>
+            
+            <div class="columns">
+              <div class="column">
+                <table class="table is-fullwidth">
+                  <tbody>
+                    <tr>
+                      <td><strong>User ID:</strong></td>
+                      <td>{{ user.user_id }}</td>
+                    </tr>
+                    <tr>
+                      <td><strong>Username:</strong></td>
+                      <td>{{ user.username|default:"Not set" }}</td>
+                    </tr>
+                    <tr>
+                      <td><strong>Email:</strong></td>
+                      <td>{{ user.email|default:"Not set" }}</td>
+                    </tr>
+                    <tr>
+                      <td><strong>First Name:</strong></td>
+                      <td>{{ user.first_name|default:"Not set" }}</td>
+                    </tr>
+                    <tr>
+                      <td><strong>Last Name:</strong></td>
+                      <td>{{ user.last_name|default:"Not set" }}</td>
+                    </tr>
+                    <tr>
+                      <td><strong>Phone Number:</strong></td>
+                      <td>{{ user.phone_number|default:"Not set" }}</td>
+                    </tr>
+                    <tr>
+                      <td><strong>Address:</strong></td>
+                      <td>{{ user.address|default:"Not set" }}</td>
+                    </tr>
+                    <tr>
+                      <td><strong>Delivery Address:</strong></td>
+                      <td>
+                        {% if user.delivery_address %}
+                          {{ user.delivery_address }}
+                        {% else %}
+                          <span class="tag is-warning">Not set</span>
+                          <br>
+                          <a href="{% url 'manage_addresses' %}" class="button is-info is-small" style="margin-top: 0.5rem;">
+                            <span class="icon"><i class="fas fa-map-marker-alt"></i></span>
+                            <span>Manage Delivery Addresses</span>
+                          </a>
+                        {% endif %}
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
             </div>
+          </div>
+          
+          <!-- Account Status Section -->
+          <div class="box has-background-primary-light">
+            <h2 class="subtitle">
+              <span class="icon has-text-primary">
+                <i class="fas fa-cog"></i>
+              </span>
+              Account Status
+            </h2>
+            
+            <div class="columns">
+              <div class="column">
+                <table class="table is-fullwidth">
+                  <tbody>
+                    <tr>
+                      <td><strong>Account Type:</strong></td>
+                      <td>
+                        <span class="tag {% if user.account_type == 'admin' %}is-danger{% elif user.account_type == 'sponsor' %}is-success{% else %}is-info{% endif %}">
+                          {{ user.account_type|capfirst }}
+                        </span>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td><strong>Date of Birth:</strong></td>
+                      <td>{{ user.date_of_birth|default:"Not set" }}</td>
+                    </tr>
+                    <tr>
+                      <td><strong>Active:</strong></td>
+                      <td>
+                        {% if user.is_active %}
+                          <span class="tag is-success">
+                            <span class="icon"><i class="fas fa-check"></i></span>
+                            <span>Active</span>
+                          </span>
+                        {% else %}
+                          <span class="tag is-danger">
+                            <span class="icon"><i class="fas fa-times"></i></span>
+                            <span>Inactive</span>
+                          </span>
+                        {% endif %}
+                      </td>
+                    </tr>
+                    <tr>
+                      <td><strong>Email Verified:</strong></td>
+                      <td>
+                        {% if user.email_verified %}
+                          <span class="tag is-success">
+                            <span class="icon"><i class="fas fa-check-circle"></i></span>
+                            <span>Verified</span>
+                          </span>
+                        {% else %}
+                          <span class="tag is-warning">
+                            <span class="icon"><i class="fas fa-exclamation-triangle"></i></span>
+                            <span>Not Verified</span>
+                          </span>
+                        {% endif %}
+                      </td>
+                    </tr>
+                    <tr>
+                      <td><strong>Last Login:</strong></td>
+                      <td>{{ user.last_login|default:"Never" }}</td>
+                    </tr>
+                    <tr>
+                      <td><strong>Account Created:</strong></td>
+                      <td>{{ user.created_at|default:"Unknown" }}</td>
+                    </tr>
+                    <tr>
+                      <td><strong>Last Updated:</strong></td>
+                      <td>{{ user.updated_at|default:"Unknown" }}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+          
+          <!-- Action Buttons -->
+          <div class="field is-grouped is-grouped-centered" style="margin-top: 2rem;">
+            <div class="control">
+              <a href="{% url 'edit_account' %}" class="button is-primary">
+                <span class="icon">
+                  <i class="fas fa-edit"></i>
+                </span>
+                <span>Edit Account</span>
+              </a>
+            </div>
+            <div class="control">
+              <a href="{% url 'change_password' %}" class="button is-info">
+                <span class="icon">
+                  <i class="fas fa-key"></i>
+                </span>
+                <span>Change Password</span>
+              </a>
+            </div>
+            <div class="control">
+              <a href="{% url 'manage_addresses' %}" class="button is-success">
+                <span class="icon">
+                  <i class="fas fa-map-marker-alt"></i>
+                </span>
+                <span>Manage Addresses</span>
+              </a>
+            </div>
+          </div>
+          
         </div>
+        {% else %}
+        <div class="notification is-danger">
+          <span class="icon">
+            <i class="fas fa-exclamation-triangle"></i>
+          </span>
+          <strong>Error:</strong> Unable to load account information. Please try logging in again.
+        </div>
+        
+        <div class="has-text-centered">
+          <a href="{% url 'login_page' %}" class="button is-primary">
+            <span class="icon">
+              <i class="fas fa-sign-in-alt"></i>
+            </span>
+            <span>Login Again</span>
+          </a>
+        </div>
+        {% endif %}
+      </div>
     </div>
-</section>
+  </div>
+</div>
 {% endblock %}
-
