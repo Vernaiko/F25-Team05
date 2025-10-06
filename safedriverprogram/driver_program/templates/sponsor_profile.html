@@ -1,0 +1,14 @@
+{% extends 'base.html' %}
+{% block content %}
+
+<h2>Sponsor Profile</h2>
+
+<p><strong>Organization Name:</strong> {{ sponsor.organization_name }}</p>
+<p><strong>Contact Email:</strong> {{ sponsor.contact_email }}</p>
+<p><strong>Username:</strong> {{ sponsor.user.username }}</p>
+
+<div style="margin-top: 20px;">
+    <a href="{% url 'sponsor_profile' %}" class="btn btn-primary">View Profile</a>
+</div>
+
+{% endblock %}

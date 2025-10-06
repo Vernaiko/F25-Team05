@@ -1,0 +1,12 @@
+{% extends 'base.html' %}
+{% block content %}
+
+<h2>Welcome, {{ sponsor.organization_name }}</h2>
+<p>You are logged in as a Sponsor.</p>
+
+<div style="margin-top: 20px;">
+    <a href="{% url 'sponsor_profile' %}" class="btn btn-primary">View Profile</a>
+    <a href="{% url 'sponsor_drivers' %}" class="btn btn-secondary">View Drivers</a>
+</div>
+
+{% endblock %}

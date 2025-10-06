@@ -14,4 +14,8 @@ urlpatterns = [
     path('addresses/', views.manage_addresses, name='manage_addresses'),
     path('addresses/edit/<int:address_id>/', views.edit_address, name='edit_address'),
     path('addresses/delete/<int:address_id>/', views.delete_address, name='delete_address'),
+    path('sponsor/home/', views.sponsor_home, name='sponsor_home'),
+    path('sponsor/profile/', views.sponsor_profile, name='sponsor_profile'),
+    path('sponsor/drivers/', views.sponsor_drivers, name='sponsor_drivers'),
+
 ]

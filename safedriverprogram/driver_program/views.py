@@ -8,6 +8,8 @@ from django.contrib.auth.models import User
 from django.http import HttpResponse
 from django.db import connection
 from django.conf import settings
+from django.contrib.auth import authenticate, login
+from .models import SponsorProfile
 import time
 import sys
 
@@ -66,6 +68,26 @@ def homepage(request):
     return render(request, 'homepage.html')
 
 def login_page(request):
+    if request.method == 'POST':
+        username = request.POST.get('username')
+        password = request.POST.get('password')
+
+        user = authenticate(request, username=username, password=password)
+
+        if user is not None:
+            login(request, user)
+
+            # If this user is a sponsor, redirect to sponsor home
+            if hasattr(user, 'sponsor_profile'):
+                return redirect('sponsor_home')
+
+            # Otherwise, treat as normal user/driver
+            return redirect('account')
+
+        else:
+            messages.error(request, "Invalid username or password.")
+            return redirect('login')
+
     return render(request, 'login.html')
 
 def signup_page(request):
@@ -272,3 +294,38 @@ def delete_address(request, address_id):
         messages.success(request, "Address deleted successfully!")
         return redirect('manage_addresses')
     return render(request, 'delete_address.html', {'address': address_obj})
+
+#@login_required
+def sponsor_home(request):
+    sponsor = request.user.sponsor_profile
+    return render(request, 'sponsor_home.html', {'sponsor': sponsor})
+
+
+#@login_required
+def sponsor_profile(request):
+    """Render the Sponsor Profile Page"""
+    try:
+        sponsor = request.user.sponsor_profile
+    except SponsorProfile.DoesNotExist:
+        messages.error(request, "Sponsor profile not found.")
+        return redirect('sponsor_home')
+
+    return render(request, 'sponsor_profile.html', {'sponsor': sponsor})
+
+#@login_required
+def sponsor_drivers(request):
+    """Render a page showing all drivers associated with the logged-in sponsor"""
+    try:
+        sponsor = request.user.sponsor_profile
+    except SponsorProfile.DoesNotExist:
+        messages.error(request, "Sponsor profile not found.")
+        return redirect('sponsor_home')
+
+    # Get all drivers whose profile.sponsor is this sponsor
+    drivers = Profile.objects.filter(sponsor=sponsor)
+
+    return render(request, 'sponsor_drivers.html', {
+        'sponsor': sponsor,
+        'drivers': drivers
+    })
+
