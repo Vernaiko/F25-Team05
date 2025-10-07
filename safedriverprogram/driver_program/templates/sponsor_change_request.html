@@ -1,0 +1,168 @@
+{% extends 'base.html' %}
+
+{% block title %}Sponsor Change Request - Safe Driver Program{% endblock %}
+
+{% block content %}
+<div class="container">
+  <div class="columns is-centered">
+    <div class="column is-two-thirds">
+      <div class="box">
+        <h1 class="title has-text-centered">
+          <span class="icon is-large has-text-warning">
+            <i class="fas fa-exchange-alt fa-2x"></i>
+          </span>
+          <br>
+          Request Sponsor Change
+        </h1>
+        
+        <!-- Current Sponsor Information -->
+        <div class="box has-background-info-light">
+          <h2 class="subtitle">
+            <span class="icon has-text-info">
+              <i class="fas fa-user-tie"></i>
+            </span>
+            Your Current Sponsor
+          </h2>
+          
+          <div class="content">
+            <div class="level">
+              <div class="level-left">
+                <div class="level-item">
+                  <div>
+                    <p class="heading">Sponsor</p>
+                    <p class="title is-5">{{ current_relationship.sponsor_first_name }} {{ current_relationship.sponsor_last_name }}</p>
+                    <p class="subtitle is-6">@{{ current_relationship.sponsor_username }}</p>
+                  </div>
+                </div>
+              </div>
+              <div class="level-right">
+                <div class="level-item">
+                  <div class="has-text-right">
+                    <p class="heading">Relationship Start</p>
+                    <p class="title is-6">{{ current_relationship.start_date|date:"M d, Y" }}</p>
+                    <p class="subtitle is-6">
+                      <span class="tag is-success">{{ current_relationship.streak_days }} day streak</span>
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            <div class="notification is-warning is-light">
+              <span class="icon">
+                <i class="fas fa-exclamation-triangle"></i>
+              </span>
+              <strong>Important:</strong> Requesting a sponsor change will require administrator approval. 
+              Your current sponsor relationship will remain active until the change is approved.
+            </div>
+          </div>
+        </div>
+        
+        <!-- Sponsor Change Request Form -->
+        <form method="post">
+          {% csrf_token %}
+          
+          <div class="box has-background-light">
+            <h2 class="subtitle">
+              <span class="icon has-text-primary">
+                <i class="fas fa-users"></i>
+              </span>
+              Available Sponsors
+            </h2>
+            
+            <div class="field">
+              <label class="label">Select New Sponsor *</label>
+              <div class="control">
+                <div class="select is-fullwidth">
+                  <select name="new_sponsor_id" required>
+                    <option value="">Choose a sponsor...</option>
+                    {% for sponsor in available_sponsors %}
+                    <option value="{{ sponsor.user_id }}">
+                      {{ sponsor.first_name }} {{ sponsor.last_name }} 
+                      ({{ sponsor.username }}) - Currently sponsoring {{ sponsor.current_drivers }} driver{{ sponsor.current_drivers|pluralize }}
+                    </option>
+                    {% endfor %}
+                  </select>
+                </div>
+              </div>
+              {% if not available_sponsors %}
+              <p class="help is-danger">
+                <span class="icon">
+                  <i class="fas fa-exclamation-triangle"></i>
+                </span>
+                No other sponsors are currently available. Please contact an administrator.
+              </p>
+              {% endif %}
+            </div>
+          </div>
+          
+          <div class="field">
+            <label class="label">Reason for Sponsor Change *</label>
+            <div class="control">
+              <textarea class="textarea" name="reason_for_change" 
+                        placeholder="Please explain why you would like to change sponsors. Be specific about any issues or preferences." 
+                        rows="4" required></textarea>
+            </div>
+            <p class="help">This information helps administrators understand your request and make the best decision.</p>
+          </div>
+          
+          <div class="field">
+            <label class="label">Additional Notes (Optional)</label>
+            <div class="control">
+              <textarea class="textarea" name="additional_notes" 
+                        placeholder="Any additional information that might be helpful..." 
+                        rows="3"></textarea>
+            </div>
+          </div>
+          
+          <div class="field">
+            <div class="control">
+              <label class="checkbox">
+                <input type="checkbox" required>
+                I understand that this request requires administrator approval and that my current sponsor relationship will continue until the change is approved. *
+              </label>
+            </div>
+          </div>
+          
+          <div class="field is-grouped is-grouped-centered" style="margin-top: 2rem;">
+            <div class="control">
+              {% if available_sponsors %}
+              <button type="submit" class="button is-warning is-large">
+                <span class="icon">
+                  <i class="fas fa-paper-plane"></i>
+                </span>
+                <span>Submit Change Request</span>
+              </button>
+              {% else %}
+              <button type="button" class="button is-warning is-large" disabled>
+                <span class="icon">
+                  <i class="fas fa-ban"></i>
+                </span>
+                <span>No Sponsors Available</span>
+              </button>
+              {% endif %}
+            </div>
+            <div class="control">
+              <a href="{% url 'account_page' %}" class="button is-light is-large">
+                <span class="icon">
+                  <i class="fas fa-arrow-left"></i>
+                </span>
+                <span>Cancel</span>
+              </a>
+            </div>
+          </div>
+        </form>
+        
+        <div class="has-text-centered" style="margin-top: 2rem;">
+          <a href="{% url 'view_sponsor_requests' %}" class="button is-info">
+            <span class="icon">
+              <i class="fas fa-history"></i>
+            </span>
+            <span>View Request History</span>
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

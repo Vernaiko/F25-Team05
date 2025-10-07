@@ -181,6 +181,24 @@
               </a>
             </div>
           </div>
+          {% if user.account_type == 'driver' %}
+            <div class="control">
+            <a href="{% url 'sponsor_change_request' %}" class="button is-warning">
+                <span class="icon">
+                <i class="fas fa-exchange-alt"></i>
+                </span>
+                <span>Request Sponsor Change</span>
+            </a>
+            </div>
+            <div class="control">
+            <a href="{% url 'view_sponsor_requests' %}" class="button is-info">
+                <span class="icon">
+                <i class="fas fa-history"></i>
+                </span>
+                <span>View Request History</span>
+            </a>
+            </div>
+            {% endif %}
           
         </div>
         {% else %}

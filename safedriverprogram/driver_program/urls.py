@@ -4,9 +4,9 @@ from . import views
 urlpatterns = [
     # Basic pages
     path('', views.homepage, name='homepage'),
-    path('login/', views.login_page, name='login_page'),        # This is the correct name
+    path('login/', views.login_page, name='login_page'),
     path('logout/', views.logout_view, name='logout'),
-    path('signup/', views.signup_page, name='signup_page'),      # This is the correct name
+    path('signup/', views.signup_page, name='signup_page'),
     
     # Account management
     path('account/', views.account_page, name='account_page'),
@@ -16,6 +16,10 @@ urlpatterns = [
     # Applications
     path('sponsor-application/', views.sponsor_application, name='sponsor_application'),
     path('application-success/', views.application_success, name='application_success'),
+    
+    # Driver-specific pages
+    path('sponsor-change-request/', views.sponsor_change_request, name='sponsor_change_request'),
+    path('sponsor-requests/', views.view_sponsor_requests, name='view_sponsor_requests'),
     
     # System pages
     path('database-status/', views.database_status, name='database_status'),

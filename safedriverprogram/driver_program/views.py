@@ -298,7 +298,7 @@ def edit_account(request):
         return redirect('account_page')
     finally:
         cursor.close()
-        
+
 @db_login_required
 def change_password(request):
     """Allow users to change their password"""
@@ -799,5 +799,272 @@ def account_page(request):
         print(f"Account page error: {e}")
         return redirect('homepage')
         
+    finally:
+        cursor.close()
+# Add this to your existing views.py file
+
+@db_login_required
+def sponsor_change_request(request):
+    """Allow drivers to request a sponsor change"""
+    
+    # Only drivers can make sponsor change requests
+    if request.session.get('account_type') != 'driver':
+        messages.error(request, "Only drivers can submit sponsor change requests.")
+        return redirect('homepage')
+    
+    user_id = request.session.get('user_id')
+    cursor = connection.cursor()
+    
+    try:
+        # Check if driver has an active relationship
+        cursor.execute("""
+            SELECT sdr.relationship_id, sdr.sponsor_user_id, sdr.relationship_start_date,
+                   u.username as sponsor_username, u.first_name, u.last_name,
+                   sdr.relationship_status
+            FROM sponsor_driver_relationships sdr
+            JOIN users u ON sdr.sponsor_user_id = u.userID
+            WHERE sdr.driver_user_id = %s 
+            AND sdr.relationship_status = 'active'
+        """, [user_id])
+        
+        current_relationship = cursor.fetchone()
+        
+        if not current_relationship:
+            messages.error(request, "You must have an active sponsor relationship before requesting a change.")
+            return redirect('account_page')
+        
+        # Check if there's already a pending change request
+        cursor.execute("""
+            SELECT COUNT(*) FROM driver_applications 
+            WHERE driver_user_id = %s 
+            AND application_status IN ('pending', 'under_review')
+            AND application_date > DATE_SUB(NOW(), INTERVAL 30 DAY)
+        """, [user_id])
+        
+        pending_requests = cursor.fetchone()[0]
+        
+        if pending_requests > 0:
+            messages.warning(request, "You already have a pending sponsor change request. Please wait for it to be processed.")
+            return redirect('account_page')
+        
+        # Get available sponsors
+        cursor.execute("""
+            SELECT u.userID, u.username, u.first_name, u.last_name, u.email,
+                   COUNT(sdr.relationship_id) as current_drivers
+            FROM users u
+            LEFT JOIN sponsor_driver_relationships sdr ON u.userID = sdr.sponsor_user_id 
+                AND sdr.relationship_status = 'active'
+            WHERE u.account_type = 'sponsor' 
+            AND u.is_active = 1
+            AND u.userID != %s
+            GROUP BY u.userID, u.username, u.first_name, u.last_name, u.email
+            ORDER BY current_drivers ASC, u.first_name ASC
+        """, [current_relationship[1]])  # Exclude current sponsor
+        
+        available_sponsors = cursor.fetchall()
+        
+        if request.method == 'POST':
+            # Process the sponsor change request
+            new_sponsor_id = request.POST.get('new_sponsor_id')
+            reason_for_change = request.POST.get('reason_for_change', '').strip()
+            additional_notes = request.POST.get('additional_notes', '').strip()
+            
+            if not new_sponsor_id or not reason_for_change:
+                messages.error(request, "Please select a new sponsor and provide a reason for the change.")
+                return render(request, 'sponsor_change_request.html', {
+                    'current_relationship': current_relationship,
+                    'available_sponsors': available_sponsors
+                })
+            
+            # Verify the selected sponsor exists and is active
+            cursor.execute("""
+                SELECT userID, username, first_name, last_name 
+                FROM users 
+                WHERE userID = %s AND account_type = 'sponsor' AND is_active = 1
+            """, [new_sponsor_id])
+            
+            selected_sponsor = cursor.fetchone()
+            
+            if not selected_sponsor:
+                messages.error(request, "Selected sponsor is not valid.")
+                return render(request, 'sponsor_change_request.html', {
+                    'current_relationship': current_relationship,
+                    'available_sponsors': available_sponsors
+                })
+            
+            # Create a new driver application for sponsor change
+            try:
+                # First, let's check what columns actually exist in driver_applications table
+                cursor.execute("DESCRIBE driver_applications")
+                columns = [col[0] for col in cursor.fetchall()]
+                print(f"Available columns in driver_applications: {columns}")
+                
+                # Create the change request with only the columns that exist
+                # Build the insert query dynamically based on available columns
+                base_columns = ['driver_user_id', 'sponsor_user_id', 'application_status', 'application_date']
+                base_values = [user_id, new_sponsor_id, 'pending', 'NOW()']
+                
+                # Add optional columns if they exist
+                optional_columns = {}
+                if 'created_at' in columns:
+                    optional_columns['created_at'] = 'NOW()'
+                if 'updated_at' in columns:
+                    optional_columns['updated_at'] = 'NOW()'
+                if 'motivation_essay' in columns:
+                    # Fix the string escaping issue
+                    escaped_reason = reason_for_change.replace("'", "''")  # SQL escape single quotes
+                    optional_columns['motivation_essay'] = f"SPONSOR CHANGE REQUEST: {escaped_reason}"
+                if 'goals_description' in columns:
+                    escaped_notes = additional_notes.replace("'", "''") if additional_notes else "Sponsor change request"
+                    optional_columns['goals_description'] = f"Additional Notes: {escaped_notes}"
+                if 'admin_notes' in columns:
+                    escaped_reason_admin = reason_for_change.replace("'", "''")
+                    sponsor_name = f"{current_relationship[3]} {current_relationship[4]} {current_relationship[5]}"
+                    requested_name = f"{selected_sponsor[2]} {selected_sponsor[3]}"
+                    admin_note = f"SPONSOR CHANGE REQUEST - Current Sponsor: {sponsor_name} (ID: {current_relationship[1]}) | Requested Sponsor: {requested_name} (ID: {selected_sponsor[0]}) | Reason: {escaped_reason_admin}"
+                    optional_columns['admin_notes'] = admin_note
+
+                for col, val in optional_columns.items():
+                    base_columns.append(col)
+                    if val == 'NOW()':
+                        base_values.append('NOW()')
+                    else:
+                        base_values.append(val)                
+                # Build and execute the query
+                columns_str = ', '.join(base_columns)
+                placeholders = []
+                actual_values = []
+                
+                for i, val in enumerate(base_values):
+                    if val in ['NOW()', 'NOW()']:
+                        placeholders.append('NOW()')
+                    elif val.startswith("'") and val.endswith("'"):
+                        placeholders.append('%s')
+                        actual_values.append(val[1:-1])  # Remove quotes
+                    else:
+                        placeholders.append('%s')
+                        actual_values.append(val)
+                
+                placeholders_str = ', '.join(placeholders)
+                
+                query = f"""
+                    INSERT INTO driver_applications ({columns_str})
+                    VALUES ({placeholders_str})
+                """
+                
+                print(f"Executing query: {query}")
+                print(f"With values: {actual_values}")
+                
+                cursor.execute(query, actual_values)
+                application_id = cursor.lastrowid
+                
+                messages.success(request, f"Your sponsor change request has been submitted successfully! You've requested to change from {current_relationship[3]} {current_relationship[4]} to {selected_sponsor[2]} {selected_sponsor[3]}. An administrator will review your request.")
+                return redirect('account_page')
+                
+            except Exception as e:
+                messages.error(request, f"Error submitting sponsor change request: {str(e)}")
+                print(f"Sponsor change request error: {e}")
+                
+                # Let's also print the table structure for debugging
+                try:
+                    cursor.execute("DESCRIBE driver_applications")
+                    table_structure = cursor.fetchall()
+                    print("driver_applications table structure:")
+                    for col in table_structure:
+                        print(f"  {col[0]} - {col[1]} - Null: {col[2]} - Key: {col[3]} - Default: {col[4]}")
+                except:
+                    print("Could not describe table structure")
+        
+        # Prepare current relationship data for template
+        relationship_data = {
+            'relationship_id': current_relationship[0],
+            'sponsor_id': current_relationship[1],
+            'start_date': current_relationship[2],
+            'sponsor_username': current_relationship[3],
+            'sponsor_first_name': current_relationship[4],
+            'sponsor_last_name': current_relationship[5],
+            'status': current_relationship[6] if len(current_relationship) > 6 else 'active'
+        }
+        
+        # Format available sponsors for template
+        sponsors_list = []
+        for sponsor in available_sponsors:
+            sponsors_list.append({
+                'user_id': sponsor[0],
+                'username': sponsor[1],
+                'first_name': sponsor[2],
+                'last_name': sponsor[3],
+                'email': sponsor[4],
+                'current_drivers': sponsor[5]
+            })
+        
+        return render(request, 'sponsor_change_request.html', {
+            'current_relationship': relationship_data,
+            'available_sponsors': sponsors_list
+        })
+        
+    except Exception as e:
+        messages.error(request, f"Error loading sponsor change request page: {str(e)}")
+        print(f"Sponsor change request page error: {e}")
+        return redirect('account_page')
+    finally:
+        cursor.close()
+
+@db_login_required
+def view_sponsor_requests(request):
+    """View sponsor change request history for the logged-in driver"""
+    
+    if request.session.get('account_type') != 'driver':
+        messages.error(request, "Access denied.")
+        return redirect('homepage')
+    
+    user_id = request.session.get('user_id')
+    cursor = connection.cursor()
+    
+    try:
+        # Get all applications/requests for this driver
+        cursor.execute("""
+            SELECT da.application_id, da.application_status, da.application_date,
+                   da.review_date, da.approval_date, da.motivation_essay,
+                   da.admin_notes, da.rejection_reason,
+                   u_sponsor.first_name as sponsor_first_name,
+                   u_sponsor.last_name as sponsor_last_name,
+                   u_reviewer.first_name as reviewer_first_name,
+                   u_reviewer.last_name as reviewer_last_name
+            FROM driver_applications da
+            LEFT JOIN users u_sponsor ON da.sponsor_user_id = u_sponsor.userID
+            LEFT JOIN users u_reviewer ON da.reviewed_by_admin_id = u_reviewer.userID
+            WHERE da.driver_user_id = %s
+            ORDER BY da.application_date DESC
+        """, [user_id])
+        
+        requests = cursor.fetchall()
+        
+        requests_list = []
+        for req in requests:
+            is_change_request = req[6] and 'SPONSOR CHANGE REQUEST' in req[6]
+            requests_list.append({
+                'application_id': req[0],
+                'status': req[1],
+                'application_date': req[2],
+                'review_date': req[3],
+                'approval_date': req[4],
+                'motivation_essay': req[5],
+                'admin_notes': req[6],
+                'rejection_reason': req[7],
+                'sponsor_first_name': req[8],
+                'sponsor_last_name': req[9],
+                'reviewer_first_name': req[10],
+                'reviewer_last_name': req[11],
+                'is_change_request': is_change_request
+            })
+        
+        return render(request, 'view_sponsor_requests.html', {
+            'requests': requests_list
+        })
+        
+    except Exception as e:
+        messages.error(request, f"Error loading requests: {str(e)}")
+        return redirect('account_page')
     finally:
         cursor.close()

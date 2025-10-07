@@ -1,0 +1,143 @@
+{% extends 'base.html' %}
+
+{% block title %}Sponsor Request History - Safe Driver Program{% endblock %}
+
+{% block content %}
+<div class="container">
+  <div class="columns is-centered">
+    <div class="column">
+      <div class="box">
+        <h1 class="title has-text-centered">
+          <span class="icon is-large has-text-info">
+            <i class="fas fa-history fa-2x"></i>
+          </span>
+          <br>
+          My Sponsor Request History
+        </h1>
+        
+        {% if requests %}
+        <div class="content">
+          {% for request in requests %}
+          <div class="box {% if request.status == 'pending' %}has-background-warning-light{% elif request.status == 'approved' %}has-background-success-light{% elif request.status == 'rejected' %}has-background-danger-light{% else %}has-background-light{% endif %}">
+            <div class="level">
+              <div class="level-left">
+                <div class="level-item">
+                  <div>
+                    <p class="heading">
+                      {% if request.is_change_request %}
+                        <span class="tag is-warning">
+                          <span class="icon"><i class="fas fa-exchange-alt"></i></span>
+                          <span>Sponsor Change</span>
+                        </span>
+                      {% else %}
+                        <span class="tag is-info">
+                          <span class="icon"><i class="fas fa-user-plus"></i></span>
+                          <span>New Application</span>
+                        </span>
+                      {% endif %}
+                    </p>
+                    <p class="title is-5">
+                      {% if request.sponsor_first_name %}
+                        {{ request.sponsor_first_name }} {{ request.sponsor_last_name }}
+                      {% else %}
+                        No Sponsor Specified
+                      {% endif %}
+                    </p>
+                    <p class="subtitle is-6">Submitted: {{ request.application_date|date:"M d, Y g:i A" }}</p>
+                  </div>
+                </div>
+              </div>
+              <div class="level-right">
+                <div class="level-item">
+                  <div class="has-text-right">
+                    <p class="heading">Status</p>
+                    <p class="title is-4">
+                      {% if request.status == 'pending' %}
+                        <span class="tag is-warning is-large">
+                          <span class="icon"><i class="fas fa-clock"></i></span>
+                          <span>Pending</span>
+                        </span>
+                      {% elif request.status == 'under_review' %}
+                        <span class="tag is-info is-large">
+                          <span class="icon"><i class="fas fa-search"></i></span>
+                          <span>Under Review</span>
+                        </span>
+                      {% elif request.status == 'approved' %}
+                        <span class="tag is-success is-large">
+                          <span class="icon"><i class="fas fa-check"></i></span>
+                          <span>Approved</span>
+                        </span>
+                      {% elif request.status == 'rejected' %}
+                        <span class="tag is-danger is-large">
+                          <span class="icon"><i class="fas fa-times"></i></span>
+                          <span>Rejected</span>
+                        </span>
+                      {% elif request.status == 'withdrawn' %}
+                        <span class="tag is-dark is-large">
+                          <span class="icon"><i class="fas fa-undo"></i></span>
+                          <span>Withdrawn</span>
+                        </span>
+                      {% endif %}
+                    </p>
+                    {% if request.review_date %}
+                      <p class="subtitle is-6">Reviewed: {{ request.review_date|date:"M d, Y" }}</p>
+                    {% endif %}
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            {% if request.motivation_essay and 'SPONSOR CHANGE REQUEST:' in request.motivation_essay %}
+              <div class="content">
+                <h6 class="title is-6">Change Reason:</h6>
+                <p>{{ request.motivation_essay|slice:"23:" }}</p>
+              </div>
+            {% endif %}
+            
+            {% if request.rejection_reason %}
+              <div class="notification is-danger is-light">
+                <h6 class="title is-6">Rejection Reason:</h6>
+                <p>{{ request.rejection_reason }}</p>
+              </div>
+            {% endif %}
+            
+            {% if request.reviewer_first_name %}
+              <p class="help">
+                Reviewed by: {{ request.reviewer_first_name }} {{ request.reviewer_last_name }}
+              </p>
+            {% endif %}
+          </div>
+          {% endfor %}
+        </div>
+        {% else %}
+        <div class="notification is-info">
+          <span class="icon">
+            <i class="fas fa-info-circle"></i>
+          </span>
+          <strong>No requests found.</strong> You haven't submitted any sponsor requests yet.
+        </div>
+        {% endif %}
+        
+        <div class="field is-grouped is-grouped-centered" style="margin-top: 2rem;">
+          <div class="control">
+            <a href="{% url 'sponsor_change_request' %}" class="button is-primary">
+              <span class="icon">
+                <i class="fas fa-exchange-alt"></i>
+              </span>
+              <span>Request Sponsor Change</span>
+            </a>
+          </div>
+          <div class="control">
+            <a href="{% url 'account_page' %}" class="button is-light">
+              <span class="icon">
+                <i class="fas fa-user"></i>
+              </span>
+              <span>Back to Account</span>
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
