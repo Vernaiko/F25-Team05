@@ -1,18 +1,101 @@
 {% extends 'base.html' %}
 
-{% block title %}Login{% endblock %}
+{% block title %}Login - Safe Driver Program{% endblock %}
 
 {% block content %}
-<div class="field">
-    <label class="label">Username</label>
-    <div class="control">
-        <input class="input" type="text" placeholder="Enter your username">
+<div class="columns is-centered">
+  <div class="column is-one-third">
+    <div class="box">
+      <h1 class="title has-text-centered">Login</h1>
+      <p class="subtitle has-text-centered">Access your Safe Driver Program account</p>
+      
+      <form method="post">
+        {% csrf_token %}
+        
+        <div class="field">
+          <label class="label">Username</label>
+          <div class="control has-icons-left">
+            <input class="input" type="text" name="username" placeholder="Enter your username" required>
+            <span class="icon is-small is-left">
+              <i class="fas fa-user"></i>
+            </span>
+          </div>
+        </div>
+        
+        <div class="field">
+          <label class="label">Password</label>
+          <div class="control has-icons-left">
+            <input class="input" type="password" name="password" placeholder="Enter your password" required>
+            <span class="icon is-small is-left">
+              <i class="fas fa-lock"></i>
+            </span>
+          </div>
+        </div>
+        
+        <div class="field">
+          <div class="control">
+            <button class="button is-primary is-fullwidth" type="submit">
+              <span class="icon">
+                <i class="fas fa-sign-in-alt"></i>
+              </span>
+              <span>Login</span>
+            </button>
+          </div>
+        </div>
+      </form>
+      
+      <div class="has-text-centered" style="margin-top: 20px;">
+        <p>
+          <a href="{% url 'homepage' %}" class="button is-light">
+            <span class="icon">
+              <i class="fas fa-home"></i>
+            </span>
+            <span>Back to Home</span>
+          </a>
+        </p>
+        <p style="margin-top: 10px;">
+          <small>Need help? Contact your administrator.</small>
+        </p>
+      </div>
     </div>
-    <label class="label">Password</label>
-    <div class="control">
-        <input class="input" type="password" placeholder="Enter your password">
-    </div>
-    <div class="control" style="margin-top: 1em;">
-        <button class="button is-link" href="{% url 'login' %}">Log In</button>
+  </div>
 </div>
+
+<style>
+.box {
+  box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+  border-radius: 8px;
+}
+
+.title {
+  color: #363636;
+  margin-bottom: 0.5rem !important;
+}
+
+.subtitle {
+  color: #4a4a4a;
+  margin-bottom: 2rem !important;
+}
+
+.field {
+  margin-bottom: 1.5rem;
+}
+
+.button.is-primary {
+  background-color: #3273dc;
+  border-color: transparent;
+  color: #fff;
+  font-weight: 600;
+  padding: 12px;
+}
+
+.button.is-primary:hover {
+  background-color: #2366d1;
+}
+
+.input:focus {
+  border-color: #3273dc;
+  box-shadow: 0 0 0 0.125em rgba(50, 115, 220, 0.25);
+}
+</style>
 {% endblock %}

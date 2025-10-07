@@ -1,0 +1,42 @@
+{% extends 'base.html' %}
+
+{% block title %}Delete Address - Safe Driver Program{% endblock %}
+
+{% block content %}
+<div class="columns is-centered">
+  <div class="column is-half">
+    <div class="box">
+      <h1 class="title has-text-centered has-text-danger">Delete Address</h1>
+      <p class="subtitle has-text-centered">Are you sure you want to delete this address?</p>
+      
+      <div class="notification is-light">
+        <strong>Address to delete:</strong><br>
+        {{ address.address }}
+      </div>
+      
+      <div class="has-text-centered">
+        <p class="has-text-danger" style="margin-bottom: 20px;">
+          <strong>Warning:</strong> This action cannot be undone.
+        </p>
+        
+        <form method="post" style="display: inline;">
+          {% csrf_token %}
+          <button type="submit" class="button is-danger">
+            <span class="icon">
+              <i class="fas fa-trash"></i>
+            </span>
+            <span>Yes, Delete Address</span>
+          </button>
+        </form>
+        
+        <a href="{% url 'manage_addresses' %}" class="button is-light" style="margin-left: 10px;">
+          <span class="icon">
+            <i class="fas fa-times"></i>
+          </span>
+          <span>Cancel</span>
+        </a>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

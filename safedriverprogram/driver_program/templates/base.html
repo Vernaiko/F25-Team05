@@ -4,21 +4,15 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{% block title %}Safe Driver Program{% endblock %}</title>
-    <!-- Bulma CSS -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@0.9.4/css/bulma.min.css">
-    <!-- Font Awesome for icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
     {% block head_extra %}{% endblock %}
-    <style>
-      .site-title { font-weight: 700; letter-spacing: -0.5px; }
-    </style>
   </head>
   <body>
-    <!-- Navbar -->
     <nav class="navbar is-dark" role="navigation" aria-label="main navigation">
       <div class="navbar-brand">
-        <a class="navbar-item" href="/">
-          <span class="site-title has-text-white">Home</span>
+        <a class="navbar-item" href="{% url 'homepage' %}">
+          <strong class="has-text-white">Safe Driver Program</strong>
         </a>
         <a role="button" class="navbar-burger" aria-label="menu" aria-expanded="false" data-target="navbarBasic">
           <span aria-hidden="true"></span>
@@ -28,13 +22,44 @@
       </div>
 
       <div id="navbarBasic" class="navbar-menu">
-
         <div class="navbar-end">
           <div class="navbar-item">
             <div class="buttons">
-              <a class="button is-light" href="{% url 'login' %}">Log In</a>
-              <a class="button is-light" href="{% url 'signup' %}">Sign Up</a>
-              <a class="button is-light" href="{% url 'sponsor_application' %}">Sponsor Application</a>
+              {% if request.session.is_authenticated %}
+                <!-- Logged in user navigation -->
+                <a class="button is-primary" href="{% url 'account_page' %}">
+                  <span class="icon"><i class="fas fa-user"></i></span>
+                  <span>My Account</span>
+                </a>
+                {% if request.session.account_type == 'admin' %}
+                  <a class="button is-success" href="{% url 'signup_page' %}">
+                    <span class="icon"><i class="fas fa-user-plus"></i></span>
+                    <span>Create User</span>
+                  </a>
+                {% endif %}
+                <a class="button is-info" href="{% url 'database_status' %}">
+                  <span class="icon"><i class="fas fa-database"></i></span>
+                  <span>Database Status</span>
+                </a>
+                <a class="button is-light" href="{% url 'logout' %}">
+                  <span class="icon"><i class="fas fa-sign-out-alt"></i></span>
+                  <span>Logout</span>
+                </a>
+              {% else %}
+                <!-- Guest navigation - FIXED URL NAMES -->
+                <a class="button is-light" href="{% url 'login_page' %}">
+                  <span class="icon"><i class="fas fa-sign-in-alt"></i></span>
+                  <span>Log In</span>
+                </a>
+                <a class="button is-info" href="{% url 'sponsor_application' %}">
+                  <span class="icon"><i class="fas fa-handshake"></i></span>
+                  <span>Sponsor Application</span>
+                </a>
+                <a class="button is-secondary" href="{% url 'database_status' %}">
+                  <span class="icon"><i class="fas fa-database"></i></span>
+                  <span>Database Status</span>
+                </a>
+              {% endif %}
             </div>
           </div>
         </div>
@@ -44,9 +69,55 @@
     <!-- Main content -->
     <section class="section">
       <div class="container">
+        <!-- Display messages -->
+        {% if messages %}
+          {% for message in messages %}
+            <div class="notification is-{{ message.tags }}">
+              <button class="delete"></button>
+              {{ message }}
+            </div>
+          {% endfor %}
+        {% endif %}
+        
         {% block content %}{% endblock %}
       </div>
     </section>
+    
+    <!-- Footer -->
+    <footer class="footer">
+      <div class="content has-text-centered">
+        <p>
+          <strong>Safe Driver Program</strong> - Promoting safe driving through rewards and sponsorship.
+        </p>
+      </div>
+    </footer>
+    
+    <!-- JavaScript for navbar and notifications -->
+    <script>
+      document.addEventListener('DOMContentLoaded', () => {
+        // Navbar burger functionality
+        const $navbarBurgers = Array.prototype.slice.call(document.querySelectorAll('.navbar-burger'), 0);
+        if ($navbarBurgers.length > 0) {
+          $navbarBurgers.forEach( el => {
+            el.addEventListener('click', () => {
+              const target = el.dataset.target;
+              const $target = document.getElementById(target);
+              el.classList.toggle('is-active');
+              $target.classList.toggle('is-active');
+            });
+          });
+        }
+        
+        // Delete notification functionality
+        (document.querySelectorAll('.notification .delete') || []).forEach(($delete) => {
+          const $notification = $delete.parentNode;
+          $delete.addEventListener('click', () => {
+            $notification.parentNode.removeChild($notification);
+          });
+        });
+      });
+    </script>
+    
     {% block body_extra %}{% endblock %}
   </body>
 </html>
