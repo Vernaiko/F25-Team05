@@ -1,35 +1,93 @@
 {% extends 'base.html' %}
+
+{% block title %}Manage Drivers - Safe Driver Program{% endblock %}
+
 {% block content %}
-
-<h2>Drivers for {{ sponsor.organization_name }}</h2>
-
-<table class="table">
-    <thead>
-        <tr>
-            <th>Username</th>
-            <th>Full Name</th>
-            <th>Email</th>
-            <th>Phone</th>
-        </tr>
-    </thead>
-    <tbody>
-        {% for driver in drivers %}
-        <tr>
-            <td>{{ driver.user.username }}</td>
-            <td>{{ driver.user.first_name }} {{ driver.user.last_name }}</td>
-            <td>{{ driver.user.email }}</td>
-            <td>{{ driver.phone_number }}</td>
-        </tr>
-        {% empty %}
-        <tr>
-            <td colspan="4">No drivers associated with this sponsor.</td>
-        </tr>
-        {% endfor %}
-    </tbody>
-</table>
-
-<div style="margin-top: 20px;">
-    <a href="{% url 'sponsor_home' %}" class="btn btn-secondary">Back to Home</a>
+<div class="container">
+  <div class="box">
+    <h1 class="title has-text-centered">
+      <span class="icon is-large has-text-primary">
+        <i class="fas fa-users fa-2x"></i>
+      </span>
+      <br>
+      My Sponsored Drivers
+    </h1>
+    
+    <!-- Statistics -->
+    <div class="level">
+      <div class="level-item has-text-centered">
+        <div>
+          <p class="heading">Total Drivers</p>
+          <p class="title">{{ total_drivers }}</p>
+        </div>
+      </div>
+      <div class="level-item has-text-centered">
+        <div>
+          <p class="heading">Active Relationships</p>
+          <p class="title">{{ active_drivers }}</p>
+        </div>
+      </div>
+      <div class="level-item has-text-centered">
+        <div>
+          <p class="heading">Pending Applications</p>
+          <p class="title">{{ pending_applications|length }}</p>
+        </div>
+      </div>
+    </div>
+    
+    {% if sponsored_drivers %}
+    <h2 class="subtitle">Current Drivers</h2>
+    <div class="table-container">
+      <table class="table is-fullwidth is-striped">
+        <thead>
+          <tr>
+            <th>Driver</th>
+            <th>Contact</th>
+            <th>Status</th>
+            <th>Start Date</th>
+            <th>Streak</th>
+            <th>Trips</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for driver in sponsored_drivers %}
+          <tr>
+            <td>
+              <strong>{{ driver.first_name }} {{ driver.last_name }}</strong>
+              <br>
+              <small>@{{ driver.username }}</small>
+            </td>
+            <td>{{ driver.email }}</td>
+            <td>
+              <span class="tag {% if driver.relationship_status == 'active' %}is-success{% else %}is-warning{% endif %}">
+                {{ driver.relationship_status|capfirst }}
+              </span>
+            </td>
+            <td>{{ driver.relationship_start_date|date:"M d, Y" }}</td>
+            <td>{{ driver.safe_driving_streak_days }} days</td>
+            <td>{{ driver.total_trips_logged }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="notification is-info">
+      <span class="icon">
+        <i class="fas fa-info-circle"></i>
+      </span>
+      You don't have any sponsored drivers yet.
+    </div>
+    {% endif %}
+    
+    <div class="has-text-centered" style="margin-top: 2rem;">
+      <a href="{% url 'sponsor_home' %}" class="button is-primary">
+        <span class="icon">
+          <i class="fas fa-home"></i>
+        </span>
+        <span>Back to Dashboard</span>
+      </a>
+    </div>
+  </div>
 </div>
-
 {% endblock %}

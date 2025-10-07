@@ -1,12 +1,70 @@
 {% extends 'base.html' %}
+
+{% block title %}Sponsor Dashboard - Safe Driver Program{% endblock %}
+
 {% block content %}
-
-<h2>Welcome, {{ sponsor.organization_name }}</h2>
-<p>You are logged in as a Sponsor.</p>
-
-<div style="margin-top: 20px;">
-    <a href="{% url 'sponsor_profile' %}" class="btn btn-primary">View Profile</a>
-    <a href="{% url 'sponsor_drivers' %}" class="btn btn-secondary">View Drivers</a>
+<div class="container">
+  <div class="box">
+    <h1 class="title has-text-centered">
+      <span class="icon is-large has-text-primary">
+        <i class="fas fa-tachometer-alt fa-2x"></i>
+      </span>
+      <br>
+      Sponsor Dashboard
+    </h1>
+    
+    <h2 class="subtitle has-text-centered">
+      Welcome back, {{ sponsor_info.first_name }}!
+    </h2>
+    
+    <!-- Statistics Cards -->
+    <div class="columns">
+      <div class="column">
+        <div class="box has-background-success-light">
+          <div class="level">
+            <div class="level-item has-text-centered">
+              <div>
+                <p class="heading">Active Drivers</p>
+                <p class="title">{{ active_drivers_count }}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <div class="column">
+        <div class="box has-background-warning-light">
+          <div class="level">
+            <div class="level-item has-text-centered">
+              <div>
+                <p class="heading">Pending Applications</p>
+                <p class="title">{{ pending_applications }}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Quick Actions -->
+    <div class="field is-grouped is-grouped-centered">
+      <div class="control">
+        <a href="{% url 'sponsor_drivers' %}" class="button is-primary is-large">
+          <span class="icon">
+            <i class="fas fa-users"></i>
+          </span>
+          <span>Manage Drivers</span>
+        </a>
+      </div>
+      <div class="control">
+        <a href="{% url 'sponsor_profile' %}" class="button is-info is-large">
+          <span class="icon">
+            <i class="fas fa-user-edit"></i>
+          </span>
+          <span>Edit Profile</span>
+        </a>
+      </div>
+    </div>
+  </div>
 </div>
-
 {% endblock %}

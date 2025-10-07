@@ -1068,3 +1068,242 @@ def view_sponsor_requests(request):
         return redirect('account_page')
     finally:
         cursor.close()
+# Add these missing view functions to your views.py file
+
+@db_login_required
+def sponsor_home(request):
+    """Sponsor dashboard/home page"""
+    
+    # Only sponsors can access this page
+    if request.session.get('account_type') != 'sponsor':
+        messages.error(request, "Access denied. Only sponsors can view this page.")
+        return redirect('homepage')
+    
+    sponsor_id = request.session.get('user_id')
+    cursor = connection.cursor()
+    
+    try:
+        # Get sponsor's basic information
+        cursor.execute("""
+            SELECT first_name, last_name, email, username
+            FROM users 
+            WHERE userID = %s
+        """, [sponsor_id])
+        
+        sponsor_info = cursor.fetchone()
+        
+        # Get sponsor's active drivers
+        cursor.execute("""
+            SELECT COUNT(*) 
+            FROM sponsor_driver_relationships 
+            WHERE sponsor_user_id = %s AND relationship_status = 'active'
+        """, [sponsor_id])
+        
+        active_drivers_count = cursor.fetchone()[0] if cursor.fetchone() else 0
+        
+        # Get pending applications
+        cursor.execute("""
+            SELECT COUNT(*) 
+            FROM driver_applications 
+            WHERE sponsor_user_id = %s AND application_status = 'pending'
+        """, [sponsor_id])
+        
+        pending_applications = cursor.fetchone()[0] if cursor.fetchone() else 0
+        
+        # Get recent driver activity (if tables exist)
+        try:
+            cursor.execute("""
+                SELECT u.first_name, u.last_name, sdr.safe_driving_streak_days, sdr.total_trips_logged
+                FROM sponsor_driver_relationships sdr
+                JOIN users u ON sdr.driver_user_id = u.userID
+                WHERE sdr.sponsor_user_id = %s AND sdr.relationship_status = 'active'
+                ORDER BY sdr.relationship_start_date DESC
+                LIMIT 5
+            """, [sponsor_id])
+            
+            recent_drivers = cursor.fetchall()
+        except:
+            recent_drivers = []
+        
+        context = {
+            'sponsor_info': {
+                'first_name': sponsor_info[0] if sponsor_info else '',
+                'last_name': sponsor_info[1] if sponsor_info else '',
+                'email': sponsor_info[2] if sponsor_info else '',
+                'username': sponsor_info[3] if sponsor_info else '',
+            },
+            'active_drivers_count': active_drivers_count,
+            'pending_applications': pending_applications,
+            'recent_drivers': recent_drivers
+        }
+        
+        return render(request, 'sponsor_home.html', context)
+        
+    except Exception as e:
+        messages.error(request, f"Error loading sponsor dashboard: {str(e)}")
+        return redirect('account_page')
+    finally:
+        cursor.close()
+
+@db_login_required
+def sponsor_profile(request):
+    """Sponsor profile management page"""
+    
+    # Only sponsors can access this page
+    if request.session.get('account_type') != 'sponsor':
+        messages.error(request, "Access denied. Only sponsors can view this page.")
+        return redirect('homepage')
+    
+    sponsor_id = request.session.get('user_id')
+    cursor = connection.cursor()
+    
+    if request.method == 'POST':
+        # Handle profile update
+        first_name = request.POST.get('first_name', '').strip()
+        last_name = request.POST.get('last_name', '').strip()
+        email = request.POST.get('email', '').strip()
+        phone_number = request.POST.get('phone_number', '').strip()
+        address = request.POST.get('address', '').strip()
+        
+        if not all([first_name, last_name, email]):
+            messages.error(request, "Please fill in all required fields.")
+        else:
+            try:
+                cursor.execute("""
+                    UPDATE users 
+                    SET first_name = %s, last_name = %s, email = %s, 
+                        phone_number = %s, address = %s, updated_at = NOW()
+                    WHERE userID = %s
+                """, [first_name, last_name, email, phone_number, address, sponsor_id])
+                
+                # Update session data
+                request.session['first_name'] = first_name
+                request.session['last_name'] = last_name
+                request.session['email'] = email
+                
+                messages.success(request, "Profile updated successfully!")
+                return redirect('sponsor_profile')
+                
+            except Exception as e:
+                messages.error(request, f"Error updating profile: {str(e)}")
+    
+    # Get current profile data
+    try:
+        cursor.execute("""
+            SELECT first_name, last_name, email, phone_number, address, username, created_at
+            FROM users 
+            WHERE userID = %s
+        """, [sponsor_id])
+        
+        profile_data = cursor.fetchone()
+        
+        if profile_data:
+            context = {
+                'profile': {
+                    'first_name': profile_data[0],
+                    'last_name': profile_data[1],
+                    'email': profile_data[2],
+                    'phone_number': profile_data[3],
+                    'address': profile_data[4],
+                    'username': profile_data[5],
+                    'created_at': profile_data[6]
+                }
+            }
+        else:
+            context = {'profile': {}}
+        
+        return render(request, 'sponsor_profile.html', context)
+        
+    except Exception as e:
+        messages.error(request, f"Error loading profile: {str(e)}")
+        return redirect('sponsor_home')
+    finally:
+        cursor.close()
+
+@db_login_required
+def sponsor_drivers(request):
+    """View and manage sponsored drivers"""
+    
+    # Only sponsors can access this page
+    if request.session.get('account_type') != 'sponsor':
+        messages.error(request, "Access denied. Only sponsors can view this page.")
+        return redirect('homepage')
+    
+    sponsor_id = request.session.get('user_id')
+    cursor = connection.cursor()
+    
+    try:
+        # Get all drivers sponsored by this sponsor
+        cursor.execute("""
+            SELECT 
+                u.userID, u.username, u.first_name, u.last_name, u.email, u.phone_number,
+                sdr.relationship_id, sdr.relationship_status, sdr.relationship_start_date,
+                sdr.safe_driving_streak_days, sdr.total_trips_logged
+            FROM sponsor_driver_relationships sdr
+            JOIN users u ON sdr.driver_user_id = u.userID
+            WHERE sdr.sponsor_user_id = %s
+            ORDER BY sdr.relationship_start_date DESC
+        """, [sponsor_id])
+        
+        sponsored_drivers = cursor.fetchall()
+        
+        # Get pending applications for this sponsor
+        cursor.execute("""
+            SELECT 
+                da.application_id, da.application_date, da.application_status,
+                u.userID, u.username, u.first_name, u.last_name, u.email,
+                da.motivation_essay, da.goals_description
+            FROM driver_applications da
+            JOIN users u ON da.driver_user_id = u.userID
+            WHERE da.sponsor_user_id = %s AND da.application_status IN ('pending', 'under_review')
+            ORDER BY da.application_date DESC
+        """, [sponsor_id])
+        
+        pending_applications = cursor.fetchall()
+        
+        # Format data for template
+        drivers_list = []
+        for driver in sponsored_drivers:
+            drivers_list.append({
+                'user_id': driver[0],
+                'username': driver[1],
+                'first_name': driver[2],
+                'last_name': driver[3],
+                'email': driver[4],
+                'phone_number': driver[5],
+                'relationship_id': driver[6],
+                'relationship_status': driver[7],
+                'relationship_start_date': driver[8],
+                'safe_driving_streak_days': driver[9] or 0,
+                'total_trips_logged': driver[10] or 0
+            })
+        
+        applications_list = []
+        for app in pending_applications:
+            applications_list.append({
+                'application_id': app[0],
+                'application_date': app[1],
+                'application_status': app[2],
+                'driver_id': app[3],
+                'driver_username': app[4],
+                'driver_first_name': app[5],
+                'driver_last_name': app[6],
+                'driver_email': app[7],
+                'motivation_essay': app[8],
+                'goals_description': app[9]
+            })
+        
+        context = {
+            'sponsored_drivers': drivers_list,
+            'pending_applications': applications_list,
+            'total_drivers': len(drivers_list),
+            'active_drivers': len([d for d in drivers_list if d['relationship_status'] == 'active'])
+        }
+        
+        return render(request, 'sponsor_drivers.html', context)
+        
+    except Exception as e:
+        messages.error(request, f"Error loading sponsored drivers: {str(e)}")
+        return redirect('sponsor_home')
+    finally:
+        cursor.close()

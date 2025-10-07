@@ -1,14 +1,84 @@
 {% extends 'base.html' %}
+
+{% block title %}Sponsor Profile - Safe Driver Program{% endblock %}
+
 {% block content %}
-
-<h2>Sponsor Profile</h2>
-
-<p><strong>Organization Name:</strong> {{ sponsor.organization_name }}</p>
-<p><strong>Contact Email:</strong> {{ sponsor.contact_email }}</p>
-<p><strong>Username:</strong> {{ sponsor.user.username }}</p>
-
-<div style="margin-top: 20px;">
-    <a href="{% url 'sponsor_profile' %}" class="btn btn-primary">View Profile</a>
+<div class="container">
+  <div class="columns is-centered">
+    <div class="column is-two-thirds">
+      <div class="box">
+        <h1 class="title has-text-centered">
+          <span class="icon is-large has-text-info">
+            <i class="fas fa-user-edit fa-2x"></i>
+          </span>
+          <br>
+          Sponsor Profile
+        </h1>
+        
+        <form method="post">
+          {% csrf_token %}
+          
+          <div class="columns">
+            <div class="column">
+              <div class="field">
+                <label class="label">First Name *</label>
+                <div class="control">
+                  <input class="input" type="text" name="first_name" value="{{ profile.first_name }}" required>
+                </div>
+              </div>
+            </div>
+            <div class="column">
+              <div class="field">
+                <label class="label">Last Name *</label>
+                <div class="control">
+                  <input class="input" type="text" name="last_name" value="{{ profile.last_name }}" required>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <div class="field">
+            <label class="label">Email *</label>
+            <div class="control">
+              <input class="input" type="email" name="email" value="{{ profile.email }}" required>
+            </div>
+          </div>
+          
+          <div class="field">
+            <label class="label">Phone Number</label>
+            <div class="control">
+              <input class="input" type="tel" name="phone_number" value="{{ profile.phone_number }}">
+            </div>
+          </div>
+          
+          <div class="field">
+            <label class="label">Address</label>
+            <div class="control">
+              <textarea class="textarea" name="address" rows="3">{{ profile.address }}</textarea>
+            </div>
+          </div>
+          
+          <div class="field is-grouped is-grouped-centered">
+            <div class="control">
+              <button type="submit" class="button is-primary">
+                <span class="icon">
+                  <i class="fas fa-save"></i>
+                </span>
+                <span>Update Profile</span>
+              </button>
+            </div>
+            <div class="control">
+              <a href="{% url 'sponsor_home' %}" class="button is-light">
+                <span class="icon">
+                  <i class="fas fa-arrow-left"></i>
+                </span>
+                <span>Back to Dashboard</span>
+              </a>
+            </div>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
 </div>
-
 {% endblock %}
