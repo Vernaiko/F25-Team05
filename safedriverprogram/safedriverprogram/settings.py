@@ -11,6 +11,7 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
 from pathlib import Path
+import os
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -20,19 +21,19 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = ''
-SECRET_KEY = os.getenv('SECRET_KEY', SECRET_KEY)
+SECRET_KEY = 'django-insecure-@5-pl@(mch*puojnu$_2c*8p%)3u#i@n$_1o#b_w$qus%#tq@$'
+#SECRET_KEY = os.getenv('SECRET_KEY', SECRET_KEY)
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-import os
+ALLOWED_HOSTS = []
 
-_hosts = os.getenv('DJANGO_ALLOWED_HOSTS', '')
+'''_hosts = os.getenv('DJANGO_ALLOWED_HOSTS', '')
 if _hosts:
     ALLOWED_HOSTS = [h.strip() for h in _hosts.split(',') if h.strip()]
 else:
-    ALLOWED_HOSTS = ['localhost', '127.0.0.1']
+    ALLOWED_HOSTS = ['localhost', '127.0.0.1']'''
 
 
 
@@ -81,7 +82,7 @@ WSGI_APPLICATION = 'safedriverprogram.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
-DATABASES = {
+'''DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.mysql',
         'NAME': os.getenv('DB_NAME', 'Team05_DB'),
@@ -90,7 +91,19 @@ DATABASES = {
         'HOST': os.getenv('DB_HOST', 'localhost'),
         'PORT': os.getenv('DB_PORT', '3306'),
     }
+}'''
+
+DATABASES = {
+    'default': {
+        'ENGINE': 'django.db.backends.mysql',
+        'NAME': 'Team05_DB',
+        'USER': 'CPSC4911_admin',
+        "PASSWORD": 'ytnSLOSNK4cB0ulSmGqJ',
+        'HOST': 'cpsc4910-f25.cobd8enwsupz.us-east-1.rds.amazonaws.com',
+        'PORT': '3306',
+    }
 }
+        
 
 # Password validation
 # https://docs.djangoproject.com/en/5.2/ref/settings/#auth-password-validators
