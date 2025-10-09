@@ -5,6 +5,11 @@ from django.db import connection
 from django.views.decorators.csrf import csrf_protect
 from django.http import JsonResponse
 
+from django.contrib.auth.models import User
+from django.contrib.auth.decorators import user_passes_test
+from django.contrib import messages
+from django.shortcuts import render, redirect, get_object_or_404
+
 # Database authentication helper functions
 class DatabaseUser:
     """Custom user authentication with MySQL database"""
@@ -1330,6 +1335,65 @@ def sponsor_drivers(request):
         return redirect('sponsor_home')
     finally:
         cursor.close()
+
+
+def is_admin(user):
+    return user.is_staff or user.is_superuser
+
+@user_passes_test(is_admin)
+def add_admin(request):
+    """Allow existing admins to add a new admin."""
+    if request.method == "POST":
+        username = request.POST.get("username")
+        email = request.POST.get("email")
+        password = request.POST.get("password")
+
+        if User.objects.filter(username=username).exists():
+            messages.error(request, "Username already exists.")
+        else:
+            new_admin = User.objects.create_user(username=username, email=email, password=password)
+            new_admin.is_staff = True
+            new_admin.save()
+            messages.success(request, f"Admin '{username}' added successfully.")
+            return redirect("admin_list")
+
+    return render(request, "add_admin.html")
+
+@user_passes_test(is_admin)
+def admin_list(request):
+    """Show all admins with option to delete."""
+    admins = User.objects.filter(is_staff=True)
+    return render(request, "admin_list.html", {"admins": admins})
+
+@user_passes_test(is_admin)
+def delete_admin(request, admin_id):
+    """Delete a selected admin."""
+    admin_user = get_object_or_404(User, id=admin_id, is_staff=True)
+
+    if request.user == admin_user:
+        messages.error(request, "You cannot delete your own account.")
+    else:
+        admin_user.delete()
+        messages.success(request, "Admin deleted successfully.")
+
+    return redirect("admin_list")
+
+@user_passes_test(is_admin)
+def driver_list(request):
+    """Display all drivers and allow admin to update their active status."""
+    drivers = User.objects.filter(is_staff=False)  # assuming drivers are non-admin users
+
+    if request.method == "POST":
+        driver_id = request.POST.get("driver_id")
+        new_status = request.POST.get("status") == "True"
+        driver = get_object_or_404(User, id=driver_id)
+        driver.is_active = new_status
+        driver.save()
+        messages.success(request, f"Driver '{driver.username}' status updated.")
+        return redirect("driver_list")
+
+    return render(request, "driver_list.html", {"drivers": drivers})
+
 # Add these functions to your existing driver_program/views.py file
 
 @db_login_required
@@ -1564,7 +1628,6 @@ def sponsor_application_action(request, application_id):
     
     return redirect('sponsor_manage_applications')
 
-@db_login_required
 @db_login_required
 def sponsor_view_application(request, application_id):
     """View detailed information about a specific driver application"""

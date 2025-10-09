@@ -1,0 +1,37 @@
+{% extends 'base.html' %}
+{% block content %}
+<h2>Driver List</h2>
+
+<table border="1" cellpadding="6">
+    <tr>
+        <th>Username</th>
+        <th>Email</th>
+        <th>Status</th>
+        <th>Action</th>
+    </tr>
+
+    {% for driver in drivers %}
+    <tr>
+        <td>{{ driver.username }}</td>
+        <td>{{ driver.email }}</td>
+        <td>{{ driver.is_active|yesno:"Active,Inactive" }}</td>
+        <td>
+            <form method="POST" style="display:inline;">
+                {% csrf_token %}
+                <input type="hidden" name="driver_id" value="{{ driver.id }}">
+                {% if driver.is_active %}
+                    <input type="hidden" name="status" value="False">
+                    <button type="submit" class="btn btn-warning">Deactivate</button>
+                {% else %}
+                    <input type="hidden" name="status" value="True">
+                    <button type="submit" class="btn btn-success">Activate</button>
+                {% endif %}
+            </form>
+        </td>
+    </tr>
+    {% empty %}
+    <tr><td colspan="4">No drivers found.</td></tr>
+    {% endfor %}
+</table>
+
+{% endblock %}
