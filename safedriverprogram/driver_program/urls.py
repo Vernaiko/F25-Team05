@@ -12,6 +12,11 @@ urlpatterns = [
     path('account/', views.account_page, name='account_page'),
     path('account/edit/', views.edit_account, name='edit_account'),
     path('account/change-password/', views.change_password, name='change_password'),
+    path('admin/add/', views.add_admin, name='add_admin'),
+    path('admin/list/', views.admin_list, name='admin_list'),
+    path('admin/delete/<int:admin_id>/', views.delete_admin, name='delete_admin'),
+    path('drivers/', views.driver_list, name='driver_list'),
+
     
     # Applications
     path('sponsor-application/', views.sponsor_application, name='sponsor_application'),

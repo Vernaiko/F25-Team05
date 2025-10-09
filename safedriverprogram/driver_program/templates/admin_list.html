@@ -1,0 +1,30 @@
+{% extends 'base.html' %}
+{% block content %}
+<h2>Admin List</h2>
+
+<table border="1" cellpadding="6">
+    <tr>
+        <th>Username</th>
+        <th>Email</th>
+        <th>Actions</th>
+    </tr>
+
+    {% for admin in admins %}
+    <tr>
+        <td>{{ admin.username }}</td>
+        <td>{{ admin.email }}</td>
+        <td>
+            {% if request.user != admin %}
+            <a href="{% url 'delete_admin' admin.id %}" class="btn btn-danger">Delete</a>
+            {% else %}
+            <em>(You)</em>
+            {% endif %}
+        </td>
+    </tr>
+    {% empty %}
+    <tr><td colspan="3">No admins found.</td></tr>
+    {% endfor %}
+</table>
+
+<a href="{% url 'add_admin' %}" class="btn btn-primary" style="margin-top:10px;">Add New Admin</a>
+{% endblock %}
