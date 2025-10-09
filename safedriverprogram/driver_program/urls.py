@@ -28,8 +28,12 @@ urlpatterns = [
     path('addresses/', views.manage_addresses, name='manage_addresses'),
     path('addresses/edit/<int:address_id>/', views.edit_address, name='edit_address'),
     path('addresses/delete/<int:address_id>/', views.delete_address, name='delete_address'),
+
+    # Sponsor-specific pages - FIXED: Remove duplicates
     path('sponsor/home/', views.sponsor_home, name='sponsor_home'),
     path('sponsor/profile/', views.sponsor_profile, name='sponsor_profile'),
     path('sponsor/drivers/', views.sponsor_drivers, name='sponsor_drivers'),
-
+    path('sponsor/applications/', views.sponsor_manage_applications, name='sponsor_manage_applications'),
+    path('sponsor/application/<int:application_id>/', views.sponsor_view_application, name='sponsor_view_application'),
+    path('sponsor-application-action/<int:application_id>/', views.sponsor_application_action, name='sponsor_application_action'),
 ]

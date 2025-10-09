@@ -1,0 +1,409 @@
+{% extends 'base.html' %}
+
+{% block title %}Manage Applications - Safe Driver Program{% endblock %}
+
+{% block content %}
+<div class="container">
+  <div class="box">
+    <h1 class="title has-text-centered">
+      <span class="icon is-large has-text-primary">
+        <i class="fas fa-clipboard-list fa-2x"></i>
+      </span>
+      <br>
+      Driver Applications
+    </h1>
+    
+    <!-- Statistics -->
+    <div class="level">
+      <div class="level-item has-text-centered">
+        <div>
+          <p class="heading">Total Applications</p>
+          <p class="title">{{ total_count }}</p>
+        </div>
+      </div>
+      <div class="level-item has-text-centered">
+        <div>
+          <p class="heading">Pending Review</p>
+          <p class="title has-text-warning">{{ pending_count }}</p>
+        </div>
+      </div>
+      <div class="level-item has-text-centered">
+        <div>
+          <p class="heading">Approved</p>
+          <p class="title has-text-success">{{ approved_count }}</p>
+        </div>
+      </div>
+      <div class="level-item has-text-centered">
+        <div>
+          <p class="heading">Rejected</p>
+          <p class="title has-text-danger">{{ rejected_count }}</p>
+        </div>
+      </div>
+    </div>
+    
+    {% if applications %}
+    <!-- Filter tabs -->
+    <div class="tabs is-centered">
+      <ul>
+        <li class="is-active" data-filter="all">
+          <a><span class="icon"><i class="fas fa-list"></i></span><span>All Applications</span></a>
+        </li>
+        <li data-filter="pending">
+          <a><span class="icon"><i class="fas fa-clock"></i></span><span>Pending ({{ pending_count }})</span></a>
+        </li>
+        <li data-filter="approved">
+          <a><span class="icon"><i class="fas fa-check"></i></span><span>Approved</span></a>
+        </li>
+        <li data-filter="rejected">
+          <a><span class="icon"><i class="fas fa-times"></i></span><span>Rejected</span></a>
+        </li>
+      </ul>
+    </div>
+    
+    <!-- Applications list -->
+    <div class="applications-container">
+      {% for application in applications %}
+      <div class="box application-item" data-status="{{ application.application_status }}">
+        <div class="level">
+          <div class="level-left">
+            <div class="level-item">
+              <div>
+                <p class="heading">
+                  {% if application.is_change_request %}
+                    <span class="tag is-warning">
+                      <span class="icon"><i class="fas fa-exchange-alt"></i></span>
+                      <span>Sponsor Change</span>
+                    </span>
+                  {% else %}
+                    <span class="tag is-info">
+                      <span class="icon"><i class="fas fa-user-plus"></i></span>
+                      <span>New Application</span>
+                    </span>
+                  {% endif %}
+                </p>
+                <p class="title is-4">{{ application.driver_first_name }} {{ application.driver_last_name }}</p>
+                <p class="subtitle is-6">
+                  @{{ application.driver_username }} • {{ application.driver_email }}
+                </p>
+                <p class="has-text-grey-dark">
+                  <span class="icon"><i class="fas fa-calendar"></i></span>
+                  Applied: {{ application.application_date|date:"M d, Y g:i A" }}
+                </p>
+              </div>
+            </div>
+          </div>
+          <div class="level-right">
+            <div class="level-item">
+              <div class="has-text-right">
+                <p class="heading">Status</p>
+                <p class="title is-4">
+                  {% if application.application_status == 'pending' %}
+                    <span class="tag is-warning is-large">
+                      <span class="icon"><i class="fas fa-clock"></i></span>
+                      <span>Pending</span>
+                    </span>
+                  {% elif application.application_status == 'under_review' %}
+                    <span class="tag is-info is-large">
+                      <span class="icon"><i class="fas fa-search"></i></span>
+                      <span>Under Review</span>
+                    </span>
+                  {% elif application.application_status == 'approved' %}
+                    <span class="tag is-success is-large">
+                      <span class="icon"><i class="fas fa-check"></i></span>
+                      <span>Approved</span>
+                    </span>
+                  {% elif application.application_status == 'rejected' %}
+                    <span class="tag is-danger is-large">
+                      <span class="icon"><i class="fas fa-times"></i></span>
+                      <span>Rejected</span>
+                    </span>
+                  {% endif %}
+                </p>
+                {% if application.review_date %}
+                  <p class="subtitle is-6">{{ application.review_date|date:"M d, Y" }}</p>
+                {% endif %}
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Application preview -->
+        {% if application.motivation_essay %}
+        <div class="content">
+          <h6 class="title is-6">
+            {% if application.is_change_request %}Change Reason:{% else %}Motivation:{% endif %}
+          </h6>
+          <p class="has-text-grey-dark">
+            {% if application.is_change_request and 'SPONSOR CHANGE REQUEST:' in application.motivation_essay %}
+              {{ application.motivation_essay|slice:"23:"|truncatewords:20 }}
+            {% else %}
+              {{ application.motivation_essay|truncatewords:20 }}
+            {% endif %}
+          </p>
+        </div>
+        {% endif %}
+        
+        <!-- Driver info preview -->
+        <div class="level is-mobile">
+          <div class="level-left">
+            <div class="level-item">
+              <small class="has-text-grey">
+                <span class="icon"><i class="fas fa-id-card"></i></span>
+                License: {{ application.driver_license_number|default:"Not provided" }}
+              </small>
+            </div>
+            <div class="level-item">
+              <small class="has-text-grey">
+                <span class="icon"><i class="fas fa-road"></i></span>
+                {{ application.years_of_experience|default:0 }} years experience
+              </small>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Action buttons -->
+        <div class="field is-grouped">
+          <div class="control">
+            <a href="{% url 'sponsor_view_application' application.application_id %}" class="button is-info">
+              <span class="icon"><i class="fas fa-eye"></i></span>
+              <span>View Details</span>
+            </a>
+          </div>
+          
+          {% if application.application_status == 'pending' or application.application_status == 'under_review' %}
+          <div class="control">
+            <button class="button is-success" onclick="approveApplication({{ application.application_id }}, '{{ application.driver_first_name }} {{ application.driver_last_name }}')">
+              <span class="icon"><i class="fas fa-check"></i></span>
+              <span>Approve</span>
+            </button>
+          </div>
+          <div class="control">
+            <button class="button is-danger" onclick="rejectApplication({{ application.application_id }}, '{{ application.driver_first_name }} {{ application.driver_last_name }}')">
+              <span class="icon"><i class="fas fa-times"></i></span>
+              <span>Reject</span>
+            </button>
+          </div>
+          {% endif %}
+        </div>
+        
+        {% if application.rejection_reason %}
+        <div class="notification is-danger is-light">
+          <h6 class="title is-6">Rejection Reason:</h6>
+          <p>{{ application.rejection_reason }}</p>
+        </div>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+    
+    {% else %}
+    <div class="notification is-info">
+      <span class="icon">
+        <i class="fas fa-info-circle"></i>
+      </span>
+      <strong>No applications found.</strong> You haven't received any driver applications yet.
+    </div>
+    {% endif %}
+    
+    <div class="has-text-centered" style="margin-top: 2rem;">
+      <a href="{% url 'sponsor_home' %}" class="button is-primary">
+        <span class="icon">
+          <i class="fas fa-home"></i>
+        </span>
+        <span>Back to Dashboard</span>
+      </a>
+    </div>
+  </div>
+</div>
+
+<!-- Approve Modal -->
+<div class="modal" id="approveModal">
+  <div class="modal-background"></div>
+  <div class="modal-card">
+    <header class="modal-card-head">
+      <p class="modal-card-title">
+        <span class="icon has-text-success"><i class="fas fa-check"></i></span>
+        Approve Application
+      </p>
+      <button class="delete" aria-label="close" onclick="closeModal('approveModal')"></button>
+    </header>
+    <section class="modal-card-body">
+      <form id="approveForm" method="post">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="approve">
+        
+        <div class="notification is-success is-light">
+          <p><strong>You are about to approve this application.</strong></p>
+          <p>Driver: <span id="approveDriverName"></span></p>
+          <p>This will create an active sponsor relationship.</p>
+        </div>
+        
+        <div class="field">
+          <label class="label">Approval Notes (Optional)</label>
+          <div class="control">
+            <textarea class="textarea" name="admin_notes" placeholder="Any notes about this approval..." rows="3"></textarea>
+          </div>
+          <p class="help">These notes will be saved with the application record.</p>
+        </div>
+      </form>
+    </section>
+    <footer class="modal-card-foot">
+      <button class="button is-success" onclick="submitApproval()">
+        <span class="icon"><i class="fas fa-check"></i></span>
+        <span>Approve Application</span>
+      </button>
+      <button class="button" onclick="closeModal('approveModal')">Cancel</button>
+    </footer>
+  </div>
+</div>
+
+<!-- Reject Modal -->
+<div class="modal" id="rejectModal">
+  <div class="modal-background"></div>
+  <div class="modal-card">
+    <header class="modal-card-head">
+      <p class="modal-card-title">
+        <span class="icon has-text-danger"><i class="fas fa-times"></i></span>
+        Reject Application
+      </p>
+      <button class="delete" aria-label="close" onclick="closeModal('rejectModal')"></button>
+    </header>
+    <section class="modal-card-body">
+      <form id="rejectForm" method="post">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="reject">
+        
+        <div class="notification is-danger is-light">
+          <p><strong>You are about to reject this application.</strong></p>
+          <p>Driver: <span id="rejectDriverName"></span></p>
+          <p>Please provide a clear reason for rejection.</p>
+        </div>
+        
+        <div class="field">
+          <label class="label">Rejection Reason *</label>
+          <div class="control">
+            <textarea class="textarea" name="rejection_reason" placeholder="Please explain why you're rejecting this application..." rows="4" required></textarea>
+          </div>
+          <p class="help">This reason will be shared with the driver.</p>
+        </div>
+        
+        <div class="field">
+          <label class="label">Additional Notes (Optional)</label>
+          <div class="control">
+            <textarea class="textarea" name="admin_notes" placeholder="Internal notes (not shared with driver)..." rows="3"></textarea>
+          </div>
+        </div>
+      </form>
+    </section>
+    <footer class="modal-card-foot">
+      <button class="button is-danger" onclick="submitRejection()">
+        <span class="icon"><i class="fas fa-times"></i></span>
+        <span>Reject Application</span>
+      </button>
+      <button class="button" onclick="closeModal('rejectModal')">Cancel</button>
+    </footer>
+  </div>
+</div>
+
+<script>
+// Filter functionality
+document.addEventListener('DOMContentLoaded', function() {
+    const tabs = document.querySelectorAll('.tabs li');
+    const applications = document.querySelectorAll('.application-item');
+    
+    tabs.forEach(tab => {
+        tab.addEventListener('click', function() {
+            tabs.forEach(t => t.classList.remove('is-active'));
+            this.classList.add('is-active');
+            
+            const filter = this.dataset.filter;
+            
+            applications.forEach(app => {
+                if (filter === 'all' || app.dataset.status === filter) {
+                    app.style.display = 'block';
+                } else {
+                    app.style.display = 'none';
+                }
+            });
+        });
+    });
+});
+
+let currentApplicationId = null;
+
+function approveApplication(applicationId, driverName) {
+    currentApplicationId = applicationId;
+    document.getElementById('approveDriverName').textContent = driverName;
+    document.getElementById('approveForm').action = `/sponsor-application-action/${applicationId}/`;
+    document.getElementById('approveModal').classList.add('is-active');
+}
+
+function rejectApplication(applicationId, driverName) {
+    currentApplicationId = applicationId;
+    document.getElementById('rejectDriverName').textContent = driverName;
+    document.getElementById('rejectForm').action = `/sponsor-application-action/${applicationId}/`;
+    document.getElementById('rejectModal').classList.add('is-active');
+}
+
+function closeModal(modalId) {
+    document.getElementById(modalId).classList.remove('is-active');
+    currentApplicationId = null;
+}
+
+function submitApproval() {
+    if (currentApplicationId) {
+        document.getElementById('approveForm').submit();
+    }
+}
+
+function submitRejection() {
+    const reason = document.querySelector('#rejectForm textarea[name="rejection_reason"]').value.trim();
+    if (!reason) {
+        alert('Please provide a reason for rejection.');
+        return;
+    }
+    if (currentApplicationId) {
+        document.getElementById('rejectForm').submit();
+    }
+}
+
+document.querySelectorAll('.modal-background').forEach(bg => {
+    bg.addEventListener('click', function() {
+        this.parentElement.classList.remove('is-active');
+    });
+});
+</script>
+
+<style>
+.application-item {
+    transition: all 0.3s ease;
+    border-left: 4px solid #dbdbdb;
+}
+
+.application-item[data-status="pending"] {
+    border-left-color: #ffdd57;
+}
+
+.application-item[data-status="approved"] {
+    border-left-color: #48c774;
+}
+
+.application-item[data-status="rejected"] {
+    border-left-color: #f14668;
+}
+
+.application-item[data-status="under_review"] {
+    border-left-color: #3273dc;
+}
+
+.application-item:hover {
+    box-shadow: 0 8px 16px rgba(10, 10, 10, 0.1);
+    transform: translateY(-2px);
+}
+
+.tabs li {
+    cursor: pointer;
+}
+</style>
+
+{% endblock %}
