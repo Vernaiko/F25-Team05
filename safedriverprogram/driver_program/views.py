@@ -944,7 +944,7 @@ def account_page(request):
         # Get user information from database
         cursor.execute("""
             SELECT userID, username, first_name, last_name, email, 
-                   phone_number, address, account_type, is_active, created_at
+                   phone_number, address, avatar_image, account_type, is_active, created_at
             FROM users 
             WHERE userID = %s
         """, [user_id])
@@ -964,10 +964,22 @@ def account_page(request):
             'email': user_data[4],
             'phone_number': user_data[5],
             'address': user_data[6],
-            'account_type': user_data[7],
-            'is_active': user_data[8],
-            'created_at': user_data[9]
+            'avatar_image': user_data[7],
+            'account_type': user_data[8],
+            'is_active': user_data[9],
+            'created_at': user_data[10]
         }
+
+        # Fetch latest delivery address if available
+        try:
+            cursor.execute(
+                "SELECT address FROM delivery_addresses WHERE user_id = %s ORDER BY created_at DESC LIMIT 1",
+                [user_info['userID']]
+            )
+            da = cursor.fetchone()
+            user_info['delivery_address'] = da[0] if da else None
+        except Exception:
+            user_info['delivery_address'] = None
         
         # Get additional statistics based on account type
         statistics = {}

@@ -17,10 +17,10 @@
         
         {% if user %}
         <div class="content">
-          {% if user.avatar_image %}
+          {% if user_info.avatar_image %}
             <div class="has-text-centered" style="margin-bottom:1rem;">
               <figure class="image is-128x128 is-inline-block">
-                <img src="{{ MEDIA_URL }}{{ user.avatar_image }}" alt="Avatar" style="width:128px;height:128px;object-fit:cover;border-radius:50%;">
+                  <img src="{{ MEDIA_URL }}{{ user_info.avatar_image }}" alt="Avatar" style="width:128px;height:128px;object-fit:cover;border-radius:50%;">
               </figure>
             </div>
           {% endif %}
@@ -39,37 +39,37 @@
                   <tbody>
                     <tr>
                       <td><strong>User ID:</strong></td>
-                      <td>{{ user.user_id }}</td>
+                      <td>{{ user_info.userID }}</td>
                     </tr>
                     <tr>
                       <td><strong>Username:</strong></td>
-                      <td>{{ user.username|default:"Not set" }}</td>
+                      <td>{{ user_info.username|default:"Not set" }}</td>
                     </tr>
                     <tr>
                       <td><strong>Email:</strong></td>
-                      <td>{{ user.email|default:"Not set" }}</td>
+                      <td>{{ user_info.email|default:"Not set" }}</td>
                     </tr>
                     <tr>
                       <td><strong>First Name:</strong></td>
-                      <td>{{ user.first_name|default:"Not set" }}</td>
+                      <td>{{ user_info.first_name|default:"Not set" }}</td>
                     </tr>
                     <tr>
                       <td><strong>Last Name:</strong></td>
-                      <td>{{ user.last_name|default:"Not set" }}</td>
+                      <td>{{ user_info.last_name|default:"Not set" }}</td>
                     </tr>
                     <tr>
                       <td><strong>Phone Number:</strong></td>
-                      <td>{{ user.phone_number|default:"Not set" }}</td>
+                      <td>{{ user_info.phone_number|default:"Not set" }}</td>
                     </tr>
                     <tr>
                       <td><strong>Address:</strong></td>
-                      <td>{{ user.address|default:"Not set" }}</td>
+                      <td>{{ user_info.address|default:"Not set" }}</td>
                     </tr>
                     <tr>
                       <td><strong>Delivery Address:</strong></td>
                       <td>
-                        {% if user.delivery_address %}
-                          {{ user.delivery_address }}
+                        {% if user_info.delivery_address %}
+                          {{ user_info.delivery_address }}
                         {% else %}
                           <span class="tag is-warning">Not set</span>
                           <br>
@@ -116,53 +116,16 @@
                   <span class="icon"><i class="fas fa-user-shield"></i></span>
                   <span>Administrator</span>
                 </span>
-                <span>Manage Addresses</span>
-              </a>
-            </div>
-            <div class="control">
-              <a href="{% url 'delete_account' %}" class="button is-danger">
-                <span class="icon">
-                  <i class="fas fa-user-slash"></i>
-                </span>
-                <span>Delete Account</span>
-              </a>
-          </div>
-        
-          {% if user.account_type == 'driver' %}
-            <div class="control">
-            <a href="{% url 'sponsor_change_request' %}" class="button is-warning">
-                <span class="icon">
-                <i class="fas fa-exchange-alt"></i>
-                </span>
-                <span>Request Sponsor Change</span>
-            </a>
-            </div>
-            <div class="control">
-            <a href="{% url 'view_sponsor_requests' %}" class="button is-info">
-                <span class="icon">
-                <i class="fas fa-history"></i>
-                </span>
-                <span>View Request History</span>
-            </a>
-            </div>
-            <div class="control">
-            <a href="{% url 'organization_page' %}" class="button is-link">
-                <span class="icon">
-                <i class="fas fa-building"></i>
-                </span>
-                <span>Organization Page</span>
-            </a>
-            </div>
               {% else %}
                 <span class="tag is-light">{{ request.session.account_type|default:"Unknown" }}</span>
               {% endif %}
             </p>
           </div>
+
           <div class="field">
             <label class="label">Phone</label>
             <p class="control">{{ user_info.phone_number|default:"Not set" }}</p>
           </div>
-          {% endif %}
           
           <div class="field">
             <label class="label">Member Since</label>
@@ -171,7 +134,8 @@
         </div>
       </div>
     </div>
-    
+
+    <div class="column is-one-third">
     <!-- Sponsor-Specific Dashboard -->
     {% if request.session.account_type == 'sponsor' %}
     <div class="box has-background-primary-light">
@@ -335,4 +299,8 @@
     </div>
   </div>
 </div>
+    </div>
+  </div>
+</div>
+{% endif %}
 {% endblock %}
