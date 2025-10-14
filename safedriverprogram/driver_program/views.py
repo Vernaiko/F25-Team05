@@ -4,6 +4,9 @@ from django.contrib import messages
 from django.db import connection
 from django.views.decorators.csrf import csrf_protect
 from django.http import JsonResponse
+from django.conf import settings
+import os
+from django.core.files.storage import default_storage
 
 from django.contrib.auth.models import User
 from django.contrib.auth.decorators import user_passes_test
@@ -218,11 +221,35 @@ def signup_page(request):
             messages.error(request, "Password must be at least 6 characters long.")
             return render(request, 'signup.html')
         
+        # Handle uploaded avatar (optional)
+        avatar_filename = None
+        if request.FILES.get('avatar'):
+            avatar = request.FILES['avatar']
+            avatars_dir = settings.MEDIA_ROOT / 'avatars'
+            os.makedirs(avatars_dir, exist_ok=True)
+            avatar_filename = os.path.join('avatars', avatar.name)
+            full_path = settings.MEDIA_ROOT / avatar_filename
+            with open(full_path, 'wb+') as dest:
+                for chunk in avatar.chunks():
+                    dest.write(chunk)
+
         # Create user in database
         user, message = DatabaseUser.create_user(
             username, email, password, first_name, last_name, 
             phone_number, address, account_type
         )
+
+        # If created and avatar uploaded, update avatar_image column
+        if user and avatar_filename:
+            cursor = connection.cursor()
+            try:
+                cursor.execute("""
+                    UPDATE users SET avatar_image = %s WHERE userID = %s
+                """, [avatar_filename, user['userID']])
+            except Exception as e:
+                print(f"Error saving avatar path to DB: {e}")
+            finally:
+                cursor.close()
         
         if user:
             messages.success(request, f"Account created successfully for {username}!")
@@ -247,11 +274,74 @@ def edit_account(request):
         last_name = request.POST.get('last_name', '').strip()
         phone_number = request.POST.get('phone_number', '').strip()
         address = request.POST.get('address', '').strip()
+        # Handle avatar upload
+        avatar_filename = None
+        if request.FILES.get('avatar'):
+            avatar = request.FILES['avatar']
+            avatars_dir = settings.MEDIA_ROOT / 'avatars'
+            os.makedirs(avatars_dir, exist_ok=True)
+            avatar_filename = os.path.join('avatars', avatar.name)
+            full_path = settings.MEDIA_ROOT / avatar_filename
+            with open(full_path, 'wb+') as dest:
+                for chunk in avatar.chunks():
+                    dest.write(chunk)
         
-        # Validation
+        # If required fields are missing (e.g., user submitted only an avatar),
+        # fetch current values from DB and use them so avatar-only updates are allowed.
         if not all([email, first_name, last_name]):
+            cursor_prefill = connection.cursor()
+            try:
+                cursor_prefill.execute("""
+                    SELECT email, first_name, last_name, phone_number, address
+                    FROM users WHERE userID = %s
+                """, [user_id])
+                existing = cursor_prefill.fetchone()
+                if existing:
+                    if not email:
+                        email = existing[0] or ''
+                    if not first_name:
+                        first_name = existing[1] or ''
+                    if not last_name:
+                        last_name = existing[2] or ''
+                    if not phone_number:
+                        phone_number = existing[3] or ''
+                    if not address:
+                        address = existing[4] or ''
+            except Exception as e:
+                print(f"Error pre-filling account data: {e}")
+            finally:
+                try:
+                    cursor_prefill.close()
+                except:
+                    pass
+
+        # Validation (re-check after prefill)
+        if not all([email, first_name, last_name]):
+            # Provide current user data to the template so the form stays populated
+            cursor = connection.cursor()
+            try:
+                cursor.execute("""
+                    SELECT email, first_name, last_name, phone_number, address
+                    FROM users WHERE userID = %s
+                """, [user_id])
+                row = cursor.fetchone()
+                user_data = {
+                    'email': row[0] if row else '',
+                    'first_name': row[1] if row else '',
+                    'last_name': row[2] if row else '',
+                    'phone_number': row[3] if row else '',
+                    'address': row[4] if row else '',
+                }
+            except Exception:
+                user_data = {'email': email, 'first_name': first_name, 'last_name': last_name, 'phone_number': phone_number, 'address': address}
+            finally:
+                try:
+                    cursor.close()
+                except:
+                    pass
+
             messages.error(request, "Please fill in all required fields.")
-            return render(request, 'edit_account.html')
+            return render(request, 'edit_account.html', {'user_data': user_data})
         
         # Update user in database
         cursor = connection.cursor()
@@ -262,6 +352,15 @@ def edit_account(request):
                     phone_number = %s, address = %s, updated_at = NOW()
                 WHERE userID = %s
             """, [email, first_name, last_name, phone_number, address, user_id])
+
+            # Save avatar filename to DB if uploaded
+            if avatar_filename:
+                try:
+                    cursor.execute("""
+                        UPDATE users SET avatar_image = %s WHERE userID = %s
+                    """, [avatar_filename, user_id])
+                except Exception as e:
+                    print(f"Error updating avatar in DB: {e}")
             
             # Update session data
             request.session['email'] = email
