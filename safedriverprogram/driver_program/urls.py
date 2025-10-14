@@ -16,6 +16,8 @@ urlpatterns = [
     path('admin/list/', views.admin_list, name='admin_list'),
     path('admin/delete/<int:admin_id>/', views.delete_admin, name='delete_admin'),
     path('drivers/', views.driver_list, name='driver_list'),
+    path('account/delete/', views.delete_account, name='delete_account'),
+    path('organzation_page/', views.to_organization_page, name='organization_page'),
 
     
     # Applications
