@@ -180,6 +180,13 @@
                 <span>Manage Addresses</span>
               </a>
             </div>
+            <div class="control">
+              <a href="{% url 'delete_account' %}" class="button is-danger">
+                <span class="icon">
+                  <i class="fas fa-user-slash"></i>
+                </span>
+                <span>Delete Account</span>
+              </a>
           </div>
           {% if user.account_type == 'driver' %}
             <div class="control">
@@ -196,6 +203,14 @@
                 <i class="fas fa-history"></i>
                 </span>
                 <span>View Request History</span>
+            </a>
+            </div>
+            <div class="control">
+            <a href="{% url 'organization_page' %}" class="button is-link">
+                <span class="icon">
+                <i class="fas fa-building"></i>
+                </span>
+                <span>Organization Page</span>
             </a>
             </div>
             {% endif %}

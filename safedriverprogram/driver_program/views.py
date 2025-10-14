@@ -354,6 +354,104 @@ def change_password(request):
     
     return render(request, 'change_password.html')
 
+@db_login_required
+def delete_account(request):
+    """Delete the logged-in user's account from the database.
+
+    - GET: show confirmation page (template: delete_account.html)
+    - POST: attempt to delete user's records and the users row, or anonymize as a fallback.
+    After successful deletion/anonymization the user's session is cleared and a success
+    page is rendered informing the user their account has been deleted.
+    Works for any account type.
+    """
+    # Ensure the user is logged in
+    if not request.session.get('is_authenticated'):
+        messages.error(request, "Please log in to delete your account.")
+        return redirect('login_page')
+
+    user_id = request.session.get('user_id')
+    if not user_id:
+        messages.error(request, "Session problem: cannot determine user. Please log in again.")
+        return redirect('login_page')
+
+    # Show confirmation page on GET
+    if request.method != 'POST':
+        return render(request, 'delete_account.html')
+
+    # POST -> perform deletion
+    cursor = connection.cursor()
+    try:
+        # Attempt to remove rows in related tables first to avoid constraint errors.
+        try:
+            cursor.execute("DELETE FROM delivery_addresses WHERE user_id = %s", [user_id])
+        except Exception:
+            pass
+
+        try:
+            cursor.execute("DELETE FROM sponsor_driver_relationships WHERE driver_user_id = %s OR sponsor_user_id = %s", [user_id, user_id])
+        except Exception:
+            pass
+
+        try:
+            cursor.execute("DELETE FROM driver_applications WHERE driver_user_id = %s OR sponsor_user_id = %s", [user_id, user_id])
+        except Exception:
+            pass
+
+        try:
+            cursor.execute("DELETE FROM sponsor_applications WHERE email = (SELECT email FROM users WHERE userID = %s)", [user_id])
+        except Exception:
+            pass
+
+        # Finally attempt to delete the user row
+        try:
+            cursor.execute("DELETE FROM users WHERE userID = %s", [user_id])
+        except Exception as e:
+            # If delete fails (FK constraints), fall back to anonymizing the account
+            try:
+                print(f"Delete failed, anonymizing user {user_id}: {e}")
+                anonymized_username = f"deleted_user_{user_id}"
+                anonymized_email = f"deleted+{user_id}@example.invalid"
+                cursor.execute(
+                    """
+                    UPDATE users SET username = %s, email = %s, password_hash = NULL,
+                                    first_name = NULL, last_name = NULL, phone_number = NULL,
+                                    address = NULL, is_active = 0, updated_at = NOW()
+                    WHERE userID = %s
+                    """,
+                    [anonymized_username, anonymized_email, user_id]
+                )
+            except Exception as e2:
+                print(f"Anonymize failed for user {user_id}: {e2}")
+                # If anonymization also fails, surface an error to the user
+                messages.error(request, "Failed to delete or anonymize your account. Please contact support.")
+                return redirect('account_page')
+
+        # Commit changes (cursor may auto-commit depending on DBAPI; ensure commit if needed)
+        try:
+            connection.commit()
+        except Exception:
+            pass
+
+        # Clear session and inform the user
+        username = request.session.get('first_name') or request.session.get('username') or 'User'
+        request.session.clear()
+
+        # Render a success page with a friendly message
+        return render(request, 'application_success.html', {
+            'message': f"{username}, your account and related data have been removed from our system. We're sorry to see you go.",
+            'title': 'Account Deleted'
+        })
+
+    finally:
+        try:
+            cursor.close()
+        except Exception:
+            pass
+        
+def to_organization_page(request):
+    """Redirect to organization page"""
+    return redirect('organization_page')
+
 # Address Management Views
 @db_login_required
 def manage_addresses(request):

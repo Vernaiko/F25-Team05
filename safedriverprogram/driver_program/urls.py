@@ -12,6 +12,8 @@ urlpatterns = [
     path('account/', views.account_page, name='account_page'),
     path('account/edit/', views.edit_account, name='edit_account'),
     path('account/change-password/', views.change_password, name='change_password'),
+    path('account/delete/', views.delete_account, name='delete_account'),
+    path('organzation_page/', views.to_organization_page, name='organization_page'),
     
     # Applications
     path('sponsor-application/', views.sponsor_application, name='sponsor_application'),
