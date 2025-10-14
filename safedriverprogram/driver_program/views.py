@@ -8,6 +8,11 @@ from django.conf import settings
 import os
 from django.core.files.storage import default_storage
 
+from django.contrib.auth.models import User
+from django.contrib.auth.decorators import user_passes_test
+from django.contrib import messages
+from django.shortcuts import render, redirect, get_object_or_404
+
 # Database authentication helper functions
 class DatabaseUser:
     """Custom user authentication with MySQL database"""
@@ -453,6 +458,104 @@ def change_password(request):
     
     return render(request, 'change_password.html')
 
+@db_login_required
+def delete_account(request):
+    """Delete the logged-in user's account from the database.
+
+    - GET: show confirmation page (template: delete_account.html)
+    - POST: attempt to delete user's records and the users row, or anonymize as a fallback.
+    After successful deletion/anonymization the user's session is cleared and a success
+    page is rendered informing the user their account has been deleted.
+    Works for any account type.
+    """
+    # Ensure the user is logged in
+    if not request.session.get('is_authenticated'):
+        messages.error(request, "Please log in to delete your account.")
+        return redirect('login_page')
+
+    user_id = request.session.get('user_id')
+    if not user_id:
+        messages.error(request, "Session problem: cannot determine user. Please log in again.")
+        return redirect('login_page')
+
+    # Show confirmation page on GET
+    if request.method != 'POST':
+        return render(request, 'delete_account.html')
+
+    # POST -> perform deletion
+    cursor = connection.cursor()
+    try:
+        # Attempt to remove rows in related tables first to avoid constraint errors.
+        try:
+            cursor.execute("DELETE FROM delivery_addresses WHERE user_id = %s", [user_id])
+        except Exception:
+            pass
+
+        try:
+            cursor.execute("DELETE FROM sponsor_driver_relationships WHERE driver_user_id = %s OR sponsor_user_id = %s", [user_id, user_id])
+        except Exception:
+            pass
+
+        try:
+            cursor.execute("DELETE FROM driver_applications WHERE driver_user_id = %s OR sponsor_user_id = %s", [user_id, user_id])
+        except Exception:
+            pass
+
+        try:
+            cursor.execute("DELETE FROM sponsor_applications WHERE email = (SELECT email FROM users WHERE userID = %s)", [user_id])
+        except Exception:
+            pass
+
+        # Finally attempt to delete the user row
+        try:
+            cursor.execute("DELETE FROM users WHERE userID = %s", [user_id])
+        except Exception as e:
+            # If delete fails (FK constraints), fall back to anonymizing the account
+            try:
+                print(f"Delete failed, anonymizing user {user_id}: {e}")
+                anonymized_username = f"deleted_user_{user_id}"
+                anonymized_email = f"deleted+{user_id}@example.invalid"
+                cursor.execute(
+                    """
+                    UPDATE users SET username = %s, email = %s, password_hash = NULL,
+                                    first_name = NULL, last_name = NULL, phone_number = NULL,
+                                    address = NULL, is_active = 0, updated_at = NOW()
+                    WHERE userID = %s
+                    """,
+                    [anonymized_username, anonymized_email, user_id]
+                )
+            except Exception as e2:
+                print(f"Anonymize failed for user {user_id}: {e2}")
+                # If anonymization also fails, surface an error to the user
+                messages.error(request, "Failed to delete or anonymize your account. Please contact support.")
+                return redirect('account_page')
+
+        # Commit changes (cursor may auto-commit depending on DBAPI; ensure commit if needed)
+        try:
+            connection.commit()
+        except Exception:
+            pass
+
+        # Clear session and inform the user
+        username = request.session.get('first_name') or request.session.get('username') or 'User'
+        request.session.clear()
+
+        # Render a success page with a friendly message
+        return render(request, 'application_success.html', {
+            'message': f"{username}, your account and related data have been removed from our system. We're sorry to see you go.",
+            'title': 'Account Deleted'
+        })
+
+    finally:
+        try:
+            cursor.close()
+        except Exception:
+            pass
+        
+def to_organization_page(request):
+    """Redirect to organization page"""
+    return redirect('organization_page')
+
 # Address Management Views
 @db_login_required
 def manage_addresses(request):
@@ -824,28 +927,24 @@ def database_status(request):
     return render(request, 'database_status.html', context)
 
 # Account management views
+@db_login_required
 def account_page(request):
-    """Display user account information"""
+    """Display user account information and management options"""
     
-    # Check if user is logged in
     if not request.session.get('is_authenticated'):
         messages.error(request, "Please log in to access your account.")
         return redirect('login_page')
     
     user_id = request.session.get('user_id')
-    if not user_id:
-        messages.error(request, "Session error. Please log in again.")
-        return redirect('login_page')
+    account_type = request.session.get('account_type')
     
     cursor = connection.cursor()
     
     try:
-        # Fetch user information from database using correct column names from your schema
+        # Get user information from database
         cursor.execute("""
-            SELECT userID, username, email, first_name, last_name, 
-                   phone_number, address, account_type, DOB,
-                   is_active, is_email_verified, last_login_at, 
-                   created_at, updated_at, avatar_image
+            SELECT userID, username, first_name, last_name, email, 
+                   phone_number, address, account_type, is_active, created_at
             FROM users 
             WHERE userID = %s
         """, [user_id])
@@ -856,39 +955,66 @@ def account_page(request):
             messages.error(request, "User account not found.")
             return redirect('login_page')
         
-        # Create user dictionary matching your actual database schema
-        user = {
-            'user_id': user_data[0],
+        # Format user information
+        user_info = {
+            'userID': user_data[0],
             'username': user_data[1],
-            'email': user_data[2],
-            'first_name': user_data[3],
-            'last_name': user_data[4],
+            'first_name': user_data[2],
+            'last_name': user_data[3],
+            'email': user_data[4],
             'phone_number': user_data[5],
             'address': user_data[6],
             'account_type': user_data[7],
-            'date_of_birth': user_data[8],  # This is DOB in your schema
-            'is_active': user_data[9],
-            'email_verified': user_data[10],  # This is is_email_verified in your schema
-            'last_login': user_data[11],      # This is last_login_at in your schema
-            'created_at': user_data[12],
-            'updated_at': user_data[13],
-            'avatar_image': user_data[14],
-            'delivery_address': None  # This column doesn't exist in your schema
+            'is_active': user_data[8],
+            'created_at': user_data[9]
         }
         
-        # Get delivery addresses count
-        cursor.execute("""
-            SELECT COUNT(*) FROM delivery_addresses 
-            WHERE user_id = %s
-        """, [user_id])
+        # Get additional statistics based on account type
+        statistics = {}
         
-        address_count_result = cursor.fetchone()
-        address_count = address_count_result[0] if address_count_result else 0
+        if account_type == 'sponsor':
+            # Get sponsor statistics
+            cursor.execute("""
+                SELECT COUNT(*) 
+                FROM sponsor_driver_relationships 
+                WHERE sponsor_user_id = %s AND relationship_status = 'active'
+            """, [user_id])
+            
+            active_drivers_result = cursor.fetchone()
+            statistics['active_drivers'] = active_drivers_result[0] if active_drivers_result else 0
+            
+            cursor.execute("""
+                SELECT COUNT(*) 
+                FROM driver_applications 
+                WHERE sponsor_user_id = %s AND application_status = 'pending'
+            """, [user_id])
+            
+            pending_apps_result = cursor.fetchone()
+            statistics['pending_applications'] = pending_apps_result[0] if pending_apps_result else 0
+            
+        elif account_type == 'driver':
+            # Get driver statistics
+            cursor.execute("""
+                SELECT COUNT(*) 
+                FROM driver_applications 
+                WHERE driver_user_id = %s
+            """, [user_id])
+            
+            total_apps_result = cursor.fetchone()
+            statistics['total_applications'] = total_apps_result[0] if total_apps_result else 0
+            
+            cursor.execute("""
+                SELECT COUNT(*) 
+                FROM sponsor_driver_relationships 
+                WHERE driver_user_id = %s AND relationship_status = 'active'
+            """, [user_id])
+            
+            active_sponsors_result = cursor.fetchone()
+            statistics['active_sponsors'] = active_sponsors_result[0] if active_sponsors_result else 0
         
         context = {
-            'user': user,
-            'has_delivery_addresses': address_count > 0,
-            'address_count': address_count
+            'user_info': user_info,
+            'statistics': statistics
         }
         
         return render(request, 'account_page.html', context)
@@ -897,214 +1023,234 @@ def account_page(request):
         messages.error(request, f"Error loading account information: {str(e)}")
         print(f"Account page error: {e}")
         return redirect('homepage')
-        
     finally:
         cursor.close()
-# Add this to your existing views.py file
 
 @db_login_required
 def sponsor_change_request(request):
-    """Allow drivers to request a sponsor change"""
+    """Allow drivers to request a change of sponsor"""
     
-    # Only drivers can make sponsor change requests
+    # Check if user is logged in and is a driver
+    if not request.session.get('is_authenticated'):
+        messages.error(request, "Please log in to submit a sponsor change request.")
+        return redirect('login_page')
+    
     if request.session.get('account_type') != 'driver':
         messages.error(request, "Only drivers can submit sponsor change requests.")
         return redirect('homepage')
     
-    user_id = request.session.get('user_id')
+    driver_id = request.session.get('user_id')
     cursor = connection.cursor()
     
-    try:
-        # Check if driver has an active relationship
-        cursor.execute("""
-            SELECT sdr.relationship_id, sdr.sponsor_user_id, sdr.relationship_start_date,
-                   u.username as sponsor_username, u.first_name, u.last_name,
-                   sdr.relationship_status
-            FROM sponsor_driver_relationships sdr
-            JOIN users u ON sdr.sponsor_user_id = u.userID
-            WHERE sdr.driver_user_id = %s 
-            AND sdr.relationship_status = 'active'
-        """, [user_id])
-        
-        current_relationship = cursor.fetchone()
-        
-        if not current_relationship:
-            messages.error(request, "You must have an active sponsor relationship before requesting a change.")
-            return redirect('account_page')
-        
-        # Check if there's already a pending change request
-        cursor.execute("""
-            SELECT COUNT(*) FROM driver_applications 
-            WHERE driver_user_id = %s 
-            AND application_status IN ('pending', 'under_review')
-            AND application_date > DATE_SUB(NOW(), INTERVAL 30 DAY)
-        """, [user_id])
-        
-        pending_requests = cursor.fetchone()[0]
-        
-        if pending_requests > 0:
-            messages.warning(request, "You already have a pending sponsor change request. Please wait for it to be processed.")
-            return redirect('account_page')
-        
-        # Get available sponsors
-        cursor.execute("""
-            SELECT u.userID, u.username, u.first_name, u.last_name, u.email,
-                   COUNT(sdr.relationship_id) as current_drivers
-            FROM users u
-            LEFT JOIN sponsor_driver_relationships sdr ON u.userID = sdr.sponsor_user_id 
-                AND sdr.relationship_status = 'active'
-            WHERE u.account_type = 'sponsor' 
-            AND u.is_active = 1
-            AND u.userID != %s
-            GROUP BY u.userID, u.username, u.first_name, u.last_name, u.email
-            ORDER BY current_drivers ASC, u.first_name ASC
-        """, [current_relationship[1]])  # Exclude current sponsor
-        
-        available_sponsors = cursor.fetchall()
-        
-        if request.method == 'POST':
-            # Process the sponsor change request
-            new_sponsor_id = request.POST.get('new_sponsor_id')
+    if request.method == 'POST':
+        try:
+            # Get form data - FIXED: Use correct field names from the HTML form
+            sponsor_user_id = request.POST.get('sponsor_user_id', '').strip()
             reason_for_change = request.POST.get('reason_for_change', '').strip()
             additional_notes = request.POST.get('additional_notes', '').strip()
             
-            if not new_sponsor_id or not reason_for_change:
-                messages.error(request, "Please select a new sponsor and provide a reason for the change.")
-                return render(request, 'sponsor_change_request.html', {
-                    'current_relationship': current_relationship,
-                    'available_sponsors': available_sponsors
-                })
+            # Validation
+            if not sponsor_user_id:
+                messages.error(request, "Please select a sponsor.")
+                return redirect('sponsor_change_request')
             
-            # Verify the selected sponsor exists and is active
-            cursor.execute("""
-                SELECT userID, username, first_name, last_name 
-                FROM users 
-                WHERE userID = %s AND account_type = 'sponsor' AND is_active = 1
-            """, [new_sponsor_id])
-            
-            selected_sponsor = cursor.fetchone()
-            
-            if not selected_sponsor:
-                messages.error(request, "Selected sponsor is not valid.")
-                return render(request, 'sponsor_change_request.html', {
-                    'current_relationship': current_relationship,
-                    'available_sponsors': available_sponsors
-                })
-            
-            # Create a new driver application for sponsor change
+            # Convert sponsor_user_id to integer
             try:
-                # First, let's check what columns actually exist in driver_applications table
-                cursor.execute("DESCRIBE driver_applications")
-                columns = [col[0] for col in cursor.fetchall()]
-                print(f"Available columns in driver_applications: {columns}")
-                
-                # Create the change request with only the columns that exist
-                # Build the insert query dynamically based on available columns
-                base_columns = ['driver_user_id', 'sponsor_user_id', 'application_status', 'application_date']
-                base_values = [user_id, new_sponsor_id, 'pending', 'NOW()']
-                
-                # Add optional columns if they exist
-                optional_columns = {}
-                if 'created_at' in columns:
-                    optional_columns['created_at'] = 'NOW()'
-                if 'updated_at' in columns:
-                    optional_columns['updated_at'] = 'NOW()'
-                if 'motivation_essay' in columns:
-                    # Fix the string escaping issue
-                    escaped_reason = reason_for_change.replace("'", "''")  # SQL escape single quotes
-                    optional_columns['motivation_essay'] = f"SPONSOR CHANGE REQUEST: {escaped_reason}"
-                if 'goals_description' in columns:
-                    escaped_notes = additional_notes.replace("'", "''") if additional_notes else "Sponsor change request"
-                    optional_columns['goals_description'] = f"Additional Notes: {escaped_notes}"
-                if 'admin_notes' in columns:
-                    escaped_reason_admin = reason_for_change.replace("'", "''")
-                    sponsor_name = f"{current_relationship[3]} {current_relationship[4]} {current_relationship[5]}"
-                    requested_name = f"{selected_sponsor[2]} {selected_sponsor[3]}"
-                    admin_note = f"SPONSOR CHANGE REQUEST - Current Sponsor: {sponsor_name} (ID: {current_relationship[1]}) | Requested Sponsor: {requested_name} (ID: {selected_sponsor[0]}) | Reason: {escaped_reason_admin}"
-                    optional_columns['admin_notes'] = admin_note
-
-                for col, val in optional_columns.items():
-                    base_columns.append(col)
-                    if val == 'NOW()':
-                        base_values.append('NOW()')
-                    else:
-                        base_values.append(val)                
-                # Build and execute the query
-                columns_str = ', '.join(base_columns)
-                placeholders = []
-                actual_values = []
-                
-                for i, val in enumerate(base_values):
-                    if val in ['NOW()', 'NOW()']:
-                        placeholders.append('NOW()')
-                    elif val.startswith("'") and val.endswith("'"):
-                        placeholders.append('%s')
-                        actual_values.append(val[1:-1])  # Remove quotes
-                    else:
-                        placeholders.append('%s')
-                        actual_values.append(val)
-                
-                placeholders_str = ', '.join(placeholders)
-                
-                query = f"""
-                    INSERT INTO driver_applications ({columns_str})
-                    VALUES ({placeholders_str})
-                """
-                
-                print(f"Executing query: {query}")
-                print(f"With values: {actual_values}")
-                
-                cursor.execute(query, actual_values)
-                application_id = cursor.lastrowid
-                
-                messages.success(request, f"Your sponsor change request has been submitted successfully! You've requested to change from {current_relationship[3]} {current_relationship[4]} to {selected_sponsor[2]} {selected_sponsor[3]}. An administrator will review your request.")
-                return redirect('account_page')
-                
-            except Exception as e:
-                messages.error(request, f"Error submitting sponsor change request: {str(e)}")
-                print(f"Sponsor change request error: {e}")
-                
-                # Let's also print the table structure for debugging
-                try:
-                    cursor.execute("DESCRIBE driver_applications")
-                    table_structure = cursor.fetchall()
-                    print("driver_applications table structure:")
-                    for col in table_structure:
-                        print(f"  {col[0]} - {col[1]} - Null: {col[2]} - Key: {col[3]} - Default: {col[4]}")
-                except:
-                    print("Could not describe table structure")
+                sponsor_user_id = int(sponsor_user_id)
+            except (ValueError, TypeError):
+                messages.error(request, "Invalid sponsor selection.")
+                return redirect('sponsor_change_request')
+            
+            if not reason_for_change:
+                messages.error(request, "Please provide your reason for the sponsor change.")
+                return redirect('sponsor_change_request')
+            
+            # Check if driver has an active sponsor relationship
+            cursor.execute("""
+                SELECT sdr.sponsor_user_id, u.first_name, u.last_name
+                FROM sponsor_driver_relationships sdr
+                JOIN users u ON sdr.sponsor_user_id = u.userID
+                WHERE sdr.driver_user_id = %s AND sdr.relationship_status = %s
+            """, [driver_id, 'active'])
+            
+            current_sponsor = cursor.fetchone()
+            
+            if not current_sponsor:
+                messages.error(request, "You must have an active sponsor before requesting a change.")
+                return redirect('sponsor_application')
+            
+            current_sponsor_id = current_sponsor[0]
+            current_sponsor_name = f"{current_sponsor[1]} {current_sponsor[2]}"
+            
+            # Check if trying to change to the same sponsor
+            if current_sponsor_id == sponsor_user_id:
+                messages.error(request, f"You are already sponsored by {current_sponsor_name}.")
+                return redirect('sponsor_change_request')
+            
+            # Check if there's already a pending change request
+            cursor.execute("""
+                SELECT COUNT(*) 
+                FROM driver_applications 
+                WHERE driver_user_id = %s 
+                AND application_status = %s
+                AND admin_notes LIKE %s
+            """, [driver_id, 'pending', '%SPONSOR CHANGE REQUEST%'])
+            
+            pending_count_result = cursor.fetchone()
+            pending_count = pending_count_result[0] if pending_count_result else 0
+            
+            if pending_count > 0:
+                messages.error(request, "You already have a pending sponsor change request. Please wait for it to be reviewed.")
+                return redirect('view_sponsor_requests')
+            
+            # Get driver's existing information from previous applications
+            cursor.execute("""
+                SELECT driver_license_number, license_state, license_expiry_date,
+                       years_of_experience, date_of_birth
+                FROM driver_applications
+                WHERE driver_user_id = %s
+                ORDER BY application_date DESC
+                LIMIT 1
+            """, [driver_id])
+            
+            previous_data = cursor.fetchone()
+            
+            if previous_data:
+                driver_license_number = previous_data[0]
+                license_state = previous_data[1]
+                license_expiry_date = previous_data[2]
+                years_of_experience = previous_data[3]
+                date_of_birth = previous_data[4]
+            else:
+                # If no previous application, use placeholder values
+                driver_license_number = "PENDING"
+                license_state = "PENDING"
+                license_expiry_date = None
+                years_of_experience = 0
+                date_of_birth = None
+            
+            # Create the motivation essay from the form data
+            motivation_essay = f"SPONSOR CHANGE REQUEST\n\nReason for change:\n{reason_for_change}"
+            if additional_notes:
+                motivation_essay += f"\n\nAdditional notes:\n{additional_notes}"
+            
+            # Create admin notes to track the change request
+            admin_notes = f"SPONSOR CHANGE REQUEST - From Sponsor ID: {current_sponsor_id} ({current_sponsor_name}) to Sponsor ID: {sponsor_user_id}"
+            
+            # Insert the sponsor change request
+            cursor.execute("""
+                INSERT INTO driver_applications (
+                    driver_user_id, sponsor_user_id, application_status,
+                    application_date, driver_license_number, license_state,
+                    license_expiry_date, years_of_experience, date_of_birth,
+                    motivation_essay, goals_description, admin_notes,
+                    created_at, updated_at
+                ) VALUES (
+                    %s, %s, %s, NOW(), %s, %s, %s, %s, %s, %s, %s, %s, NOW(), NOW()
+                )
+            """, [
+                driver_id,
+                sponsor_user_id,
+                'pending',
+                driver_license_number,
+                license_state,
+                license_expiry_date,
+                years_of_experience,
+                date_of_birth,
+                motivation_essay,
+                additional_notes or '',
+                admin_notes
+            ])
+            
+            application_id = cursor.lastrowid
+            
+            # Get new sponsor name for confirmation message
+            cursor.execute("""
+                SELECT first_name, last_name 
+                FROM users 
+                WHERE userID = %s
+            """, [sponsor_user_id])
+            
+            new_sponsor = cursor.fetchone()
+            new_sponsor_name = f"{new_sponsor[0]} {new_sponsor[1]}" if new_sponsor else "the selected sponsor"
+            
+            messages.success(request, 
+                f"Sponsor change request submitted successfully! Your request to change from {current_sponsor_name} to {new_sponsor_name} is now pending review.")
+            
+            return redirect('application_success')
+            
+        except Exception as e:
+            messages.error(request, f"Error submitting sponsor change request: {str(e)}")
+            print(f"Sponsor change request error: {e}")
+            import traceback
+            traceback.print_exc()
+            return redirect('sponsor_change_request')
+        finally:
+            cursor.close()
+    
+    # GET request - display the form
+    try:
+        # Get current sponsor information first
+        cursor.execute("""
+            SELECT u.userID, u.first_name, u.last_name, u.username, 
+                   sdr.relationship_start_date, sdr.safe_driving_streak_days
+            FROM sponsor_driver_relationships sdr
+            JOIN users u ON sdr.sponsor_user_id = u.userID
+            WHERE sdr.driver_user_id = %s AND sdr.relationship_status = %s
+        """, [driver_id, 'active'])
         
-        # Prepare current relationship data for template
-        relationship_data = {
-            'relationship_id': current_relationship[0],
-            'sponsor_id': current_relationship[1],
-            'start_date': current_relationship[2],
-            'sponsor_username': current_relationship[3],
-            'sponsor_first_name': current_relationship[4],
-            'sponsor_last_name': current_relationship[5],
-            'status': current_relationship[6] if len(current_relationship) > 6 else 'active'
+        current_sponsor = cursor.fetchone()
+        
+        if not current_sponsor:
+            messages.warning(request, "You must have an active sponsor before requesting a change.")
+            return redirect('sponsor_application')
+        
+        current_relationship = {
+            'sponsor_id': current_sponsor[0],
+            'sponsor_first_name': current_sponsor[1],
+            'sponsor_last_name': current_sponsor[2],
+            'sponsor_username': current_sponsor[3],
+            'start_date': current_sponsor[4],
+            'streak_days': current_sponsor[5] or 0
         }
         
-        # Format available sponsors for template
-        sponsors_list = []
-        for sponsor in available_sponsors:
-            sponsors_list.append({
-                'user_id': sponsor[0],
-                'username': sponsor[1],
-                'first_name': sponsor[2],
-                'last_name': sponsor[3],
-                'email': sponsor[4],
-                'current_drivers': sponsor[5]
-            })
+        # Get list of available sponsors (exclude current sponsor)
+        cursor.execute("""
+            SELECT u.userID, u.first_name, u.last_name, u.username,
+                   (SELECT COUNT(*) 
+                    FROM sponsor_driver_relationships sdr2 
+                    WHERE sdr2.sponsor_user_id = u.userID 
+                    AND sdr2.relationship_status = 'active') as current_drivers
+            FROM users u
+            WHERE u.account_type = %s 
+            AND u.is_active = 1
+            AND u.userID != %s
+            ORDER BY u.last_name, u.first_name
+        """, ['sponsor', current_sponsor[0]])
         
-        return render(request, 'sponsor_change_request.html', {
-            'current_relationship': relationship_data,
-            'available_sponsors': sponsors_list
-        })
+        available_sponsors = cursor.fetchall()
+        
+        context = {
+            'available_sponsors': [
+                {
+                    'userID': sponsor[0],
+                    'first_name': sponsor[1],
+                    'last_name': sponsor[2],
+                    'username': sponsor[3],
+                    'current_drivers': sponsor[4]
+                }
+                for sponsor in available_sponsors
+            ],
+            'current_relationship': current_relationship
+        }
+        
+        return render(request, 'sponsor_change_request.html', context)
         
     except Exception as e:
-        messages.error(request, f"Error loading sponsor change request page: {str(e)}")
-        print(f"Sponsor change request page error: {e}")
+        messages.error(request, f"Error loading sponsor change request form: {str(e)}")
+        print(f"Error loading form: {e}")
+        import traceback
+        traceback.print_exc()
         return redirect('account_page')
     finally:
         cursor.close()
@@ -1191,23 +1337,25 @@ def sponsor_home(request):
         
         sponsor_info = cursor.fetchone()
         
-        # Get sponsor's active drivers
+        # Get sponsor's active drivers - FIX: Store result in variable first
         cursor.execute("""
             SELECT COUNT(*) 
             FROM sponsor_driver_relationships 
             WHERE sponsor_user_id = %s AND relationship_status = 'active'
         """, [sponsor_id])
         
-        active_drivers_count = cursor.fetchone()[0] if cursor.fetchone() else 0
+        active_drivers_result = cursor.fetchone()
+        active_drivers_count = active_drivers_result[0] if active_drivers_result else 0
         
-        # Get pending applications
+        # Get pending applications - FIX: Store result in variable first
         cursor.execute("""
             SELECT COUNT(*) 
             FROM driver_applications 
             WHERE sponsor_user_id = %s AND application_status = 'pending'
         """, [sponsor_id])
         
-        pending_applications = cursor.fetchone()[0] if cursor.fetchone() else 0
+        pending_applications_result = cursor.fetchone()
+        pending_applications = pending_applications_result[0] if pending_applications_result else 0
         
         # Get recent driver activity (if tables exist)
         try:
@@ -1404,5 +1552,422 @@ def sponsor_drivers(request):
     except Exception as e:
         messages.error(request, f"Error loading sponsored drivers: {str(e)}")
         return redirect('sponsor_home')
+    finally:
+        cursor.close()
+
+
+def is_admin(user):
+    return user.is_staff or user.is_superuser
+
+@user_passes_test(is_admin)
+def add_admin(request):
+    """Allow existing admins to add a new admin."""
+    if request.method == "POST":
+        username = request.POST.get("username")
+        email = request.POST.get("email")
+        password = request.POST.get("password")
+
+        if User.objects.filter(username=username).exists():
+            messages.error(request, "Username already exists.")
+        else:
+            new_admin = User.objects.create_user(username=username, email=email, password=password)
+            new_admin.is_staff = True
+            new_admin.save()
+            messages.success(request, f"Admin '{username}' added successfully.")
+            return redirect("admin_list")
+
+    return render(request, "add_admin.html")
+
+@user_passes_test(is_admin)
+def admin_list(request):
+    """Show all admins with option to delete."""
+    admins = User.objects.filter(is_staff=True)
+    return render(request, "admin_list.html", {"admins": admins})
+
+@user_passes_test(is_admin)
+def delete_admin(request, admin_id):
+    """Delete a selected admin."""
+    admin_user = get_object_or_404(User, id=admin_id, is_staff=True)
+
+    if request.user == admin_user:
+        messages.error(request, "You cannot delete your own account.")
+    else:
+        admin_user.delete()
+        messages.success(request, "Admin deleted successfully.")
+
+    return redirect("admin_list")
+
+@user_passes_test(is_admin)
+def driver_list(request):
+    """Display all drivers and allow admin to update their active status."""
+    drivers = User.objects.filter(is_staff=False)  # assuming drivers are non-admin users
+
+    if request.method == "POST":
+        driver_id = request.POST.get("driver_id")
+        new_status = request.POST.get("status") == "True"
+        driver = get_object_or_404(User, id=driver_id)
+        driver.is_active = new_status
+        driver.save()
+        messages.success(request, f"Driver '{driver.username}' status updated.")
+        return redirect("driver_list")
+
+    return render(request, "driver_list.html", {"drivers": drivers})
+
+# Add these functions to your existing driver_program/views.py file
+
+@db_login_required
+def sponsor_manage_applications(request):
+    """Allow sponsors to view and manage driver applications"""
+    
+    # Check if user is logged in and is a sponsor
+    if request.session.get('account_type') != 'sponsor':
+        messages.error(request, "Access denied. Only sponsors can view this page.")
+        return redirect('homepage')
+    
+    sponsor_id = request.session.get('user_id')
+    cursor = connection.cursor()
+    
+    try:
+        # Get all applications for this sponsor - FIXED: Remove driver info from users table
+        cursor.execute("""
+            SELECT 
+                da.application_id, da.driver_user_id, da.sponsor_user_id,
+                da.application_status, da.application_date, da.driver_license_number,
+                da.license_state, da.license_expiry_date, da.years_of_experience,
+                da.date_of_birth, da.motivation_essay, da.goals_description,
+                da.admin_notes, da.review_date, da.reviewed_by_admin_id,
+                da.rejection_reason, da.created_at, da.updated_at,
+                u.username, u.first_name, u.last_name, u.email, u.phone_number,
+                u.address, u.is_active, u.created_at as user_created
+            FROM driver_applications da
+            JOIN users u ON da.driver_user_id = u.userID
+            WHERE da.sponsor_user_id = %s
+            ORDER BY 
+                CASE da.application_status 
+                    WHEN 'pending' THEN 1 
+                    WHEN 'under_review' THEN 2 
+                    ELSE 3 
+                END,
+                da.application_date DESC
+        """, [sponsor_id])
+        
+        applications = cursor.fetchall()
+        
+        # Format applications for template
+        applications_list = []
+        for app in applications:
+            # Check if this is a sponsor change request based on admin_notes
+            is_change_request = app[12] and 'SPONSOR CHANGE REQUEST' in str(app[12])
+            
+            applications_list.append({
+                'application_id': app[0],
+                'driver_user_id': app[1],
+                'sponsor_user_id': app[2],
+                'application_status': app[3],
+                'application_date': app[4],
+                'driver_license_number': app[5],  # From driver_applications table
+                'license_state': app[6],
+                'license_expiry_date': app[7],
+                'years_of_experience': app[8],
+                'date_of_birth': app[9],
+                'motivation_essay': app[10],
+                'goals_description': app[11],
+                'admin_notes': app[12],
+                'review_date': app[13],
+                'reviewed_by_admin_id': app[14],
+                'rejection_reason': app[15],
+                'created_at': app[16],
+                'updated_at': app[17],
+                'driver_username': app[18],   # From users table
+                'driver_first_name': app[19], # From users table
+                'driver_last_name': app[20],  # From users table
+                'driver_email': app[21],      # From users table
+                'driver_phone': app[22],      # From users table
+                'driver_address': app[23],    # From users table
+                'driver_is_active': app[24],  # From users table
+                'driver_created': app[25],    # From users table
+                'is_change_request': is_change_request
+            })
+        
+        # Get statistics
+        pending_count = len([app for app in applications_list if app['application_status'] == 'pending'])
+        approved_count = len([app for app in applications_list if app['application_status'] == 'approved'])
+        rejected_count = len([app for app in applications_list if app['application_status'] == 'rejected'])
+        
+        context = {
+            'applications': applications_list,
+            'pending_count': pending_count,
+            'approved_count': approved_count,
+            'rejected_count': rejected_count,
+            'total_count': len(applications_list)
+        }
+        
+        return render(request, 'sponsor_manage_applications.html', context)
+        
+    except Exception as e:
+        messages.error(request, f"Error loading applications: {str(e)}")
+        print(f"Sponsor manage applications error: {e}")
+        return redirect('sponsor_home')
+    finally:
+        cursor.close()
+
+@csrf_protect
+def sponsor_application_action(request, application_id):
+    """Handle sponsor actions on driver applications (approve/reject)"""
+    
+    # Check if user is logged in and is a sponsor
+    if not request.session.get('is_authenticated'):
+        messages.error(request, "Please log in to access this page.")
+        return redirect('login_page')
+    
+    if request.session.get('account_type') != 'sponsor':
+        messages.error(request, "Access denied. Only sponsors can perform this action.")
+        return redirect('homepage')
+    
+    sponsor_id = request.session.get('user_id')
+    
+    if request.method == 'POST':
+        action = request.POST.get('action')  # 'approve' or 'reject'
+        admin_notes = request.POST.get('admin_notes', '').strip()
+        rejection_reason = request.POST.get('rejection_reason', '').strip()
+        
+        if action not in ['approve', 'reject']:
+            messages.error(request, "Invalid action.")
+            return redirect('sponsor_manage_applications')
+        
+        cursor = connection.cursor()
+        
+        try:
+            # First, verify this application belongs to this sponsor
+            cursor.execute("""
+                SELECT da.driver_user_id, da.application_status, da.admin_notes,
+                       u.first_name, u.last_name
+                FROM driver_applications da
+                JOIN users u ON da.driver_user_id = u.userID
+                WHERE da.application_id = %s AND da.sponsor_user_id = %s
+            """, [application_id, sponsor_id])
+            
+            application_data = cursor.fetchone()
+            
+            if not application_data:
+                messages.error(request, "Application not found or you don't have permission to modify it.")
+                return redirect('sponsor_manage_applications')
+            
+            driver_id = application_data[0]
+            current_status = application_data[1]
+            existing_notes = application_data[2] or ''
+            driver_name = f"{application_data[3]} {application_data[4]}"
+            
+            if current_status not in ['pending', 'under_review']:
+                messages.error(request, "This application has already been processed.")
+                return redirect('sponsor_manage_applications')
+            
+            # Check if this is a sponsor change request
+            is_change_request = 'SPONSOR CHANGE REQUEST' in existing_notes
+            
+            if action == 'approve':
+                # Update application status
+                cursor.execute("""
+                    UPDATE driver_applications 
+                    SET application_status = 'approved', 
+                        review_date = NOW(),
+                        reviewed_by_admin_id = %s,
+                        admin_notes = %s
+                    WHERE application_id = %s
+                """, [sponsor_id, admin_notes, application_id])
+                
+                if is_change_request:
+                    # For sponsor change requests, end the current relationship and create new one
+                    try:
+                        # End current active relationship
+                        cursor.execute("""
+                            UPDATE sponsor_driver_relationships 
+                            SET relationship_status = 'ended', 
+                                relationship_end_date = NOW(),
+                                updated_at = NOW()
+                            WHERE driver_user_id = %s 
+                            AND relationship_status = 'active'
+                        """, [driver_id])
+                        
+                        # Create new relationship
+                        cursor.execute("""
+                            INSERT INTO sponsor_driver_relationships (
+                                sponsor_user_id, driver_user_id, application_id,
+                                relationship_status, relationship_start_date, 
+                                created_at, updated_at
+                            ) VALUES (%s, %s, %s, 'active', NOW(), NOW(), NOW())
+                        """, [sponsor_id, driver_id, application_id])
+                        
+                        messages.success(request, f"Sponsor change request approved! {driver_name} is now your sponsored driver.")
+                        
+                    except Exception as rel_error:
+                        print(f"Error creating new relationship: {rel_error}")
+                        messages.warning(request, f"Application approved, but there was an issue creating the new sponsor relationship. Please contact an administrator.")
+                else:
+                    # For new applications, create the relationship
+                    try:
+                        cursor.execute("""
+                            INSERT INTO sponsor_driver_relationships (
+                                sponsor_user_id, driver_user_id, application_id,
+                                relationship_status, relationship_start_date,
+                                created_at, updated_at
+                            ) VALUES (%s, %s, %s, 'active', NOW(), NOW(), NOW())
+                        """, [sponsor_id, driver_id, application_id])
+                        
+                        messages.success(request, f"Application approved! {driver_name} is now your sponsored driver.")
+                        
+                    except Exception as rel_error:
+                        print(f"Error creating relationship: {rel_error}")
+                        messages.warning(request, f"Application approved, but there was an issue creating the sponsor relationship. Please contact an administrator.")
+                
+            elif action == 'reject':
+                if not rejection_reason:
+                    messages.error(request, "Please provide a reason for rejection.")
+                    return redirect('sponsor_manage_applications')
+                
+                # Update application status
+                cursor.execute("""
+                    UPDATE driver_applications 
+                    SET application_status = 'rejected', 
+                        review_date = NOW(),
+                        reviewed_by_admin_id = %s,
+                        rejection_reason = %s,
+                        admin_notes = %s
+                    WHERE application_id = %s
+                """, [sponsor_id, rejection_reason, admin_notes, application_id])
+                
+                action_type = "change request" if is_change_request else "application"
+                messages.success(request, f"Driver {action_type} rejected. {driver_name} has been notified.")
+            
+        except Exception as e:
+            messages.error(request, f"Error processing application: {str(e)}")
+            print(f"Application action error: {e}")
+        finally:
+            cursor.close()
+    
+    return redirect('sponsor_manage_applications')
+
+@db_login_required
+def sponsor_view_application(request, application_id):
+    """View detailed information about a specific driver application"""
+    
+    # Check if user is logged in and is a sponsor
+    if request.session.get('account_type') != 'sponsor':
+        messages.error(request, "Access denied. Only sponsors can view this page.")
+        return redirect('homepage')
+    
+    sponsor_id = request.session.get('user_id')
+    cursor = connection.cursor()
+    
+    try:
+        # Get application details - FIXED: Correct column references
+        cursor.execute("""
+            SELECT 
+                da.application_id, da.driver_user_id, da.sponsor_user_id,
+                da.application_status, da.application_date, da.driver_license_number,
+                da.license_state, da.license_expiry_date, da.years_of_experience,
+                da.date_of_birth, da.motivation_essay, da.goals_description,
+                da.admin_notes, da.review_date, da.reviewed_by_admin_id,
+                da.rejection_reason, da.created_at, da.updated_at,
+                u.username, u.first_name, u.last_name, u.email, u.phone_number,
+                u.address, u.is_active, u.created_at as user_created
+            FROM driver_applications da
+            JOIN users u ON da.driver_user_id = u.userID
+            WHERE da.application_id = %s AND da.sponsor_user_id = %s
+        """, [application_id, sponsor_id])
+        
+        application_data = cursor.fetchone()
+        
+        if not application_data:
+            messages.error(request, "Application not found or you don't have permission to view it.")
+            return redirect('sponsor_manage_applications')
+        
+        # Check if this is a sponsor change request
+        is_change_request = application_data[12] and 'SPONSOR CHANGE REQUEST' in str(application_data[12])
+        
+        # Get current sponsor info if this is a change request
+        current_sponsor_info = None
+        if is_change_request:
+            cursor.execute("""
+                SELECT u.first_name, u.last_name, u.username, sdr.relationship_start_date
+                FROM sponsor_driver_relationships sdr
+                JOIN users u ON sdr.sponsor_user_id = u.userID
+                WHERE sdr.driver_user_id = %s AND sdr.relationship_status = %s
+            """, [application_data[1], 'active'])
+            
+            current_sponsor = cursor.fetchone()
+            if current_sponsor:
+                current_sponsor_info = {
+                    'name': f"{current_sponsor[0]} {current_sponsor[1]}",
+                    'username': current_sponsor[2],
+                    'relationship_start': current_sponsor[3]
+                }
+        
+        # REMOVED: Problematic status history query
+        # Instead, create a simple status timeline from the application data itself
+        status_history = []
+        
+        # Create basic status history from available application data
+        if application_data[4]:  # application_date
+            status_history.append({
+                'previous_status': None,
+                'new_status': 'submitted',
+                'change_date': application_data[4],  # application_date
+                'change_reason': 'Application submitted',
+                'changed_by': 'Driver'
+            })
+        
+        # Add review entry if review_date exists
+        if application_data[13] and application_data[3] in ['approved', 'rejected']:  # review_date and current status
+            status_history.append({
+                'previous_status': 'pending',
+                'new_status': application_data[3],
+                'change_date': application_data[13],  # review_date
+                'change_reason': f'Application {application_data[3]} by sponsor',
+                'changed_by': 'Sponsor'
+            })
+        
+        application = {
+            'application_id': application_data[0],
+            'driver_user_id': application_data[1],
+            'sponsor_user_id': application_data[2],
+            'application_status': application_data[3],
+            'application_date': application_data[4],
+            'driver_license_number': application_data[5],  # From driver_applications table
+            'license_state': application_data[6],
+            'license_expiry_date': application_data[7],
+            'years_of_experience': application_data[8],
+            'date_of_birth': application_data[9],
+            'motivation_essay': application_data[10],
+            'goals_description': application_data[11],
+            'admin_notes': application_data[12],
+            'review_date': application_data[13],
+            'reviewed_by_admin_id': application_data[14],
+            'rejection_reason': application_data[15],
+            'created_at': application_data[16],
+            'updated_at': application_data[17],
+            'driver_username': application_data[18],   # From users table
+            'driver_first_name': application_data[19], # From users table
+            'driver_last_name': application_data[20],  # From users table
+            'driver_email': application_data[21],      # From users table
+            'driver_phone': application_data[22],      # From users table
+            'driver_address': application_data[23],    # From users table
+            'driver_is_active': application_data[24],  # From users table
+            'driver_created': application_data[25],    # From users table
+            'is_change_request': is_change_request,
+            'current_sponsor': current_sponsor_info,
+            'status_history': status_history
+        }
+        
+        context = {
+            'application': application
+        }
+        
+        return render(request, 'sponsor_view_application.html', context)
+        
+    except Exception as e:
+        messages.error(request, f"Error loading application details: {str(e)}")
+        print(f"View application error: {e}")
+        return redirect('sponsor_manage_applications')
     finally:
         cursor.close()
