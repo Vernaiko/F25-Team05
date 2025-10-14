@@ -17,6 +17,13 @@
         
         {% if user %}
         <div class="content">
+          {% if user.avatar_image %}
+            <div class="has-text-centered" style="margin-bottom:1rem;">
+              <figure class="image is-128x128 is-inline-block">
+                <img src="{{ MEDIA_URL }}{{ user.avatar_image }}" alt="Avatar" style="width:128px;height:128px;object-fit:cover;border-radius:50%;">
+              </figure>
+            </div>
+          {% endif %}
           <!-- Personal Information Section -->
           <div class="box has-background-light">
             <h2 class="subtitle">
