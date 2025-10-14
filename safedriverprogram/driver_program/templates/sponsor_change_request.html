@@ -74,10 +74,10 @@
               <label class="label">Select New Sponsor *</label>
               <div class="control">
                 <div class="select is-fullwidth">
-                  <select name="new_sponsor_id" required>
+                  <select name="sponsor_user_id" required>
                     <option value="">Choose a sponsor...</option>
                     {% for sponsor in available_sponsors %}
-                    <option value="{{ sponsor.user_id }}">
+                    <option value="{{ sponsor.userID }}">
                       {{ sponsor.first_name }} {{ sponsor.last_name }} 
                       ({{ sponsor.username }}) - Currently sponsoring {{ sponsor.current_drivers }} driver{{ sponsor.current_drivers|pluralize }}
                     </option>

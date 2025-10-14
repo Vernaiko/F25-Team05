@@ -1,0 +1,287 @@
+{% extends 'base.html' %}
+
+{% block title %}Application Details - Safe Driver Program{% endblock %}
+
+{% block content %}
+<div class="container">
+  <div class="columns is-centered">
+    <div class="column is-two-thirds">
+      <div class="box">
+        
+        {% if error %}
+        <!-- Error Display -->
+        <div class="notification is-danger">
+          <h1 class="title">Error Loading Application</h1>
+          <p>{{ error }}</p>
+          <a href="{% url 'sponsor_manage_applications' %}" class="button is-primary">
+            <span class="icon"><i class="fas fa-arrow-left"></i></span>
+            <span>Back to Applications</span>
+          </a>
+        </div>
+        
+        {% elif not application %}
+        <!-- No Application Found -->
+        <div class="notification is-warning">
+          <h1 class="title">Application Not Found</h1>
+          <p>The requested application could not be found or you don't have permission to view it.</p>
+          <a href="{% url 'sponsor_manage_applications' %}" class="button is-primary">
+            <span class="icon"><i class="fas fa-arrow-left"></i></span>
+            <span>Back to Applications</span>
+          </a>
+        </div>
+        
+        {% else %}
+        <!-- Normal Application Display -->
+        <h1 class="title has-text-centered">
+          {% if application.is_change_request %}
+            <span class="icon is-large has-text-warning">
+              <i class="fas fa-exchange-alt fa-2x"></i>
+            </span>
+            <br>
+            Sponsor Change Request
+          {% else %}
+            <span class="icon is-large has-text-info">
+              <i class="fas fa-file-alt fa-2x"></i>
+            </span>
+            <br>
+            Driver Application
+          {% endif %}
+        </h1>
+        
+        <!-- Status badge -->
+        <div class="has-text-centered" style="margin-bottom: 2rem;">
+          {% if application.application_status == 'pending' %}
+            <span class="tag is-warning is-large">
+              <span class="icon"><i class="fas fa-clock"></i></span>
+              <span>Pending Review</span>
+            </span>
+          {% elif application.application_status == 'approved' %}
+            <span class="tag is-success is-large">
+              <span class="icon"><i class="fas fa-check"></i></span>
+              <span>Approved</span>
+            </span>
+          {% elif application.application_status == 'rejected' %}
+            <span class="tag is-danger is-large">
+              <span class="icon"><i class="fas fa-times"></i></span>
+              <span>Rejected</span>
+            </span>
+          {% endif %}
+        </div>
+        
+        <!-- Driver Information -->
+        <div class="box has-background-info-light">
+          <h2 class="subtitle">
+            <span class="icon has-text-info">
+              <i class="fas fa-user"></i>
+            </span>
+            Driver Information
+          </h2>
+          
+          <div class="columns">
+            <div class="column">
+              <div class="field">
+                <label class="label">Name</label>
+                <p class="control">
+                  <strong>{{ application.driver_first_name|default:"N/A" }} {{ application.driver_last_name|default:"N/A" }}</strong>
+                </p>
+              </div>
+              
+              <div class="field">
+                <label class="label">Username</label>
+                <p class="control">@{{ application.driver_username|default:"N/A" }}</p>
+              </div>
+              
+              <div class="field">
+                <label class="label">Email</label>
+                <p class="control">{{ application.driver_email|default:"N/A" }}</p>
+              </div>
+              
+              <div class="field">
+                <label class="label">Phone</label>
+                <p class="control">{{ application.driver_phone|default:"Not provided" }}</p>
+              </div>
+            </div>
+            
+            <div class="column">
+              <div class="field">
+                <label class="label">Date of Birth</label>
+                <p class="control">{{ application.date_of_birth|date:"F d, Y"|default:"Not provided" }}</p>
+              </div>
+              
+              <div class="field">
+                <label class="label">Address</label>
+                <p class="control">{{ application.driver_address|default:"Not provided" }}</p>
+              </div>
+              
+              <div class="field">
+                <label class="label">Member Since</label>
+                <p class="control">{{ application.driver_created|date:"F d, Y"|default:"N/A" }}</p>
+              </div>
+              
+              <div class="field">
+                <label class="label">Account Status</label>
+                <p class="control">
+                  {% if application.driver_is_active %}
+                    <span class="tag is-success">Active</span>
+                  {% else %}
+                    <span class="tag is-danger">Inactive</span>
+                  {% endif %}
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Driving Information -->
+        <div class="box has-background-light">
+          <h2 class="subtitle">
+            <span class="icon has-text-primary">
+              <i class="fas fa-car"></i>
+            </span>
+            Driving Information
+          </h2>
+          
+          <div class="columns">
+            <div class="column">
+              <div class="field">
+                <label class="label">License Number</label>
+                <p class="control">{{ application.driver_license_number|default:"Not provided" }}</p>
+              </div>
+              
+              <div class="field">
+                <label class="label">License State</label>
+                <p class="control">{{ application.license_state|default:"Not provided" }}</p>
+              </div>
+            </div>
+            
+            <div class="column">
+              <div class="field">
+                <label class="label">License Expiry</label>
+                <p class="control">
+                  {% if application.license_expiry_date %}
+                    {{ application.license_expiry_date|date:"F d, Y" }}
+                    <span class="tag is-success">Valid</span>
+                  {% else %}
+                    Not provided
+                  {% endif %}
+                </p>
+              </div>
+              
+              <div class="field">
+                <label class="label">Years of Experience</label>
+                <p class="control">{{ application.years_of_experience|default:0 }} years</p>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Application Details -->
+        <div class="box">
+          <h2 class="subtitle">
+            <span class="icon has-text-success">
+              <i class="fas fa-file-text"></i>
+            </span>
+            Application Details
+          </h2>
+          
+          <div class="field">
+            <label class="label">Application Date</label>
+            <p class="control">{{ application.application_date|date:"F d, Y g:i A"|default:"N/A" }}</p>
+          </div>
+          
+          {% if application.motivation_essay %}
+          <div class="field">
+            <label class="label">Motivation</label>
+            <div class="control">
+              <div class="box has-background-white-ter">
+                {{ application.motivation_essay|linebreaksbr }}
+              </div>
+            </div>
+          </div>
+          {% endif %}
+          
+          {% if application.goals_description %}
+          <div class="field">
+            <label class="label">Goals & Additional Information</label>
+            <div class="control">
+              <div class="box has-background-white-ter">
+                {{ application.goals_description|linebreaksbr }}
+              </div>
+            </div>
+          </div>
+          {% endif %}
+          
+          {% if application.admin_notes %}
+          <div class="field">
+            <label class="label">Notes</label>
+            <div class="control">
+              <div class="notification is-info is-light">
+                {{ application.admin_notes|linebreaksbr }}
+              </div>
+            </div>
+          </div>
+          {% endif %}
+          
+          {% if application.rejection_reason %}
+          <div class="field">
+            <label class="label">Rejection Reason</label>
+            <div class="control">
+              <div class="notification is-danger is-light">
+                {{ application.rejection_reason|linebreaksbr }}
+              </div>
+            </div>
+          </div>
+          {% endif %}
+        </div>
+        
+        <!-- Action Buttons -->
+        <div class="field is-grouped is-grouped-centered">
+          {% if application.application_status == 'pending' or application.application_status == 'under_review' %}
+          <div class="control">
+            <button class="button is-success is-large" onclick="approveApplication({{ application.application_id }}, '{{ application.driver_first_name }} {{ application.driver_last_name }}')">
+              <span class="icon"><i class="fas fa-check"></i></span>
+              <span>Approve Application</span>
+            </button>
+          </div>
+          <div class="control">
+            <button class="button is-danger is-large" onclick="rejectApplication({{ application.application_id }}, '{{ application.driver_first_name }} {{ application.driver_last_name }}')">
+              <span class="icon"><i class="fas fa-times"></i></span>
+              <span>Reject Application</span>
+            </button>
+          </div>
+          {% endif %}
+          <div class="control">
+            <a href="{% url 'sponsor_manage_applications' %}" class="button is-light is-large">
+              <span class="icon"><i class="fas fa-arrow-left"></i></span>
+              <span>Back to Applications</span>
+            </a>
+          </div>
+        </div>
+        
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Debug info (remove in production) -->
+<div class="container" style="margin-top: 2rem;">
+  <div class="notification is-light">
+    <h4 class="title is-4">Debug Info</h4>
+    <p><strong>Application ID:</strong> {{ application.application_id|default:"None" }}</p>
+    <p><strong>User Session:</strong> {{ request.session.account_type }} (ID: {{ request.session.user_id }})</p>
+    <p><strong>Is Authenticated:</strong> {{ request.session.is_authenticated }}</p>
+  </div>
+</div>
+
+<script>
+function approveApplication(applicationId, driverName) {
+    alert('Approve functionality not yet implemented for application ' + applicationId);
+}
+
+function rejectApplication(applicationId, driverName) {
+    alert('Reject functionality not yet implemented for application ' + applicationId);
+}
+</script>
+
+{% endblock %}
