@@ -75,13 +75,15 @@ WSGI_APPLICATION = 'safedriverprogram.wsgi.application'
 
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.mysql',
-        'NAME': 'Team05_DB',  # Your database name
-        'USER': 'CPSC4911_admin',
-        'PASSWORD': 'ytnSLOSNK4cB0ulSmGqJ',
-        'HOST': 'cpsc4910-f25.cobd8enwsupz.us-east-1.rds.amazonaws.com',  # Or your MySQL server IP
-        'PORT': '3306',       # Default MySQL port
-        'OPTIONS': {
+        # Use SQLite for local development (DEBUG=True) to avoid requiring the remote MySQL server.
+        # When DEBUG is False (production), the project will attempt to use the MySQL/RDS settings.
+        'ENGINE': 'django.db.backends.sqlite3' if DEBUG else 'django.db.backends.mysql',
+        'NAME': BASE_DIR / 'db.sqlite3' if DEBUG else 'Team05_DB',  # local db file or production DB name
+        'USER': None if DEBUG else 'CPSC4911_admin',
+        'PASSWORD': None if DEBUG else 'ytnSLOSNK4cB0ulSmGqJ',
+        'HOST': None if DEBUG else 'cpsc4910-f25.cobd8enwsupz.us-east-1.rds.amazonaws.com',
+        'PORT': None if DEBUG else '3306',
+        'OPTIONS': {} if DEBUG else {
             'sql_mode': 'traditional',
         }
     }
