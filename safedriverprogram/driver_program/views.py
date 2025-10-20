@@ -1625,6 +1625,102 @@ def driver_list(request):
 
     return render(request, "driver_list.html", {"drivers": drivers})
 
+
+@admin_required
+def admin_driver_dashboard(request):
+    """Admin dashboard: list all drivers from the custom `users` table (account_type='driver').
+
+    This uses the same session-based admin check (`admin_required`) used elsewhere in the app
+    so it works with your database-backed login/session system.
+    """
+    cursor = connection.cursor()
+    try:
+        cursor.execute("""
+            SELECT userID, username, first_name, last_name, email,
+                   phone_number, account_type, is_active, created_at
+            FROM users
+            WHERE account_type = %s
+            ORDER BY last_name, first_name
+        """, ['driver'])
+
+        rows = cursor.fetchall()
+        drivers = []
+        for r in rows:
+            drivers.append({
+                'user_id': r[0],
+                'username': r[1],
+                'first_name': r[2],
+                'last_name': r[3],
+                'email': r[4],
+                'phone_number': r[5],
+                'account_type': r[6],
+                'is_active': bool(r[7]),
+                'created_at': r[8]
+            })
+
+        return render(request, 'admin_driver_list.html', {
+            'drivers': drivers,
+        })
+
+    except Exception as e:
+        messages.error(request, f"Error loading drivers: {str(e)}")
+        return redirect('account_page')
+    finally:
+        try:
+            cursor.close()
+        except:
+            pass
+
+
+@admin_required
+def admin_delete_driver(request, user_id):
+    """Delete a driver and related records from the custom database tables.
+
+    This removes related delivery addresses, sponsor relationships, driver applications,
+    and the users table row. It's admin-only and uses POST for safety.
+    """
+    if request.method != 'POST':
+        messages.error(request, "Invalid request method.")
+        return redirect('admin_driver_dashboard')
+
+    cursor = connection.cursor()
+    try:
+        # Remove related rows first to avoid FK issues
+        try:
+            cursor.execute("DELETE FROM delivery_addresses WHERE user_id = %s", [user_id])
+        except Exception:
+            pass
+
+        try:
+            cursor.execute("DELETE FROM sponsor_driver_relationships WHERE driver_user_id = %s OR sponsor_user_id = %s", [user_id, user_id])
+        except Exception:
+            pass
+
+        try:
+            cursor.execute("DELETE FROM driver_applications WHERE driver_user_id = %s OR sponsor_user_id = %s", [user_id, user_id])
+        except Exception:
+            pass
+
+        # Finally delete the user row
+        cursor.execute("DELETE FROM users WHERE userID = %s", [user_id])
+
+        try:
+            connection.commit()
+        except Exception:
+            pass
+
+        messages.success(request, "Driver and related data deleted successfully.")
+        return redirect('admin_driver_dashboard')
+
+    except Exception as e:
+        messages.error(request, f"Error deleting driver: {str(e)}")
+        return redirect('admin_driver_dashboard')
+    finally:
+        try:
+            cursor.close()
+        except:
+            pass
+
 # Add these functions to your existing driver_program/views.py file
 
 @db_login_required

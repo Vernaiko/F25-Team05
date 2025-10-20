@@ -265,6 +265,14 @@
             <span>Manage Addresses</span>
           </a>
         </div>
+        {% if request.session.account_type == 'admin' %}
+        <div class="control">
+          <a href="{% url 'admin_driver_dashboard' %}" class="button is-dark">
+            <span class="icon"><i class="fas fa-users"></i></span>
+            <span>All Drivers</span>
+          </a>
+        </div>
+        {% endif %}
       </div>
     </div>
     
