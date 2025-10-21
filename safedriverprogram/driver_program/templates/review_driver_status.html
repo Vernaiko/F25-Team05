@@ -1,0 +1,19 @@
+<h2>Driver Accounts</h2>
+<table border="1" cellpadding="8" cellspacing="0">
+  <tr>
+    <th>Username</th>
+    <th>Email</th>
+    <th>Active</th>
+  </tr>
+  {% for driver in drivers %}
+  <tr>
+    <td>{{ driver.username }}</td>
+    <td>{{ driver.email }}</td>
+    <td>{{ driver.is_active }}</td>
+  </tr>
+  {% empty %}
+  <tr>
+    <td colspan="3">No driver accounts found.</td>
+  </tr>
+  {% endfor %}
+</table>

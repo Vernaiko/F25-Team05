@@ -1,0 +1,19 @@
+<h2>Sponsor Accounts</h2>
+<table border="1" cellpadding="8" cellspacing="0">
+  <tr>
+    <th>Username</th>
+    <th>Email</th>
+    <th>Active</th>
+  </tr>
+  {% for sponsor in sponsors %}
+  <tr>
+    <td>{{ sponsor.username }}</td>
+    <td>{{ sponsor.email }}</td>
+    <td>{{ sponsor.is_active }}</td>
+  </tr>
+  {% empty %}
+  <tr>
+    <td colspan="3">No sponsor accounts found.</td>
+  </tr>
+  {% endfor %}
+</table>
