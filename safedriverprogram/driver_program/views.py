@@ -1983,3 +1983,643 @@ def sponsor_view_application(request, application_id):
         return redirect('sponsor_manage_applications')
     finally:
         cursor.close()
+@db_login_required
+def admin_sponsor_list(request):
+    """Admin page to view and manage all sponsors"""
+    
+    # Check if user is logged in and is an admin
+    if not request.session.get('is_authenticated'):
+        messages.error(request, "Please log in to access this page.")
+        return redirect('login_page')
+    
+    if request.session.get('account_type') != 'admin':
+        messages.error(request, "Access denied. Only administrators can view this page.")
+        return redirect('homepage')
+    
+    cursor = connection.cursor()
+    
+    try:
+        # Get all sponsors with their statistics
+        cursor.execute("""
+            SELECT 
+                u.userID, u.username, u.first_name, u.last_name, u.email,
+                u.phone_number, u.address, u.is_active, u.created_at,
+                (SELECT COUNT(*) 
+                 FROM sponsor_driver_relationships sdr 
+                 WHERE sdr.sponsor_user_id = u.userID 
+                 AND sdr.relationship_status = 'active') as active_drivers,
+                (SELECT COUNT(*) 
+                 FROM driver_applications da 
+                 WHERE da.sponsor_user_id = u.userID 
+                 AND da.application_status = 'pending') as pending_applications,
+                (SELECT COUNT(*) 
+                 FROM driver_applications da 
+                 WHERE da.sponsor_user_id = u.userID 
+                 AND da.application_status = 'approved') as total_approved
+            FROM users u
+            WHERE u.account_type = 'sponsor'
+            ORDER BY u.created_at DESC
+        """)
+        
+        sponsors_data = cursor.fetchall()
+        
+        sponsors_list = []
+        for sponsor in sponsors_data:
+            sponsors_list.append({
+                'userID': sponsor[0],
+                'username': sponsor[1],
+                'first_name': sponsor[2],
+                'last_name': sponsor[3],
+                'email': sponsor[4],
+                'phone_number': sponsor[5],
+                'address': sponsor[6],
+                'is_active': sponsor[7],
+                'created_at': sponsor[8],
+                'active_drivers': sponsor[9],
+                'pending_applications': sponsor[10],
+                'total_approved': sponsor[11]
+            })
+        
+        # Get statistics
+        total_sponsors = len(sponsors_list)
+        active_sponsors = len([s for s in sponsors_list if s['is_active']])
+        inactive_sponsors = total_sponsors - active_sponsors
+        
+        context = {
+            'sponsors': sponsors_list,
+            'total_sponsors': total_sponsors,
+            'active_sponsors': active_sponsors,
+            'inactive_sponsors': inactive_sponsors
+        }
+        
+        return render(request, 'admin_sponsor_list.html', context)
+        
+    except Exception as e:
+        messages.error(request, f"Error loading sponsors: {str(e)}")
+        print(f"Admin sponsor list error: {e}")
+        return redirect('account_page')
+    finally:
+        cursor.close()
+
+
+@db_login_required
+def admin_update_sponsor_status(request, sponsor_id):
+    """Toggle sponsor active/inactive status"""
+
+    # Check if user is logged in and is an admin
+    if not request.session.get('is_authenticated'):
+        messages.error(request, "Please log in to access this page.")
+        return redirect('login_page')
+
+    if request.session.get('account_type') != 'admin':
+        messages.error(request, "Access denied. Only administrators can perform this action.")
+        return redirect('homepage')
+
+    if request.method == 'POST':
+        cursor = connection.cursor()
+
+        try:
+            # Get current sponsor status
+            cursor.execute("""
+                SELECT username, first_name, last_name, is_active, account_type
+                FROM users
+                WHERE userID = %s
+            """, [sponsor_id])
+
+            sponsor_data = cursor.fetchone()
+
+            if not sponsor_data:
+                messages.error(request, "Sponsor not found.")
+                return redirect('admin_sponsor_list')
+
+            if sponsor_data[4] != 'sponsor':
+                messages.error(request, "This user is not a sponsor.")
+                return redirect('admin_sponsor_list')
+
+            username = sponsor_data[0]
+            full_name = f"{sponsor_data[1]} {sponsor_data[2]}"
+            current_status = sponsor_data[3]
+
+            # Toggle status
+            new_status = 0 if current_status else 1
+
+            cursor.execute("""
+                UPDATE users
+                SET is_active = %s
+                WHERE userID = %s
+            """, [new_status, sponsor_id])
+
+            status_text = "activated" if new_status else "deactivated"
+            messages.success(request, f"Sponsor {full_name} (@{username}) has been {status_text}.")
+
+        except Exception as e:
+            messages.error(request, f"Error updating sponsor status: {str(e)}")
+            print(f"Update sponsor status error: {e}")
+        finally:
+            cursor.close()
+
+    return redirect('admin_sponsor_list')
+
+@db_login_required
+def admin_sponsor_details(request, sponsor_id):
+    """View detailed information about a specific sponsor"""
+    
+    # Check if user is logged in and is an admin
+    if not request.session.get('is_authenticated'):
+        messages.error(request, "Please log in to access this page.")
+        return redirect('login_page')
+    
+    if request.session.get('account_type') != 'admin':
+        messages.error(request, "Access denied. Only administrators can view this page.")
+        return redirect('homepage')
+    
+    cursor = connection.cursor()
+    
+    try:
+        # Get sponsor information
+        cursor.execute("""
+            SELECT userID, username, first_name, last_name, email,
+                   phone_number, address, organization, is_active, created_at, account_type
+            FROM users
+            WHERE userID = %s
+        """, [sponsor_id])
+        
+        sponsor_data = cursor.fetchone()
+        
+        if not sponsor_data or sponsor_data[10] != 'sponsor':
+            messages.error(request, "Sponsor not found.")
+            return redirect('admin_sponsor_list')
+        
+        sponsor_info = {
+            'userID': sponsor_data[0],
+            'username': sponsor_data[1],
+            'first_name': sponsor_data[2],
+            'last_name': sponsor_data[3],
+            'email': sponsor_data[4],
+            'phone_number': sponsor_data[5],
+            'address': sponsor_data[6],
+            'organization': sponsor_data[7],
+            'is_active': sponsor_data[8],
+            'created_at': sponsor_data[9]
+        }
+        
+        # Get active drivers
+        cursor.execute("""
+            SELECT u.userID, u.username, u.first_name, u.last_name,
+                   sdr.relationship_start_date, sdr.safe_driving_streak_days,
+                   sdr.total_trips_logged
+            FROM sponsor_driver_relationships sdr
+            JOIN users u ON sdr.driver_user_id = u.userID
+            WHERE sdr.sponsor_user_id = %s AND sdr.relationship_status = 'active'
+            ORDER BY sdr.relationship_start_date DESC
+        """, [sponsor_id])
+        
+        active_drivers = cursor.fetchall()
+        
+        # Get pending applications
+        cursor.execute("""
+            SELECT da.application_id, da.driver_user_id, da.application_date,
+                   u.username, u.first_name, u.last_name
+            FROM driver_applications da
+            JOIN users u ON da.driver_user_id = u.userID
+            WHERE da.sponsor_user_id = %s AND da.application_status = 'pending'
+            ORDER BY da.application_date DESC
+        """, [sponsor_id])
+        
+        pending_applications = cursor.fetchall()
+        
+        # Get relationship history
+        cursor.execute("""
+            SELECT u.userID, u.username, u.first_name, u.last_name,
+                   sdr.relationship_start_date, sdr.relationship_end_date,
+                   sdr.relationship_status
+            FROM sponsor_driver_relationships sdr
+            JOIN users u ON sdr.driver_user_id = u.userID
+            WHERE sdr.sponsor_user_id = %s
+            ORDER BY sdr.relationship_start_date DESC
+        """, [sponsor_id])
+        
+        relationship_history = cursor.fetchall()
+        
+        context = {
+            'sponsor': sponsor_info,
+            'active_drivers': [
+                {
+                    'userID': driver[0],
+                    'username': driver[1],
+                    'first_name': driver[2],
+                    'last_name': driver[3],
+                    'relationship_start_date': driver[4],
+                    'streak_days': driver[5] or 0,
+                    'total_trips': driver[6] or 0
+                }
+                for driver in active_drivers
+            ],
+            'pending_applications': [
+                {
+                    'application_id': app[0],
+                    'driver_user_id': app[1],
+                    'application_date': app[2],
+                    'driver_username': app[3],
+                    'driver_first_name': app[4],
+                    'driver_last_name': app[5]
+                }
+                for app in pending_applications
+            ],
+            'relationship_history': [
+                {
+                    'driver_user_id': rel[0],
+                    'driver_username': rel[1],
+                    'driver_first_name': rel[2],
+                    'driver_last_name': rel[3],
+                    'start_date': rel[4],
+                    'end_date': rel[5],
+                    'status': rel[6]
+                }
+                for rel in relationship_history
+            ]
+        }
+        
+        return render(request, 'admin_sponsor_details.html', context)
+        
+    except Exception as e:
+        messages.error(request, f"Error loading sponsor details: {str(e)}")
+        print(f"Sponsor details error: {e}")
+        import traceback
+        traceback.print_exc()
+        return redirect('admin_sponsor_list')
+    finally:
+        cursor.close()
+
+@db_login_required
+def admin_delete_sponsor(request, sponsor_id):
+    """Delete a sponsor account"""
+    
+    # Check if user is logged in and is an admin
+    if not request.session.get('is_authenticated'):
+        messages.error(request, "Please log in to access this page.")
+        return redirect('login_page')
+    
+    if request.session.get('account_type') != 'admin':
+        messages.error(request, "Access denied. Only administrators can perform this action.")
+        return redirect('homepage')
+    
+    if request.method == 'POST':
+        cursor = connection.cursor()
+        
+        try:
+            # Get sponsor information
+            cursor.execute("""
+                SELECT username, first_name, last_name, account_type
+                FROM users
+                WHERE userID = %s
+            """, [sponsor_id])
+            
+            sponsor_data = cursor.fetchone()
+            
+            if not sponsor_data:
+                messages.error(request, "Sponsor not found.")
+                # Get referer URL to preserve filters
+                referer = request.META.get('HTTP_REFERER', '')
+                if 'useradmin/sponsors' in referer:
+                    return redirect(referer)
+                return redirect('admin_sponsor_list')
+            
+            if sponsor_data[3] != 'sponsor':
+                messages.error(request, "This user is not a sponsor.")
+                referer = request.META.get('HTTP_REFERER', '')
+                if 'useradmin/sponsors' in referer:
+                    return redirect(referer)
+                return redirect('admin_sponsor_list')
+            
+            username = sponsor_data[0]
+            full_name = f"{sponsor_data[1]} {sponsor_data[2]}"
+            
+            # Check if sponsor has active relationships
+            cursor.execute("""
+                SELECT COUNT(*)
+                FROM sponsor_driver_relationships
+                WHERE sponsor_user_id = %s AND relationship_status = 'active'
+            """, [sponsor_id])
+            
+            active_relationships_result = cursor.fetchone()
+            active_relationships = active_relationships_result[0] if active_relationships_result else 0
+            
+            if active_relationships > 0:
+                messages.error(request, 
+                    f"Cannot delete sponsor {full_name}. They have {active_relationships} active driver relationship(s). "
+                    f"Please end all relationships before deleting.")
+                referer = request.META.get('HTTP_REFERER', '')
+                if 'useradmin/sponsors' in referer:
+                    return redirect(referer)
+                return redirect('admin_sponsor_list')
+            
+            # End any non-active relationships
+            cursor.execute("""
+                UPDATE sponsor_driver_relationships
+                SET relationship_status = 'ended',
+                    relationship_end_date = NOW(),
+                    updated_at = NOW()
+                WHERE sponsor_user_id = %s 
+                AND relationship_status != 'ended'
+            """, [sponsor_id])
+            
+            # Update applications to show sponsor deleted
+            cursor.execute("""
+                UPDATE driver_applications
+                SET admin_notes = CONCAT(COALESCE(admin_notes, ''), '\n[Sponsor account deleted by admin]'),
+                    updated_at = NOW()
+                WHERE sponsor_user_id = %s
+            """, [sponsor_id])
+            
+            # Delete the sponsor account
+            cursor.execute("""
+                DELETE FROM users
+                WHERE userID = %s
+            """, [sponsor_id])
+            
+            messages.success(request, f"Sponsor {full_name} (@{username}) has been deleted successfully.")
+            
+            # Get referer URL to preserve filters
+            referer = request.META.get('HTTP_REFERER', '')
+            if 'useradmin/sponsors' in referer:
+                return redirect(referer)
+            
+        except Exception as e:
+            messages.error(request, f"Error deleting sponsor: {str(e)}")
+            print(f"Delete sponsor error: {e}")
+        finally:
+            cursor.close()
+    
+    return redirect('admin_sponsor_list')
+
+
+@db_login_required
+def admin_sponsor_list(request):
+    """Admin page to view and manage all sponsors with bulk operations"""
+    
+    # Check if user is logged in and is an admin
+    if not request.session.get('is_authenticated'):
+        messages.error(request, "Please log in to access this page.")
+        return redirect('login_page')
+    
+    if request.session.get('account_type') != 'admin':
+        messages.error(request, "Access denied. Only administrators can view this page.")
+        return redirect('homepage')
+    
+    cursor = connection.cursor()
+    
+    # Get filter parameters from GET request
+    organization_filter = request.GET.get('organization', '')
+    status_filter = request.GET.get('status', '')
+    
+    # Handle bulk actions
+    if request.method == 'POST':
+        action = request.POST.get('bulk_action')
+        selected_sponsors = request.POST.getlist('selected_sponsors')
+        organization_bulk = request.POST.get('organization_filter', '').strip()
+        
+        if action and (selected_sponsors or organization_bulk):
+            try:
+                if action == 'delete_selected':
+                    # Delete selected sponsors
+                    if selected_sponsors:
+                        deleted_count = 0
+                        skipped_count = 0
+                        
+                        for sponsor_id in selected_sponsors:
+                            # Check for active relationships
+                            cursor.execute("""
+                                SELECT COUNT(*) FROM sponsor_driver_relationships
+                                WHERE sponsor_user_id = %s AND relationship_status = 'active'
+                            """, [sponsor_id])
+                            result = cursor.fetchone()
+                            active_rels = result[0] if result else 0
+                            
+                            if active_rels > 0:
+                                skipped_count += 1
+                                continue
+                            
+                            # End non-active relationships
+                            cursor.execute("""
+                                UPDATE sponsor_driver_relationships
+                                SET relationship_status = 'ended',
+                                    relationship_end_date = NOW(),
+                                    updated_at = NOW()
+                                WHERE sponsor_user_id = %s AND relationship_status != 'ended'
+                            """, [sponsor_id])
+                            
+                            # Update applications
+                            cursor.execute("""
+                                UPDATE driver_applications
+                                SET admin_notes = CONCAT(COALESCE(admin_notes, ''), '\n[Sponsor account deleted by admin]'),
+                                    updated_at = NOW()
+                                WHERE sponsor_user_id = %s
+                            """, [sponsor_id])
+                            
+                            # Delete sponsor
+                            cursor.execute("DELETE FROM users WHERE userID = %s", [sponsor_id])
+                            deleted_count += 1
+                        
+                        if deleted_count > 0:
+                            messages.success(request, f"Successfully deleted {deleted_count} sponsor(s).")
+                        if skipped_count > 0:
+                            messages.warning(request, f"Skipped {skipped_count} sponsor(s) with active relationships.")
+                
+                elif action == 'delete_by_organization':
+                    # Delete all sponsors from specific organization
+                    if organization_bulk:
+                        # Get sponsors from organization
+                        cursor.execute("""
+                            SELECT userID FROM users 
+                            WHERE account_type = 'sponsor' AND organization = %s
+                        """, [organization_bulk])
+                        
+                        org_sponsors = cursor.fetchall()
+                        deleted_count = 0
+                        skipped_count = 0
+                        
+                        for (sponsor_id,) in org_sponsors:
+                            # Check for active relationships
+                            cursor.execute("""
+                                SELECT COUNT(*) FROM sponsor_driver_relationships
+                                WHERE sponsor_user_id = %s AND relationship_status = 'active'
+                            """, [sponsor_id])
+                            result = cursor.fetchone()
+                            active_rels = result[0] if result else 0
+                            
+                            if active_rels > 0:
+                                skipped_count += 1
+                                continue
+                            
+                            # End non-active relationships
+                            cursor.execute("""
+                                UPDATE sponsor_driver_relationships
+                                SET relationship_status = 'ended',
+                                    relationship_end_date = NOW(),
+                                    updated_at = NOW()
+                                WHERE sponsor_user_id = %s AND relationship_status != 'ended'
+                            """, [sponsor_id])
+                            
+                            # Update applications
+                            cursor.execute("""
+                                UPDATE driver_applications
+                                SET admin_notes = CONCAT(COALESCE(admin_notes, ''), '\n[Sponsor account deleted by admin - Organization cleanup]'),
+                                    updated_at = NOW()
+                                WHERE sponsor_user_id = %s
+                            """, [sponsor_id])
+                            
+                            # Delete sponsor
+                            cursor.execute("DELETE FROM users WHERE userID = %s", [sponsor_id])
+                            deleted_count += 1
+                        
+                        if deleted_count > 0:
+                            messages.success(request, f"Successfully deleted {deleted_count} sponsor(s) from organization '{organization_bulk}'.")
+                        if skipped_count > 0:
+                            messages.warning(request, f"Skipped {skipped_count} sponsor(s) with active relationships.")
+                
+                elif action == 'activate_selected':
+                    # Activate selected sponsors
+                    if selected_sponsors:
+                        placeholders = ','.join(['%s'] * len(selected_sponsors))
+                        cursor.execute(f"""
+                            UPDATE users SET is_active = 1 
+                            WHERE userID IN ({placeholders})
+                        """, selected_sponsors)
+                        messages.success(request, f"Successfully activated {len(selected_sponsors)} sponsor(s).")
+                
+                elif action == 'deactivate_selected':
+                    # Deactivate selected sponsors
+                    if selected_sponsors:
+                        placeholders = ','.join(['%s'] * len(selected_sponsors))
+                        cursor.execute(f"""
+                            UPDATE users SET is_active = 0 
+                            WHERE userID IN ({placeholders})
+                        """, selected_sponsors)
+                        messages.success(request, f"Successfully deactivated {len(selected_sponsors)} sponsor(s).")
+                
+                elif action == 'activate_by_organization':
+                    # Activate all sponsors from organization
+                    if organization_bulk:
+                        cursor.execute("""
+                            UPDATE users SET is_active = 1 
+                            WHERE account_type = 'sponsor' AND organization = %s
+                        """, [organization_bulk])
+                        affected = cursor.rowcount
+                        messages.success(request, f"Successfully activated {affected} sponsor(s) from organization '{organization_bulk}'.")
+                
+                elif action == 'deactivate_by_organization':
+                    # Deactivate all sponsors from organization
+                    if organization_bulk:
+                        cursor.execute("""
+                            UPDATE users SET is_active = 0 
+                            WHERE account_type = 'sponsor' AND organization = %s
+                        """, [organization_bulk])
+                        affected = cursor.rowcount
+                        messages.success(request, f"Successfully deactivated {affected} sponsor(s) from organization '{organization_bulk}'.")
+                
+                # Redirect back with filters preserved
+                redirect_url = f"{request.path}?"
+                if organization_filter:
+                    redirect_url += f"organization={organization_filter}&"
+                if status_filter:
+                    redirect_url += f"status={status_filter}&"
+                return redirect(redirect_url.rstrip('&?'))
+                
+            except Exception as e:
+                messages.error(request, f"Error performing bulk action: {str(e)}")
+                print(f"Bulk action error: {e}")
+                import traceback
+                traceback.print_exc()
+    
+    try:
+        # Build query with filters
+        query = """
+            SELECT 
+                u.userID, u.username, u.first_name, u.last_name, u.email,
+                u.phone_number, u.address, u.organization, u.is_active, u.created_at,
+                (SELECT COUNT(*) 
+                 FROM sponsor_driver_relationships sdr 
+                 WHERE sdr.sponsor_user_id = u.userID 
+                 AND sdr.relationship_status = 'active') as active_drivers,
+                (SELECT COUNT(*) 
+                 FROM driver_applications da 
+                 WHERE da.sponsor_user_id = u.userID 
+                 AND da.application_status = 'pending') as pending_applications,
+                (SELECT COUNT(*) 
+                 FROM driver_applications da 
+                 WHERE da.sponsor_user_id = u.userID 
+                 AND da.application_status = 'approved') as total_approved
+            FROM users u
+            WHERE u.account_type = 'sponsor'
+        """
+        
+        params = []
+        
+        if organization_filter:
+            query += " AND u.organization = %s"
+            params.append(organization_filter)
+        
+        if status_filter:
+            if status_filter == 'active':
+                query += " AND u.is_active = 1"
+            elif status_filter == 'inactive':
+                query += " AND u.is_active = 0"
+        
+        query += " ORDER BY u.created_at DESC"
+        
+        cursor.execute(query, params)
+        sponsors_data = cursor.fetchall()
+        
+        sponsors_list = []
+        for sponsor in sponsors_data:
+            sponsors_list.append({
+                'userID': sponsor[0],
+                'username': sponsor[1],
+                'first_name': sponsor[2],
+                'last_name': sponsor[3],
+                'email': sponsor[4],
+                'phone_number': sponsor[5],
+                'address': sponsor[6],
+                'organization': sponsor[7],
+                'is_active': sponsor[8],
+                'created_at': sponsor[9],
+                'active_drivers': sponsor[10],
+                'pending_applications': sponsor[11],
+                'total_approved': sponsor[12]
+            })
+        
+        # Get list of all organizations
+        cursor.execute("""
+            SELECT DISTINCT organization 
+            FROM users 
+            WHERE account_type = 'sponsor' AND organization IS NOT NULL AND organization != ''
+            ORDER BY organization
+        """)
+        organizations = [org[0] for org in cursor.fetchall()]
+        
+        # Get statistics (for filtered results)
+        total_sponsors = len(sponsors_list)
+        active_sponsors = len([s for s in sponsors_list if s['is_active']])
+        inactive_sponsors = total_sponsors - active_sponsors
+        
+        context = {
+            'sponsors': sponsors_list,
+            'organizations': organizations,
+            'total_sponsors': total_sponsors,
+            'active_sponsors': active_sponsors,
+            'inactive_sponsors': inactive_sponsors,
+            'current_organization_filter': organization_filter,
+            'current_status_filter': status_filter
+        }
+        
+        return render(request, 'admin_sponsor_list.html', context)
+        
+    except Exception as e:
+        messages.error(request, f"Error loading sponsors: {str(e)}")
+        print(f"Admin sponsor list error: {e}")
+        import traceback
+        traceback.print_exc()
+        return redirect('account_page')
+    finally:
+        cursor.close()

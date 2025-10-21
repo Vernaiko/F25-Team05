@@ -24,6 +24,56 @@
               </figure>
             </div>
           {% endif %}
+          <!-- Find the admin dashboard section and add the Manage Sponsors button -->
+{% if user_info.account_type == 'admin' %}
+<div class="box has-background-danger-light">
+  <h2 class="subtitle">
+    <span class="icon has-text-danger">
+      <i class="fas fa-user-shield"></i>
+    </span>
+    Administrator Dashboard
+  </h2>
+  <p class="mb-4">Manage system users and settings.</p>
+  
+  <div class="field is-grouped is-grouped-multiline">
+    <div class="control">
+      <a href="{% url 'add_admin' %}" class="button is-danger">
+        <span class="icon"><i class="fas fa-user-plus"></i></span>
+        <span>Add Admin</span>
+      </a>
+    </div>
+    
+    <div class="control">
+      <a href="{% url 'admin_list' %}" class="button is-info">
+        <span class="icon"><i class="fas fa-users-cog"></i></span>
+        <span>Manage Admins</span>
+      </a>
+    </div>
+    
+    <div class="control">
+      <a href="{% url 'driver_list' %}" class="button is-success">
+        <span class="icon"><i class="fas fa-car"></i></span>
+        <span>Manage Drivers</span>
+      </a>
+    </div>
+    
+    <!-- NEW: Add this button for Manage Sponsors -->
+    <div class="control">
+      <a href="{% url 'admin_sponsor_list' %}" class="button is-primary">
+        <span class="icon"><i class="fas fa-user-tie"></i></span>
+        <span>Manage Sponsors</span>
+      </a>
+    </div>
+    
+    <div class="control">
+      <a href="{% url 'view_sponsor_requests' %}" class="button is-warning">
+        <span class="icon"><i class="fas fa-clipboard-check"></i></span>
+        <span>Review Applications</span>
+      </a>
+    </div>
+  </div>
+</div>
+{% endif %}
           <!-- Personal Information Section -->
           <div class="box has-background-light">
             <h2 class="subtitle">
