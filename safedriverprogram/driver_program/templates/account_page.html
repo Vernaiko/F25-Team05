@@ -166,8 +166,22 @@
                   <span class="icon"><i class="fas fa-user-shield"></i></span>
                   <span>Administrator</span>
                 </span>
-              {% else %}
-                <span class="tag is-light">{{ request.session.account_type|default:"Unknown" }}</span>
+
+                <!-- ADMIN DASHBOARD LINKS -->
+                <div class="mt-3">
+                  <h3 class="subtitle is-6 has-text-weight-bold">Admin Dashboard</h3>
+                  <div class="buttons">
+                    <a href="{% url 'review_admin_status' %}" class="button is-danger is-small">
+                      Review Admins
+                    </a>
+                    <a href="{% url 'review_sponsor_status' %}" class="button is-info is-small">
+                      Review Sponsors
+                    </a>
+                    <a href="{% url 'review_driver_status' %}" class="button is-success is-small">
+                      Review Drivers
+                    </a>
+                  </div>
+                </div>
               {% endif %}
             </p>
           </div>
@@ -185,7 +199,6 @@
       </div>
     </div>
 
-    <div class="column is-one-third">
     <!-- Sponsor-Specific Dashboard -->
     {% if request.session.account_type == 'sponsor' %}
     <div class="box has-background-primary-light">
@@ -315,6 +328,14 @@
             <span>Manage Addresses</span>
           </a>
         </div>
+        {% if request.session.account_type == 'admin' %}
+        <div class="control">
+          <a href="{% url 'admin_driver_dashboard' %}" class="button is-dark">
+            <span class="icon"><i class="fas fa-users"></i></span>
+            <span>All Drivers</span>
+          </a>
+        </div>
+        {% endif %}
       </div>
     </div>
     
@@ -349,8 +370,4 @@
     </div>
   </div>
 </div>
-    </div>
-  </div>
-</div>
-{% endif %}
 {% endblock %}

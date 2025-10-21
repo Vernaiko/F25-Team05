@@ -53,4 +53,14 @@ urlpatterns = [
     path('sponsor/applications/', views.sponsor_manage_applications, name='sponsor_manage_applications'),
     path('sponsor/application/<int:application_id>/', views.sponsor_view_application, name='sponsor_view_application'),
     path('sponsor-application-action/<int:application_id>/', views.sponsor_application_action, name='sponsor_application_action'),
+
+    # Admin review pages
+    path('review/admins/', views.review_admin_status, name='review_admin_status'),
+    path('review/sponsors/', views.review_sponsor_status, name='review_sponsor_status'),
+    path('review/drivers/', views.review_driver_status, name='review_driver_status'),
+    
+    # Products
+    path('products/', views.view_products, name='view_products'),
+ 
+
 ]
