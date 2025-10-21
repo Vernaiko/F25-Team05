@@ -1524,6 +1524,45 @@ def sponsor_drivers(request):
                 'safe_driving_streak_days': driver[9] or 0,
                 'total_trips_logged': driver[10] or 0
             })
+
+        # Ensure transactions table exists for point adjustments
+        try:
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS driver_points_transactions (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    sponsor_user_id INT NOT NULL,
+                    driver_user_id INT NOT NULL,
+                    points INT NOT NULL,
+                    message TEXT,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    INDEX idx_sponsor_driver (sponsor_user_id, driver_user_id)
+                )
+            """)
+        except Exception as e:
+            print(f"Error ensuring transactions table: {e}")
+
+        # Attach points summary and recent transactions for each driver
+        for d in drivers_list:
+            try:
+                cursor.execute(
+                    "SELECT IFNULL(SUM(points), 0) FROM driver_points_transactions WHERE sponsor_user_id = %s AND driver_user_id = %s",
+                    [sponsor_id, d['user_id']]
+                )
+                pts_row = cursor.fetchone()
+                d['points'] = pts_row[0] if pts_row else 0
+
+                cursor.execute(
+                    "SELECT points, message, created_at FROM driver_points_transactions WHERE sponsor_user_id = %s AND driver_user_id = %s ORDER BY created_at DESC LIMIT 5",
+                    [sponsor_id, d['user_id']]
+                )
+                tx_rows = cursor.fetchall()
+                d['transactions'] = [
+                    {'points': t[0], 'message': t[1], 'created_at': t[2]} for t in tx_rows
+                ]
+            except Exception as e:
+                print(f"Error loading transactions for driver {d['user_id']}: {e}")
+                d['points'] = 0
+                d['transactions'] = []
         
         applications_list = []
         for app in pending_applications:
@@ -1971,3 +2010,68 @@ def sponsor_view_application(request, application_id):
         return redirect('sponsor_manage_applications')
     finally:
         cursor.close()
+
+
+@db_login_required
+def sponsor_adjust_points(request):
+    """Allow sponsors to add/remove points for their drivers and store the transactions."""
+    if request.method != 'POST':
+        messages.error(request, "Invalid request method.")
+        return redirect('sponsor_drivers')
+
+    if request.session.get('account_type') != 'sponsor':
+        messages.error(request, "Access denied.")
+        return redirect('homepage')
+
+    sponsor_id = request.session.get('user_id')
+    driver_user_id = request.POST.get('driver_user_id')
+    try:
+        points = int(request.POST.get('points', '0'))
+    except ValueError:
+        messages.error(request, "Points must be an integer.")
+        return redirect('sponsor_drivers')
+
+    message_text = request.POST.get('message', '').strip()
+
+    cursor = connection.cursor()
+    try:
+        # Ensure driver exists and is sponsored by this sponsor
+        cursor.execute("SELECT COUNT(*) FROM sponsor_driver_relationships WHERE sponsor_user_id = %s AND driver_user_id = %s AND relationship_status = 'active'", [sponsor_id, driver_user_id])
+        rel_exists = cursor.fetchone()[0]
+        if not rel_exists:
+            messages.error(request, "Driver not found or not sponsored by you.")
+            return redirect('sponsor_drivers')
+
+        # Insert transaction
+        cursor.execute("""
+            INSERT INTO driver_points_transactions (sponsor_user_id, driver_user_id, points, message, created_at)
+            VALUES (%s, %s, %s, %s, NOW())
+        """, [sponsor_id, driver_user_id, points, message_text])
+
+        # Optionally update any aggregate counters in sponsor_driver_relationships (e.g., total points)
+        try:
+            cursor.execute("""
+                UPDATE sponsor_driver_relationships
+                SET total_points = IFNULL(total_points, 0) + %s, updated_at = NOW()
+                WHERE sponsor_user_id = %s AND driver_user_id = %s
+            """, [points, sponsor_id, driver_user_id])
+        except Exception:
+            # Table might not have total_points column; ignore silently
+            pass
+
+        try:
+            connection.commit()
+        except Exception:
+            pass
+
+        messages.success(request, "Points recorded successfully.")
+        return redirect('sponsor_drivers')
+
+    except Exception as e:
+        messages.error(request, f"Error recording points: {str(e)}")
+        return redirect('sponsor_drivers')
+    finally:
+        try:
+            cursor.close()
+        except:
+            pass

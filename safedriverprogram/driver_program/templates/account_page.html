@@ -15,12 +15,12 @@
           My Account
         </h1>
         
-        {% if user %}
+        {% if user_info %}
         <div class="content">
-          {% if user.avatar_image %}
+          {% if user_info.avatar_image %}
             <div class="has-text-centered" style="margin-bottom:1rem;">
               <figure class="image is-128x128 is-inline-block">
-                <img src="{{ MEDIA_URL }}{{ user.avatar_image }}" alt="Avatar" style="width:128px;height:128px;object-fit:cover;border-radius:50%;">
+                <img src="{{ MEDIA_URL }}{{ user_info.avatar_image }}" alt="Avatar" style="width:128px;height:128px;object-fit:cover;border-radius:50%;">
               </figure>
             </div>
           {% endif %}
@@ -39,37 +39,37 @@
                   <tbody>
                     <tr>
                       <td><strong>User ID:</strong></td>
-                      <td>{{ user.user_id }}</td>
+                      <td>{{ user_info.userID }}</td>
                     </tr>
                     <tr>
                       <td><strong>Username:</strong></td>
-                      <td>{{ user.username|default:"Not set" }}</td>
+                      <td>{{ user_info.username|default:"Not set" }}</td>
                     </tr>
                     <tr>
                       <td><strong>Email:</strong></td>
-                      <td>{{ user.email|default:"Not set" }}</td>
+                      <td>{{ user_info.email|default:"Not set" }}</td>
                     </tr>
                     <tr>
                       <td><strong>First Name:</strong></td>
-                      <td>{{ user.first_name|default:"Not set" }}</td>
+                      <td>{{ user_info.first_name|default:"Not set" }}</td>
                     </tr>
                     <tr>
                       <td><strong>Last Name:</strong></td>
-                      <td>{{ user.last_name|default:"Not set" }}</td>
+                      <td>{{ user_info.last_name|default:"Not set" }}</td>
                     </tr>
                     <tr>
                       <td><strong>Phone Number:</strong></td>
-                      <td>{{ user.phone_number|default:"Not set" }}</td>
+                      <td>{{ user_info.phone_number|default:"Not set" }}</td>
                     </tr>
                     <tr>
                       <td><strong>Address:</strong></td>
-                      <td>{{ user.address|default:"Not set" }}</td>
+                      <td>{{ user_info.address|default:"Not set" }}</td>
                     </tr>
                     <tr>
                       <td><strong>Delivery Address:</strong></td>
                       <td>
-                        {% if user.delivery_address %}
-                          {{ user.delivery_address }}
+                        {% if user_info.delivery_address %}
+                          {{ user_info.delivery_address }}
                         {% else %}
                           <span class="tag is-warning">Not set</span>
                           <br>
@@ -335,4 +335,5 @@
     </div>
   </div>
 </div>
+{% endif %}
 {% endblock %}
