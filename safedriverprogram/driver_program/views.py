@@ -4,6 +4,9 @@ from django.contrib import messages
 from django.db import connection
 from django.views.decorators.csrf import csrf_protect
 from django.http import JsonResponse
+from django.conf import settings
+import os
+from django.core.files.storage import default_storage
 
 from django.contrib.auth.models import User
 from django.contrib.auth.decorators import user_passes_test
@@ -218,11 +221,35 @@ def signup_page(request):
             messages.error(request, "Password must be at least 6 characters long.")
             return render(request, 'signup.html')
         
+        # Handle uploaded avatar (optional)
+        avatar_filename = None
+        if request.FILES.get('avatar'):
+            avatar = request.FILES['avatar']
+            avatars_dir = settings.MEDIA_ROOT / 'avatars'
+            os.makedirs(avatars_dir, exist_ok=True)
+            avatar_filename = os.path.join('avatars', avatar.name)
+            full_path = settings.MEDIA_ROOT / avatar_filename
+            with open(full_path, 'wb+') as dest:
+                for chunk in avatar.chunks():
+                    dest.write(chunk)
+
         # Create user in database
         user, message = DatabaseUser.create_user(
             username, email, password, first_name, last_name, 
             phone_number, address, account_type
         )
+
+        # If created and avatar uploaded, update avatar_image column
+        if user and avatar_filename:
+            cursor = connection.cursor()
+            try:
+                cursor.execute("""
+                    UPDATE users SET avatar_image = %s WHERE userID = %s
+                """, [avatar_filename, user['userID']])
+            except Exception as e:
+                print(f"Error saving avatar path to DB: {e}")
+            finally:
+                cursor.close()
         
         if user:
             messages.success(request, f"Account created successfully for {username}!")
@@ -247,11 +274,74 @@ def edit_account(request):
         last_name = request.POST.get('last_name', '').strip()
         phone_number = request.POST.get('phone_number', '').strip()
         address = request.POST.get('address', '').strip()
+        # Handle avatar upload
+        avatar_filename = None
+        if request.FILES.get('avatar'):
+            avatar = request.FILES['avatar']
+            avatars_dir = settings.MEDIA_ROOT / 'avatars'
+            os.makedirs(avatars_dir, exist_ok=True)
+            avatar_filename = os.path.join('avatars', avatar.name)
+            full_path = settings.MEDIA_ROOT / avatar_filename
+            with open(full_path, 'wb+') as dest:
+                for chunk in avatar.chunks():
+                    dest.write(chunk)
         
-        # Validation
+        # If required fields are missing (e.g., user submitted only an avatar),
+        # fetch current values from DB and use them so avatar-only updates are allowed.
         if not all([email, first_name, last_name]):
+            cursor_prefill = connection.cursor()
+            try:
+                cursor_prefill.execute("""
+                    SELECT email, first_name, last_name, phone_number, address
+                    FROM users WHERE userID = %s
+                """, [user_id])
+                existing = cursor_prefill.fetchone()
+                if existing:
+                    if not email:
+                        email = existing[0] or ''
+                    if not first_name:
+                        first_name = existing[1] or ''
+                    if not last_name:
+                        last_name = existing[2] or ''
+                    if not phone_number:
+                        phone_number = existing[3] or ''
+                    if not address:
+                        address = existing[4] or ''
+            except Exception as e:
+                print(f"Error pre-filling account data: {e}")
+            finally:
+                try:
+                    cursor_prefill.close()
+                except:
+                    pass
+
+        # Validation (re-check after prefill)
+        if not all([email, first_name, last_name]):
+            # Provide current user data to the template so the form stays populated
+            cursor = connection.cursor()
+            try:
+                cursor.execute("""
+                    SELECT email, first_name, last_name, phone_number, address
+                    FROM users WHERE userID = %s
+                """, [user_id])
+                row = cursor.fetchone()
+                user_data = {
+                    'email': row[0] if row else '',
+                    'first_name': row[1] if row else '',
+                    'last_name': row[2] if row else '',
+                    'phone_number': row[3] if row else '',
+                    'address': row[4] if row else '',
+                }
+            except Exception:
+                user_data = {'email': email, 'first_name': first_name, 'last_name': last_name, 'phone_number': phone_number, 'address': address}
+            finally:
+                try:
+                    cursor.close()
+                except:
+                    pass
+
             messages.error(request, "Please fill in all required fields.")
-            return render(request, 'edit_account.html')
+            return render(request, 'edit_account.html', {'user_data': user_data})
         
         # Update user in database
         cursor = connection.cursor()
@@ -262,6 +352,15 @@ def edit_account(request):
                     phone_number = %s, address = %s, updated_at = NOW()
                 WHERE userID = %s
             """, [email, first_name, last_name, phone_number, address, user_id])
+
+            # Save avatar filename to DB if uploaded
+            if avatar_filename:
+                try:
+                    cursor.execute("""
+                        UPDATE users SET avatar_image = %s WHERE userID = %s
+                    """, [avatar_filename, user_id])
+                except Exception as e:
+                    print(f"Error updating avatar in DB: {e}")
             
             # Update session data
             request.session['email'] = email
@@ -845,7 +944,7 @@ def account_page(request):
         # Get user information from database
         cursor.execute("""
             SELECT userID, username, first_name, last_name, email, 
-                   phone_number, address, account_type, is_active, created_at
+                   phone_number, address, avatar_image, account_type, is_active, created_at
             FROM users 
             WHERE userID = %s
         """, [user_id])
@@ -865,10 +964,22 @@ def account_page(request):
             'email': user_data[4],
             'phone_number': user_data[5],
             'address': user_data[6],
-            'account_type': user_data[7],
-            'is_active': user_data[8],
-            'created_at': user_data[9]
+            'avatar_image': user_data[7],
+            'account_type': user_data[8],
+            'is_active': user_data[9],
+            'created_at': user_data[10]
         }
+
+        # Fetch latest delivery address if available
+        try:
+            cursor.execute(
+                "SELECT address FROM delivery_addresses WHERE user_id = %s ORDER BY created_at DESC LIMIT 1",
+                [user_info['userID']]
+            )
+            da = cursor.fetchone()
+            user_info['delivery_address'] = da[0] if da else None
+        except Exception:
+            user_info['delivery_address'] = None
         
         # Get additional statistics based on account type
         statistics = {}
@@ -1513,6 +1624,102 @@ def driver_list(request):
         return redirect("driver_list")
 
     return render(request, "driver_list.html", {"drivers": drivers})
+
+
+@admin_required
+def admin_driver_dashboard(request):
+    """Admin dashboard: list all drivers from the custom `users` table (account_type='driver').
+
+    This uses the same session-based admin check (`admin_required`) used elsewhere in the app
+    so it works with your database-backed login/session system.
+    """
+    cursor = connection.cursor()
+    try:
+        cursor.execute("""
+            SELECT userID, username, first_name, last_name, email,
+                   phone_number, account_type, is_active, created_at
+            FROM users
+            WHERE account_type = %s
+            ORDER BY last_name, first_name
+        """, ['driver'])
+
+        rows = cursor.fetchall()
+        drivers = []
+        for r in rows:
+            drivers.append({
+                'user_id': r[0],
+                'username': r[1],
+                'first_name': r[2],
+                'last_name': r[3],
+                'email': r[4],
+                'phone_number': r[5],
+                'account_type': r[6],
+                'is_active': bool(r[7]),
+                'created_at': r[8]
+            })
+
+        return render(request, 'admin_driver_list.html', {
+            'drivers': drivers,
+        })
+
+    except Exception as e:
+        messages.error(request, f"Error loading drivers: {str(e)}")
+        return redirect('account_page')
+    finally:
+        try:
+            cursor.close()
+        except:
+            pass
+
+
+@admin_required
+def admin_delete_driver(request, user_id):
+    """Delete a driver and related records from the custom database tables.
+
+    This removes related delivery addresses, sponsor relationships, driver applications,
+    and the users table row. It's admin-only and uses POST for safety.
+    """
+    if request.method != 'POST':
+        messages.error(request, "Invalid request method.")
+        return redirect('admin_driver_dashboard')
+
+    cursor = connection.cursor()
+    try:
+        # Remove related rows first to avoid FK issues
+        try:
+            cursor.execute("DELETE FROM delivery_addresses WHERE user_id = %s", [user_id])
+        except Exception:
+            pass
+
+        try:
+            cursor.execute("DELETE FROM sponsor_driver_relationships WHERE driver_user_id = %s OR sponsor_user_id = %s", [user_id, user_id])
+        except Exception:
+            pass
+
+        try:
+            cursor.execute("DELETE FROM driver_applications WHERE driver_user_id = %s OR sponsor_user_id = %s", [user_id, user_id])
+        except Exception:
+            pass
+
+        # Finally delete the user row
+        cursor.execute("DELETE FROM users WHERE userID = %s", [user_id])
+
+        try:
+            connection.commit()
+        except Exception:
+            pass
+
+        messages.success(request, "Driver and related data deleted successfully.")
+        return redirect('admin_driver_dashboard')
+
+    except Exception as e:
+        messages.error(request, f"Error deleting driver: {str(e)}")
+        return redirect('admin_driver_dashboard')
+    finally:
+        try:
+            cursor.close()
+        except:
+            pass
 
 # Add these functions to your existing driver_program/views.py file
 

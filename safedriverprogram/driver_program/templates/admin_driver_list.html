@@ -1,0 +1,51 @@
+{% extends 'base.html' %}
+
+{% block title %}All Drivers - Admin Dashboard{% endblock %}
+
+{% block content %}
+<div class="container">
+  <h1 class="title">All Drivers</h1>
+  <div class="box">
+    <table class="table is-fullwidth is-striped">
+      <thead>
+        <tr>
+          <th>User ID</th>
+          <th>Username</th>
+          <th>Name</th>
+          <th>Email</th>
+          <th>Phone</th>
+          <th>Active</th>
+          <th>Joined</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for d in drivers %}
+        <tr>
+          <td>{{ d.user_id }}</td>
+          <td>{{ d.username }}</td>
+          <td>{{ d.first_name }} {{ d.last_name }}</td>
+          <td>{{ d.email }}</td>
+          <td>{{ d.phone_number|default:'-' }}</td>
+          <td>{% if d.is_active %}<span class="tag is-success">Yes</span>{% else %}<span class="tag is-danger">No</span>{% endif %}</td>
+          <td>{{ d.created_at|date:"F d, Y" }}</td>
+          <td>
+            <form method="post" action="{% url 'admin_delete_driver' d.user_id %}" onsubmit="return confirm('Delete driver {{ d.username }}? This will remove related data.');">
+              {% csrf_token %}
+              <button type="submit" class="button is-danger is-small">
+                <span class="icon"><i class="fas fa-trash"></i></span>
+                <span>Delete</span>
+              </button>
+            </form>
+          </td>
+        </tr>
+        {% empty %}
+        <tr>
+          <td colspan="8">No drivers found.</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <a href="{% url 'account_page' %}" class="button is-light">Back to Account</a>
+</div>
+{% endblock %}

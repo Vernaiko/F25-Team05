@@ -8,36 +8,52 @@
         <h1 class="title has-text-centered">Edit Account</h1>
         <div class="columns is-centered">
             <div class="column is-half">
-                <form method="POST">
+                <form method="POST" enctype="multipart/form-data">
                     {% csrf_token %}
-                    {{ form.non_field_errors }}
-                    
+                    {# Prefill values come from user_data passed by the view #}
                     <div class="field">
-                        {{ form.phone_number.label_tag }}
+                        <label class="label">Email</label>
                         <div class="control">
-                            {{ form.phone_number }}
+                            <input class="input" type="email" name="email" value="{{ user_data.email|default:'' }}" required>
                         </div>
-                        {{ form.phone_number.errors }}
                     </div>
 
                     <div class="field">
-                        {{ form.address.label_tag }}
+                        <label class="label">First Name</label>
                         <div class="control">
-                            {{ form.address }}
+                            <input class="input" type="text" name="first_name" value="{{ user_data.first_name|default:'' }}" required>
                         </div>
-                        {{ form.address.errors }}
                     </div>
 
                     <div class="field">
-                        {{ form.delivery_address.label_tag }}
+                        <label class="label">Last Name</label>
                         <div class="control">
-                            {{ form.delivery_address }}
+                            <input class="input" type="text" name="last_name" value="{{ user_data.last_name|default:'' }}" required>
                         </div>
-                        {{ form.delivery_address.errors }}
+                    </div>
+
+                    <div class="field">
+                        <label class="label">Phone Number</label>
+                        <div class="control">
+                            <input class="input" type="tel" name="phone_number" value="{{ user_data.phone_number|default:'' }}">
+                        </div>
+                    </div>
+
+                    <div class="field">
+                        <label class="label">Address</label>
+                        <div class="control">
+                            <textarea class="textarea" name="address" rows="3">{{ user_data.address|default:'' }}</textarea>
+                        </div>
                     </div>
 
                     <div class="field is-grouped is-grouped-right">
                         <div class="control">
+                            <div class="field">
+                                <label class="label">Profile Picture</label>
+                                <div class="control">
+                                    <input class="input" type="file" name="avatar" accept="image/*">
+                                </div>
+                            </div>
                             <button class="button is-primary is-rounded" type="submit">
                                 <span class="icon"><i class="fas fa-save"></i></span>
                                 <span>Save Changes</span>

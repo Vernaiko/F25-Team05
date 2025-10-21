@@ -4,31 +4,86 @@
 
 {% block content %}
 <div class="container">
-  <div class="box">
-    <h1 class="title has-text-centered">
-      <span class="icon is-large has-text-primary">
-        <i class="fas fa-user-circle fa-2x"></i>
-      </span>
-      <br>
-      My Account
-    </h1>
-    
-    <!-- User Information Display -->
-    <div class="box has-background-light">
-      <h2 class="subtitle">
-        <span class="icon has-text-info">
-          <i class="fas fa-info-circle"></i>
-        </span>
-        Account Information
-      </h2>
-      
-      <div class="columns">
-        <div class="column">
-          <div class="field">
-            <label class="label">Name</label>
-            <p class="control">
-              <strong>{{ user_info.first_name|default:"Not set" }} {{ user_info.last_name|default:"Not set" }}</strong>
-            </p>
+  <div class="columns is-centered">
+    <div class="column is-two-thirds">
+      <div class="box">
+        <h1 class="title has-text-centered">
+          <span class="icon is-large">
+            <i class="fas fa-user-circle fa-2x"></i>
+          </span>
+          <br>
+          My Account
+        </h1>
+        
+        {% if user %}
+        <div class="content">
+          {% if user_info.avatar_image %}
+            <div class="has-text-centered" style="margin-bottom:1rem;">
+              <figure class="image is-128x128 is-inline-block">
+                  <img src="{{ MEDIA_URL }}{{ user_info.avatar_image }}" alt="Avatar" style="width:128px;height:128px;object-fit:cover;border-radius:50%;">
+              </figure>
+            </div>
+          {% endif %}
+          <!-- Personal Information Section -->
+          <div class="box has-background-light">
+            <h2 class="subtitle">
+              <span class="icon has-text-primary">
+                <i class="fas fa-user"></i>
+              </span>
+              Personal Information
+            </h2>
+            
+            <div class="columns">
+              <div class="column">
+                <table class="table is-fullwidth">
+                  <tbody>
+                    <tr>
+                      <td><strong>User ID:</strong></td>
+                      <td>{{ user_info.userID }}</td>
+                    </tr>
+                    <tr>
+                      <td><strong>Username:</strong></td>
+                      <td>{{ user_info.username|default:"Not set" }}</td>
+                    </tr>
+                    <tr>
+                      <td><strong>Email:</strong></td>
+                      <td>{{ user_info.email|default:"Not set" }}</td>
+                    </tr>
+                    <tr>
+                      <td><strong>First Name:</strong></td>
+                      <td>{{ user_info.first_name|default:"Not set" }}</td>
+                    </tr>
+                    <tr>
+                      <td><strong>Last Name:</strong></td>
+                      <td>{{ user_info.last_name|default:"Not set" }}</td>
+                    </tr>
+                    <tr>
+                      <td><strong>Phone Number:</strong></td>
+                      <td>{{ user_info.phone_number|default:"Not set" }}</td>
+                    </tr>
+                    <tr>
+                      <td><strong>Address:</strong></td>
+                      <td>{{ user_info.address|default:"Not set" }}</td>
+                    </tr>
+                    <tr>
+                      <td><strong>Delivery Address:</strong></td>
+                      <td>
+                        {% if user_info.delivery_address %}
+                          {{ user_info.delivery_address }}
+                        {% else %}
+                          <span class="tag is-warning">Not set</span>
+                          <br>
+                          <a href="{% url 'manage_addresses' %}" class="button is-info is-small" style="margin-top: 0.5rem;">
+                            <span class="icon"><i class="fas fa-map-marker-alt"></i></span>
+                            <span>Manage Delivery Addresses</span>
+                          </a>
+                        {% endif %}
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
           </div>
           
           <div class="field">
@@ -223,6 +278,14 @@
             <span>Manage Addresses</span>
           </a>
         </div>
+        {% if request.session.account_type == 'admin' %}
+        <div class="control">
+          <a href="{% url 'admin_driver_dashboard' %}" class="button is-dark">
+            <span class="icon"><i class="fas fa-users"></i></span>
+            <span>All Drivers</span>
+          </a>
+        </div>
+        {% endif %}
       </div>
     </div>
     
