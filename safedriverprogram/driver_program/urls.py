@@ -43,4 +43,6 @@ urlpatterns = [
     path('sponsor/applications/', views.sponsor_manage_applications, name='sponsor_manage_applications'),
     path('sponsor/application/<int:application_id>/', views.sponsor_view_application, name='sponsor_view_application'),
     path('sponsor-application-action/<int:application_id>/', views.sponsor_application_action, name='sponsor_application_action'),
+    # Products
+    path('products/', views.view_products, name='view_products'),
 ]

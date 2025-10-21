@@ -12,6 +12,14 @@
       <h2 class="subtitle">
         Promoting safer roads through driver rewards and community sponsorship
       </h2>
+      {% if request.session.is_authenticated %}
+      <a href="{% url 'view_products' %}" class="button is-light is-large">
+        <span class="icon">
+          <i class="fas fa-shopping-cart"></i>
+        </span>
+        <span>View Available Products</span>
+      </a>
+      {% endif %}
     </div>
   </div>
 </div>

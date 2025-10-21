@@ -1872,3 +1872,24 @@ def sponsor_view_application(request, application_id):
         return redirect('sponsor_manage_applications')
     finally:
         cursor.close()
+        
+@db_login_required
+def view_products(request):
+    """Display products from Fake Store API"""
+    import requests
+
+    try:
+        # Fetch products from the Fake Store API
+        response = requests.get('https://fakestoreapi.com/products')
+        response.raise_for_status()  # Raise an exception for error status codes
+        products = response.json()
+
+        return render(request, 'products.html', {
+            'products': products
+        })
+    except requests.RequestException as e:
+        return render(request, 'products.html', {
+            'error_message': f"Failed to fetch products: {str(e)}",
+            'products': []
+        })
+    
