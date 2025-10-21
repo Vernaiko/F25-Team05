@@ -2073,5 +2073,5 @@ def sponsor_adjust_points(request):
     finally:
         try:
             cursor.close()
-        except:
+        except Exception:
             pass
