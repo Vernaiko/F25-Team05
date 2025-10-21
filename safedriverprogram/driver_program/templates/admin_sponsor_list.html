@@ -1,0 +1,481 @@
+{% extends 'base.html' %}
+
+{% block title %}Manage Sponsors - Admin Dashboard{% endblock %}
+
+{% block content %}
+<div class="container">
+  <div class="box">
+    <h1 class="title has-text-centered">
+      <span class="icon is-large has-text-primary">
+        <i class="fas fa-user-tie fa-2x"></i>
+      </span>
+      <br>
+      Sponsor Management
+    </h1>
+    
+    <!-- Statistics -->
+    <div class="columns is-multiline" style="margin-bottom: 2rem;">
+      <div class="column is-4">
+        <div class="box has-background-info-light">
+          <div class="heading">Total Sponsors (Filtered)</div>
+          <div class="title is-3 has-text-info">{{ total_sponsors }}</div>
+        </div>
+      </div>
+      <div class="column is-4">
+        <div class="box has-background-success-light">
+          <div class="heading">Active Sponsors</div>
+          <div class="title is-3 has-text-success">{{ active_sponsors }}</div>
+        </div>
+      </div>
+      <div class="column is-4">
+        <div class="box has-background-warning-light">
+          <div class="heading">Inactive Sponsors</div>
+          <div class="title is-3 has-text-warning">{{ inactive_sponsors }}</div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Filters -->
+    <div class="box has-background-light">
+      <h2 class="subtitle">
+        <span class="icon has-text-info">
+          <i class="fas fa-filter"></i>
+        </span>
+        Filters
+      </h2>
+      
+      <form method="get" action="{% url 'admin_sponsor_list' %}" id="filterForm">
+        <div class="columns">
+          <div class="column">
+            <div class="field">
+              <label class="label">Organization</label>
+              <div class="control">
+                <div class="select is-fullwidth">
+                  <select name="organization" onchange="this.form.submit()">
+                    <option value="">All Organizations</option>
+                    {% for org in organizations %}
+                    <option value="{{ org }}" {% if org == current_organization_filter %}selected{% endif %}>
+                      {{ org }}
+                    </option>
+                    {% endfor %}
+                  </select>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <div class="column">
+            <div class="field">
+              <label class="label">Status</label>
+              <div class="control">
+                <div class="select is-fullwidth">
+                  <select name="status" onchange="this.form.submit()">
+                    <option value="">All Status</option>
+                    <option value="active" {% if current_status_filter == 'active' %}selected{% endif %}>Active</option>
+                    <option value="inactive" {% if current_status_filter == 'inactive' %}selected{% endif %}>Inactive</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <div class="column is-narrow">
+            <div class="field">
+              <label class="label">&nbsp;</label>
+              <div class="control">
+                <a href="{% url 'admin_sponsor_list' %}" class="button is-light">
+                  <span class="icon"><i class="fas fa-times"></i></span>
+                  <span>Clear Filters</span>
+                </a>
+              <form method="post" id="bulkActionForm" action="{% url 'admin_sponsor_list' %}{% if current_organization_filter or current_status_filter %}?{% if current_organization_filter %}organization={{ current_organization_filter }}{% endif %}{% if current_organization_filter and current_status_filter %}&{% endif %}{% if current_status_filter %}status={{ current_status_filter }}{% endif %}{% endif %}" onsubmit="return confirmBulkAction()"></form></div>
+            </div>
+          </div>
+        </div>
+      </form>
+    </div>
+    
+    <!-- Bulk Actions -->
+    <div class="box has-background-warning-light">
+      <h2 class="subtitle">
+        <span class="icon has-text-warning">
+          <i class="fas fa-tasks"></i>
+        </span>
+        Bulk Actions
+      </h2>
+      
+      <form method="post" id="bulkActionForm" action="{% url 'admin_sponsor_list' %}?organization={{ current_organization_filter }}&status={{ current_status_filter }}" onsubmit="return confirmBulkAction()">
+        {% csrf_token %}
+        
+        <div class="columns">
+          <div class="column">
+            <div class="field">
+              <label class="label">Action on Selected Sponsors</label>
+              <div class="field has-addons">
+                <div class="control is-expanded">
+                  <div class="select is-fullwidth">
+                    <select name="bulk_action" id="bulk_action_select">
+                      <option value="">Choose an action...</option>
+                      <option value="activate_selected">Activate Selected</option>
+                      <option value="deactivate_selected">Deactivate Selected</option>
+                      <option value="delete_selected">Delete Selected</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="control">
+                  <button type="submit" class="button is-primary">
+                    <span class="icon"><i class="fas fa-check"></i></span>
+                    <span>Apply to Selected</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        {% if organizations %}
+        <hr>
+        
+        <div class="columns">
+          <div class="column">
+            <div class="field">
+              <label class="label">Action on Organization</label>
+              <div class="field has-addons">
+                <div class="control">
+                  <div class="select">
+                    <select name="bulk_action" id="org_action_select">
+                      <option value="">Choose an action...</option>
+                      <option value="activate_by_organization">Activate All</option>
+                      <option value="deactivate_by_organization">Deactivate All</option>
+                      <option value="delete_by_organization">Delete All</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="control is-expanded">
+                  <div class="select is-fullwidth">
+                    <select name="organization_filter" id="organization_select">
+                      <option value="">Select organization...</option>
+                      {% for org in organizations %}
+                      <option value="{{ org }}">{{ org }}</option>
+                      {% endfor %}
+                    </select>
+                  </div>
+                </div>
+                <div class="control">
+                  <button type="submit" class="button is-danger">
+                    <span class="icon"><i class="fas fa-exclamation-triangle"></i></span>
+                    <span>Apply to Organization</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        {% endif %}
+        
+        <!-- Sponsors Table -->
+        <div class="box" style="margin-top: 1rem;">
+          <div class="level">
+            <div class="level-left">
+              <div class="level-item">
+                <h2 class="subtitle">
+                  <span class="icon has-text-info">
+                    <i class="fas fa-list"></i>
+                  </span>
+                  All Sponsors
+                  {% if current_organization_filter %}
+                    <span class="tag is-info">{{ current_organization_filter }}</span>
+                  {% endif %}
+                  {% if current_status_filter %}
+                    <span class="tag {% if current_status_filter == 'active' %}is-success{% else %}is-warning{% endif %}">
+                      {{ current_status_filter|title }}
+                    </span>
+                  {% endif %}
+                </h2>
+              </div>
+            </div>
+            <div class="level-right">
+              <div class="level-item">
+                <button type="button" class="button is-small is-light" onclick="toggleSelectAll()">
+                  <span class="icon"><i class="fas fa-check-square"></i></span>
+                  <span>Select All / None</span>
+                </button>
+              </div>
+            </div>
+          </div>
+          
+          {% if sponsors %}
+          <div class="table-container">
+            <table class="table is-fullwidth is-striped is-hoverable">
+              <thead>
+                <tr>
+                  <th width="50">
+                    <input type="checkbox" id="select_all_checkbox" onclick="toggleSelectAll()">
+                  </th>
+                  <th>ID</th>
+                  <th>Name</th>
+                  <th>Username</th>
+                  <th>Email</th>
+                  <th>Organization</th>
+                  <th>Active Drivers</th>
+                  <th>Pending Apps</th>
+                  <th>Status</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for sponsor in sponsors %}
+                <tr>
+                  <td>
+                    <input type="checkbox" name="selected_sponsors" value="{{ sponsor.userID }}" class="sponsor-checkbox">
+                  </td>
+                  <td>{{ sponsor.userID }}</td>
+                  <td>
+                    <strong>{{ sponsor.first_name }} {{ sponsor.last_name }}</strong>
+                  </td>
+                  <td>@{{ sponsor.username }}</td>
+                  <td>{{ sponsor.email }}</td>
+                  <td>
+                    {% if sponsor.organization %}
+                      <span class="tag is-info">{{ sponsor.organization }}</span>
+                    {% else %}
+                      <span class="has-text-grey-light">None</span>
+                    {% endif %}
+                  </td>
+                  <td>
+                    <span class="tag is-success">
+                      <span class="icon"><i class="fas fa-users"></i></span>
+                      <span>{{ sponsor.active_drivers }}</span>
+                    </span>
+                  </td>
+                  <td>
+                    {% if sponsor.pending_applications > 0 %}
+                      <span class="tag is-warning">
+                        <span class="icon"><i class="fas fa-clock"></i></span>
+                        <span>{{ sponsor.pending_applications }}</span>
+                      </span>
+                    {% else %}
+                      <span class="tag is-light">0</span>
+                    {% endif %}
+                  </td>
+                  <td>
+                    {% if sponsor.is_active %}
+                      <span class="tag is-success">
+                        <span class="icon"><i class="fas fa-check"></i></span>
+                        <span>Active</span>
+                      </span>
+                    {% else %}
+                      <span class="tag is-danger">
+                        <span class="icon"><i class="fas fa-ban"></i></span>
+                        <span>Inactive</span>
+                      </span>
+                    {% endif %}
+                  </td>
+                  <td>
+                    <div class="buttons are-small">
+                      <a href="{% url 'admin_sponsor_details' sponsor.userID %}" 
+                         class="button is-info is-small" 
+                         title="View Details">
+                        <span class="icon">
+                          <i class="fas fa-eye"></i>
+                        </span>
+                      </a>
+                      
+                      <button type="button" 
+                              class="button is-small {% if sponsor.is_active %}is-warning{% else %}is-success{% endif %}"
+                              onclick="toggleSponsorStatus({{ sponsor.userID }}, {{ sponsor.is_active|yesno:'true,false' }})"
+                              title="{% if sponsor.is_active %}Deactivate{% else %}Activate{% endif %}">
+                        <span class="icon">
+                          <i class="fas fa-{% if sponsor.is_active %}pause{% else %}play{% endif %}"></i>
+                        </span>
+                      </button>
+                      
+                      <button type="button" 
+                              class="button is-danger is-small" 
+                              onclick="confirmDeleteSponsor({{ sponsor.userID }}, '{{ sponsor.first_name }} {{ sponsor.last_name }}', {{ sponsor.active_drivers }})"
+                              title="Delete">
+                        <span class="icon">
+                          <i class="fas fa-trash"></i>
+                        </span>
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+          {% else %}
+          <div class="notification is-info">
+            <span class="icon">
+              <i class="fas fa-info-circle"></i>
+            </span>
+            No sponsors found matching the current filters.
+          </div>
+          {% endif %}
+        </div>
+      </form>
+    </div>
+    
+    <!-- Back Button -->
+    <div class="has-text-centered">
+      <a href="{% url 'account_page' %}" class="button is-light is-large">
+        <span class="icon">
+          <i class="fas fa-arrow-left"></i>
+        </span>
+        <span>Back to Dashboard</span>
+      </a>
+    </div>
+  </div>
+</div>
+
+<!-- Hidden form for individual status toggle -->
+<form id="toggleStatusForm" method="post" style="display: none;">
+  {% csrf_token %}
+</form>
+
+<!-- Delete Confirmation Modal -->
+<div id="deleteModal" class="modal">
+  <div class="modal-background"></div>
+  <div class="modal-card">
+    <header class="modal-card-head has-background-danger">
+      <p class="modal-card-title has-text-white">
+        <span class="icon">
+          <i class="fas fa-exclamation-triangle"></i>
+        </span>
+        Confirm Sponsor Deletion
+      </p>
+      <button class="delete" aria-label="close" onclick="closeDeleteModal()"></button>
+    </header>
+    <section class="modal-card-body">
+      <div class="content">
+        <p id="deleteMessage"></p>
+        <div id="activeDriversWarning" class="notification is-danger" style="display: none;">
+          <strong>Warning:</strong> This sponsor has active driver relationships. 
+          You must end all active relationships before deleting this sponsor.
+        </div>
+        <p class="has-text-weight-bold">This action cannot be undone!</p>
+      </div>
+    </section>
+    <footer class="modal-card-foot">
+      <form id="deleteForm" method="post" action="">
+        {% csrf_token %}
+        <button type="submit" class="button is-danger" id="confirmDeleteButton">
+          <span class="icon">
+            <i class="fas fa-trash"></i>
+          </span>
+          <span>Delete Sponsor</span>
+        </button>
+      </form>
+      <button class="button" onclick="closeDeleteModal()">Cancel</button>
+    </footer>
+  </div>
+</div>
+
+<script>
+// Get current filter parameters
+const currentOrg = "{{ current_organization_filter|escapejs }}";
+const currentStatus = "{{ current_status_filter|escapejs }}";
+
+// Select All / None functionality
+function toggleSelectAll() {
+    const selectAllCheckbox = document.getElementById('select_all_checkbox');
+    const checkboxes = document.querySelectorAll('.sponsor-checkbox');
+    
+    checkboxes.forEach(checkbox => {
+        checkbox.checked = selectAllCheckbox.checked;
+    });
+}
+
+// Confirm bulk action
+function confirmBulkAction() {
+    const selectedAction = document.getElementById('bulk_action_select').value || 
+                          document.getElementById('org_action_select').value;
+    const selectedSponsors = document.querySelectorAll('.sponsor-checkbox:checked').length;
+    const selectedOrg = document.getElementById('organization_select').value;
+    
+    if (!selectedAction) {
+        alert('Please select an action to perform.');
+        return false;
+    }
+    
+    if (selectedAction.includes('selected') && selectedSponsors === 0) {
+        alert('Please select at least one sponsor.');
+        return false;
+    }
+    
+    if (selectedAction.includes('organization') && !selectedOrg) {
+        alert('Please select an organization.');
+        return false;
+    }
+    
+    let confirmMessage = '';
+    
+    if (selectedAction === 'delete_selected') {
+        confirmMessage = `Are you sure you want to delete ${selectedSponsors} selected sponsor(s)? This action cannot be undone.`;
+    } else if (selectedAction === 'delete_by_organization') {
+        confirmMessage = `Are you sure you want to delete ALL sponsors from organization "${selectedOrg}"? This action cannot be undone.`;
+    } else if (selectedAction === 'activate_selected') {
+        confirmMessage = `Activate ${selectedSponsors} selected sponsor(s)?`;
+    } else if (selectedAction === 'deactivate_selected') {
+        confirmMessage = `Deactivate ${selectedSponsors} selected sponsor(s)?`;
+    } else if (selectedAction === 'activate_by_organization') {
+        confirmMessage = `Activate ALL sponsors from organization "${selectedOrg}"?`;
+    } else if (selectedAction === 'deactivate_by_organization') {
+        confirmMessage = `Deactivate ALL sponsors from organization "${selectedOrg}"?`;
+    }
+    
+    return confirm(confirmMessage);
+}
+
+// Toggle individual sponsor status - FIXED URL
+function toggleSponsorStatus(sponsorId, isCurrentlyActive) {
+    // Build URL with filters - FIXED: use /useradmin/ instead of /admin/
+    let url = `/useradmin/sponsors/${sponsorId}/update-status/`;
+    
+    const form = document.getElementById('toggleStatusForm');
+    form.action = url;
+    form.submit();
+}
+
+// Delete confirmation - FIXED URL
+function confirmDeleteSponsor(sponsorId, sponsorName, activeDrivers) {
+    const modal = document.getElementById('deleteModal');
+    const deleteForm = document.getElementById('deleteForm');
+    const deleteMessage = document.getElementById('deleteMessage');
+    const activeDriversWarning = document.getElementById('activeDriversWarning');
+    const confirmButton = document.getElementById('confirmDeleteButton');
+    
+    deleteMessage.innerHTML = `Are you sure you want to delete sponsor <strong>${sponsorName}</strong>?`;
+    
+    // Build URL - FIXED: use /useradmin/ instead of /admin/
+    let url = `/useradmin/sponsors/${sponsorId}/delete/`;
+    deleteForm.action = url;
+    
+    if (activeDrivers > 0) {
+        activeDriversWarning.style.display = 'block';
+        confirmButton.disabled = true;
+        confirmButton.classList.add('is-static');
+    } else {
+        activeDriversWarning.style.display = 'none';
+        confirmButton.disabled = false;
+        confirmButton.classList.remove('is-static');
+    }
+    
+    modal.classList.add('is-active');
+}
+
+function closeDeleteModal() {
+    const modal = document.getElementById('deleteModal');
+    modal.classList.remove('is-active');
+}
+
+// Close modal when clicking background
+document.addEventListener('DOMContentLoaded', () => {
+    const modal = document.getElementById('deleteModal');
+    const background = modal.querySelector('.modal-background');
+    
+    background.addEventListener('click', closeDeleteModal);
+});
+</script>
+
+{% endblock %}

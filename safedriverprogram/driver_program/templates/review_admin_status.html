@@ -1,0 +1,15 @@
+<h2>Admin Accounts</h2>
+<table>
+  <tr>
+    <th>Username</th>
+    <th>Email</th>
+    <th>Active</th>
+  </tr>
+  {% for admin in admins %}
+  <tr>
+    <td>{{ admin.username }}</td>
+    <td>{{ admin.email }}</td>
+    <td>{{ admin.is_active }}</td>
+  </tr>
+  {% endfor %}
+</table>
