@@ -11,3 +11,4 @@ media/
 
 # Local env files
 server_requirements.txt
+*.pyc
