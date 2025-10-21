@@ -12,7 +12,7 @@
       <br>
       My Sponsored Drivers
     </h1>
-    
+
     <!-- Statistics -->
     <div class="level">
       <div class="level-item has-text-centered">
@@ -34,7 +34,41 @@
         </div>
       </div>
     </div>
-    
+
+    <!-- Single points form (select driver then record points) -->
+    <div class="has-text-centered" style="margin-top:1rem; margin-bottom:1rem;">
+      <form method="post" action="{% url 'sponsor_adjust_points' %}" style="display:inline-block; min-width:320px; max-width:720px; width:100%;">
+        {% csrf_token %}
+        <div class="box" style="padding:1rem;">
+          <div class="field">
+            <label class="label">Select Driver</label>
+            <div class="control">
+              <div class="select is-fullwidth">
+                <select name="driver_user_id" required>
+                  <option value="" disabled selected>Choose a driver...</option>
+                  {% for driver in sponsored_drivers %}
+                  <option value="{{ driver.user_id }}">{{ driver.first_name }} {{ driver.last_name }} (@{{ driver.username }})</option>
+                  {% endfor %}
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <div class="field has-addons" style="margin-top:0.75rem; gap:0.5rem;">
+            <div class="control">
+              <input class="input" type="number" name="points" placeholder="Points (e.g. 10 or -5)" required>
+            </div>
+            <div class="control is-expanded">
+              <input class="input" type="text" name="message" placeholder="Reason or message (optional)">
+            </div>
+            <div class="control">
+              <button class="button is-primary" type="submit">Record</button>
+            </div>
+          </div>
+        </div>
+      </form>
+    </div>
+
     {% if sponsored_drivers %}
     <h2 class="subtitle">Current Drivers</h2>
     <div class="table-container">
@@ -47,6 +81,8 @@
             <th>Start Date</th>
             <th>Streak</th>
             <th>Trips</th>
+            <th>Points</th>
+            <th>Recent Transactions</th>
           </tr>
         </thead>
         <tbody>
@@ -66,6 +102,27 @@
             <td>{{ driver.relationship_start_date|date:"M d, Y" }}</td>
             <td>{{ driver.safe_driving_streak_days }} days</td>
             <td>{{ driver.total_trips_logged }}</td>
+            <td><span class="tag is-info">{{ driver.points|default:0 }}</span></td>
+            <td>
+              {% if driver.transactions %}
+              <ul style="margin:0; padding-left:1rem;">
+                {% for t in driver.transactions %}
+                <li style="margin-bottom:0.25rem;">
+                  {% if t.points > 0 %}
+                    <span class="tag is-success">+{{ t.points }}</span>
+                  {% else %}
+                    <span class="tag is-danger">{{ t.points }}</span>
+                  {% endif %}
+                  &nbsp;{{ t.message|default:"(no message)" }}
+                  <br>
+                  <small class="has-text-grey">{{ t.created_at|date:"M d, Y H:i" }}</small>
+                </li>
+                {% endfor %}
+              </ul>
+              {% else %}
+                <small class="has-text-grey">No recent transactions</small>
+              {% endif %}
+            </td>
           </tr>
           {% endfor %}
         </tbody>
@@ -79,7 +136,7 @@
       You don't have any sponsored drivers yet.
     </div>
     {% endif %}
-    
+
     <div class="has-text-centered" style="margin-top: 2rem;">
       <a href="{% url 'sponsor_home' %}" class="button is-primary">
         <span class="icon">
