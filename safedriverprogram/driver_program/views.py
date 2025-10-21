@@ -1872,3 +1872,58 @@ def sponsor_view_application(request, application_id):
         return redirect('sponsor_manage_applications')
     finally:
         cursor.close()
+
+# ADMIN DASHBOARD: REVIEW USER ACCOUNT STATUSES
+def is_admin(user):
+    return user.is_staff or user.is_superuser
+
+
+@user_passes_test(is_admin)
+def review_admin_status(request):
+    """View all admins and their account status."""
+    admins = User.objects.filter(is_staff=True)
+
+    if request.method == "POST":
+        admin_id = request.POST.get("admin_id")
+        new_status = request.POST.get("status") == "True"
+        admin_user = get_object_or_404(User, id=admin_id)
+        admin_user.is_active = new_status
+        admin_user.save()
+        messages.success(request, f"Admin '{admin_user.username}' status updated.")
+        return redirect("review_admin_status")
+
+    return render(request, "admin_status.html", {"admins": admins})
+
+
+@user_passes_test(is_admin)
+def review_sponsor_status(request):
+    """View all sponsors and their account status."""
+    sponsors = User.objects.filter(groups__name='Sponsor')
+
+    if request.method == "POST":
+        sponsor_id = request.POST.get("sponsor_id")
+        new_status = request.POST.get("status") == "True"
+        sponsor_user = get_object_or_404(User, id=sponsor_id)
+        sponsor_user.is_active = new_status
+        sponsor_user.save()
+        messages.success(request, f"Sponsor '{sponsor_user.username}' status updated.")
+        return redirect("review_sponsor_status")
+
+    return render(request, "sponsor_status.html", {"sponsors": sponsors})
+
+
+@user_passes_test(is_admin)
+def review_driver_status(request):
+    """View all drivers and their account status."""
+    drivers = User.objects.filter(groups__name='Driver')
+
+    if request.method == "POST":
+        driver_id = request.POST.get("driver_id")
+        new_status = request.POST.get("status") == "True"
+        driver_user = get_object_or_404(User, id=driver_id)
+        driver_user.is_active = new_status
+        driver_user.save()
+        messages.success(request, f"Driver '{driver_user.username}' status updated.")
+        return redirect("review_driver_status")
+
+    return render(request, "driver_status.html", {"drivers": drivers})

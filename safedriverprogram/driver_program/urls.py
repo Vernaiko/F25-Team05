@@ -12,13 +12,9 @@ urlpatterns = [
     path('account/', views.account_page, name='account_page'),
     path('account/edit/', views.edit_account, name='edit_account'),
     path('account/change-password/', views.change_password, name='change_password'),
-    path('dashboard/add-admin/', views.add_admin, name='add_admin'),
-    path('dashboard/admin-list/', views.admin_list, name='admin_list'),
-    path('dashboard/delete-admin/<int:admin_id>/', views.delete_admin, name='delete_admin'),
-    path('dashboard/drivers/', views.driver_list, name='driver_list'),
-    path('admin/add/', views.add_admin, name='add_admin'),
-    path('admin/list/', views.admin_list, name='admin_list'),
-    path('admin/delete/<int:admin_id>/', views.delete_admin, name='delete_admin'),
+    path('admins/add/', views.add_admin, name='add_admin'),
+    path('admins/list/', views.admin_list, name='admin_list'),
+    path('admins/delete/<int:admin_id>/', views.delete_admin, name='delete_admin'),
     path('drivers/', views.driver_list, name='driver_list'),
     path('account/delete/', views.delete_account, name='delete_account'),
     path('organzation_page/', views.to_organization_page, name='organization_page'),
@@ -47,4 +43,11 @@ urlpatterns = [
     path('sponsor/applications/', views.sponsor_manage_applications, name='sponsor_manage_applications'),
     path('sponsor/application/<int:application_id>/', views.sponsor_view_application, name='sponsor_view_application'),
     path('sponsor-application-action/<int:application_id>/', views.sponsor_application_action, name='sponsor_application_action'),
+
+    # Admin review pages
+    path('review/admins/', views.review_admin_status, name='review_admin_status'),
+    path('review/sponsors/', views.review_sponsor_status, name='review_sponsor_status'),
+    path('review/drivers/', views.review_driver_status, name='review_driver_status'),
+ 
+
 ]
