@@ -2192,6 +2192,25 @@ def view_products(request):
             'error_message': f"Failed to fetch products: {str(e)}",
             'products': []
         })
+
+@db_login_required
+def view_product(request, product_id):
+    """Display a single product's details from Fake Store API"""
+    import requests
+
+    try:
+        response = requests.get(f'https://fakestoreapi.com/products/{product_id}')
+        response.raise_for_status()
+        product = response.json()
+
+        return render(request, 'product_detail.html', {
+            'product': product
+        })
+    except requests.RequestException as e:
+        messages.error(request, f"Failed to fetch product details: {str(e)}")
+        return redirect('view_products')
+      
+      
 @db_login_required
 def admin_sponsor_list(request):
     """Admin page to view and manage all sponsors"""
