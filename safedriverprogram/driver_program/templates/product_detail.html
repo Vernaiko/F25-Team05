@@ -28,7 +28,27 @@
           <p><strong>Reviews:</strong> {{ product.rating.count }}</p>
         </div>
 
-        <a href="{% url 'view_products' %}" class="button is-light">Back to products</a>
+        <div style="margin-top: 1rem;">
+          {% if request.session.is_authenticated %}
+            {% if product.id in wishlist %}
+              <form method="post" action="{% url 'remove_from_wishlist' %}">
+                {% csrf_token %}
+                <input type="hidden" name="product_id" value="{{ product.id }}">
+                <button type="submit" class="button is-danger">Remove from wishlist</button>
+              </form>
+            {% else %}
+              <form method="post" action="{% url 'add_to_wishlist' %}">
+                {% csrf_token %}
+                <input type="hidden" name="product_id" value="{{ product.id }}">
+                <button type="submit" class="button is-primary">Add to wishlist</button>
+              </form>
+            {% endif %}
+          {% else %}
+            <p><em>Log in to add this product to your wishlist.</em></p>
+          {% endif %}
+        </div>
+
+        <a href="{% url 'view_products' %}" class="button is-light" style="margin-top: .5rem;">Back to products</a>
       </div>
     </div>
   </div>
