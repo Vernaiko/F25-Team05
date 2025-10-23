@@ -1,0 +1,36 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ product.title }} - Product Details{% endblock %}
+
+{% block content %}
+<section class="section">
+  <div class="container">
+    <div class="columns">
+      <div class="column is-one-third">
+        <figure class="image">
+          <img src="{{ product.image }}" alt="{{ product.title }}" style="object-fit: contain;">
+        </figure>
+      </div>
+      <div class="column">
+        <h1 class="title">{{ product.title }}</h1>
+        <h2 class="subtitle">${{ product.price }}</h2>
+
+        <div class="tags">
+          <span class="tag is-info">{{ product.category }}</span>
+        </div>
+
+        <div class="content" style="margin-top: 1rem;">
+          <p>{{ product.description }}</p>
+        </div>
+
+        <div class="box">
+          <p><strong>Rating:</strong> {{ product.rating.rate }} / 5</p>
+          <p><strong>Reviews:</strong> {{ product.rating.count }}</p>
+        </div>
+
+        <a href="{% url 'view_products' %}" class="button is-light">Back to products</a>
+      </div>
+    </div>
+  </div>
+</section>
+{% endblock %}

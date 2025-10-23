@@ -51,6 +51,7 @@ urlpatterns = [
     
     # Products
     path('products/', views.view_products, name='view_products'),
+    path('products/<int:product_id>/', views.view_product, name='view_product'),
  
 
 ]
