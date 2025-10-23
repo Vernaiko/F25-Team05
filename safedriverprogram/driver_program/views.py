@@ -6,6 +6,7 @@ from django.views.decorators.csrf import csrf_protect
 from django.http import JsonResponse
 from django.conf import settings
 import os
+import requests
 from django.core.files.storage import default_storage
 
 from django.contrib.auth.models import User
@@ -131,7 +132,46 @@ def admin_required(view_func):
 # Basic Views
 def homepage(request):
     """Display homepage"""
-    return render(request, 'homepage.html')
+    wishlist_display = []
+    if request.session.get('is_authenticated'):
+        user_id = request.session.get('user_id')
+        try:
+            cursor = connection.cursor()
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS user_wishlist (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    user_id INT NOT NULL,
+                    product_id INT NOT NULL,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE KEY uniq_user_product (user_id, product_id),
+                    INDEX idx_user_id (user_id)
+                )
+            """)
+            cursor.execute("SELECT product_id FROM user_wishlist WHERE user_id = %s ORDER BY created_at DESC", [user_id])
+            rows = cursor.fetchall()
+            wishlist_ids = [r[0] for r in rows]
+
+            # Fetch product titles for up to 5 items
+            import requests
+            for pid in wishlist_ids[:5]:
+                try:
+                    resp = requests.get(f'https://fakestoreapi.com/products/{pid}', timeout=3)
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        wishlist_display.append({'id': data.get('id'), 'title': data.get('title')})
+                    else:
+                        wishlist_display.append({'id': pid, 'title': f'Product #{pid}'})
+                except Exception:
+                    wishlist_display.append({'id': pid, 'title': f'Product #{pid}'})
+        except Exception:
+            wishlist_display = []
+        finally:
+            try:
+                cursor.close()
+            except:
+                pass
+
+    return render(request, 'homepage.html', {'wishlist': wishlist_display})
 
 @csrf_protect
 @csrf_protect
@@ -555,6 +595,93 @@ def delete_account(request):
 def to_organization_page(request):
     """Redirect to organization page"""
     return redirect('organization_page')
+
+
+def get_user_wishlist(user_id):
+    """Return a list of product_ids in the user's wishlist."""
+    cursor = connection.cursor()
+    try:
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS user_wishlist (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                user_id INT NOT NULL,
+                product_id INT NOT NULL,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE KEY uniq_user_product (user_id, product_id),
+                INDEX idx_user_id (user_id)
+            )
+        """)
+
+        cursor.execute("""SELECT product_id FROM user_wishlist WHERE user_id = %s ORDER BY created_at DESC""", [user_id])
+        rows = cursor.fetchall()
+        return [r[0] for r in rows]
+    except Exception:
+        return []
+    finally:
+        try:
+            cursor.close()
+        except:
+            pass
+
+
+@db_login_required
+def add_to_wishlist(request, product_id=None):
+    """Add a product to the logged-in user's wishlist.
+
+    Accepts product_id either as a POST form field or as a URL parameter (optional).
+    """
+    if request.method != 'POST' and product_id is None:
+        messages.error(request, "Invalid request method")
+        return redirect('view_products')
+
+    # Prefer POST product_id, fall back to URL param
+    if request.method == 'POST':
+        product_id = request.POST.get('product_id') or product_id
+
+    if not product_id:
+        messages.error(request, "No product specified")
+        return redirect('view_products')
+
+    # session keys were inconsistent across the codebase; accept either
+    user_id = request.session.get('user_id') or request.session.get('userID')
+    if not user_id:
+        messages.error(request, "You must be logged in to add items to wishlist.")
+        return redirect('login_page')
+
+    cursor = connection.cursor()
+    try:
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS user_wishlist (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                user_id INT NOT NULL,
+                product_id INT NOT NULL,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE KEY uniq_user_product (user_id, product_id),
+                INDEX idx_user_id (user_id)
+            )
+        """)
+
+        try:
+            cursor.execute("INSERT INTO user_wishlist (user_id, product_id) VALUES (%s, %s)", [user_id, int(product_id)])
+            connection.commit()
+            messages.success(request, "Added to your wishlist")
+        except Exception as ex:
+            # Likely duplicate insertion or constraint error; report info
+            messages.info(request, f"Product already in wishlist or could not be added: {ex}")
+
+    except Exception as e:
+        messages.error(request, f"Error adding to wishlist: {str(e)}")
+    finally:
+        try:
+            cursor.close()
+        except:
+            pass
+
+    # Redirect back to product detail if referrer is product page
+    ref = request.META.get('HTTP_REFERER')
+    if ref:
+        return redirect(ref)
+    return redirect('view_products')
 
 # Address Management Views
 @db_login_required
@@ -2196,15 +2323,22 @@ def view_products(request):
 @db_login_required
 def view_product(request, product_id):
     """Display a single product's details from Fake Store API"""
-    import requests
 
     try:
         response = requests.get(f'https://fakestoreapi.com/products/{product_id}')
         response.raise_for_status()
         product = response.json()
 
+        wishlist = []
+        if request.session.get('is_authenticated'):
+            try:
+                wishlist = get_user_wishlist(request.session.get('user_id'))
+            except Exception:
+                wishlist = []
+
         return render(request, 'product_detail.html', {
-            'product': product
+            'product': product,
+            'wishlist': wishlist
         })
     except requests.RequestException as e:
         messages.error(request, f"Failed to fetch product details: {str(e)}")
@@ -2916,3 +3050,41 @@ def sponsor_adjust_points(request):
             cursor.close()
         except Exception:
             pass
+
+@db_login_required
+def wishlist_page(request):
+    """Display the user's wishlist"""
+    # Accept either session key name used elsewhere ('user_id' or 'userID')
+    user_id = request.session.get('user_id') or request.session.get('userID')
+    cursor = connection.cursor()
+    
+    try:
+        # For testing, let's add a sample product
+        # Get all product IDs from the user's wishlist
+        cursor.execute("""
+            SELECT product_id FROM user_wishlist WHERE user_id = %s
+        """, [user_id])
+        product_ids = [row[0] for row in cursor.fetchall()]
+        # Fetch product details from Fake Store API
+        wishlist_items = []
+        for product_id in product_ids:
+            try:
+                response = requests.get(f'https://fakestoreapi.com/products/{product_id}')
+                if response.status_code == 200:
+                    product_data = response.json()
+                    wishlist_items.append(product_data)
+            except Exception as e:
+                # Skip product on error but log to console
+                print(f"Error fetching product {product_id}: {str(e)}")
+        
+        # Optional: add info message when wishlist is empty
+        if not wishlist_items:
+            messages.info(request, "Your wishlist is empty.")
+
+        return render(request, 'wishlist.html', {'wishlist_items': wishlist_items})
+    
+    except Exception as e:
+        messages.error(request, f"Error fetching wishlist: {str(e)}")
+        return redirect('homepage')
+    finally:
+        cursor.close()

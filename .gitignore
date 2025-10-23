@@ -15,3 +15,4 @@ server_requirements.txt
 safedriverprogram/driver_program/__pycache__/models.cpython-312.pyc
 safedriverprogram/driver_program/__pycache__/urls.cpython-312.pyc
 *.pyc
+*.pyc
