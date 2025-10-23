@@ -9,6 +9,7 @@ CREATE TABLE users (
     last_name varchar(50), 
     phone_number varchar(20),
     address varchar(200),
+    organization varchar(200),
     avatar_image varchar(200),
     account_type ENUM('driver', 'sponsor', 'admin') DEFAULT 'driver',
     DOB DATE,

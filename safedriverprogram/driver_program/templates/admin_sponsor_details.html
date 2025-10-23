@@ -1,0 +1,245 @@
+{% extends 'base.html' %}
+
+{% block title %}Sponsor Details - Admin Dashboard{% endblock %}
+
+{% block content %}
+<div class="container">
+  <div class="box">
+    <h1 class="title has-text-centered">
+      <span class="icon is-large has-text-primary">
+        <i class="fas fa-user-tie fa-2x"></i>
+      </span>
+      <br>
+      Sponsor Details
+    </h1>
+    
+    <!-- Sponsor Information -->
+    <div class="box has-background-light">
+      <h2 class="subtitle">
+        <span class="icon has-text-info">
+          <i class="fas fa-info-circle"></i>
+        </span>
+        Sponsor Information
+      </h2>
+      
+      <div class="columns">
+        <div class="column">
+          <div class="field">
+            <label class="label">Name</label>
+            <p><strong>{{ sponsor.first_name }} {{ sponsor.last_name }}</strong></p>
+          </div>
+          
+          <div class="field">
+            <label class="label">Username</label>
+            <p>@{{ sponsor.username }}</p>
+          </div>
+          
+          <div class="field">
+            <label class="label">Email</label>
+            <p>{{ sponsor.email }}</p>
+          </div>
+        </div>
+        
+        <div class="column">
+          <div class="field">
+            <label class="label">Phone</label>
+            <p>{{ sponsor.phone_number|default:"Not provided" }}</p>
+          </div>
+          
+          <div class="field">
+            <label class="label">Address</label>
+            <p>{{ sponsor.address|default:"Not provided" }}</p>
+          </div>
+          
+          <div class="field">
+            <label class="label">Status</label>
+            <p>
+              {% if sponsor.is_active %}
+                <span class="tag is-success is-large">
+                  <span class="icon"><i class="fas fa-check"></i></span>
+                  <span>Active</span>
+                </span>
+              {% else %}
+                <span class="tag is-danger is-large">
+                  <span class="icon"><i class="fas fa-ban"></i></span>
+                  <span>Inactive</span>
+                </span>
+              {% endif %}
+            </p>
+          </div>
+          
+          <div class="field">
+            <label class="label">Member Since</label>
+            <p>{{ sponsor.created_at|date:"F d, Y" }}</p>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Active Drivers -->
+    <div class="box">
+      <h2 class="subtitle">
+        <span class="icon has-text-success">
+          <i class="fas fa-users"></i>
+        </span>
+        Active Drivers ({{ active_drivers|length }})
+      </h2>
+      
+      {% if active_drivers %}
+      <div class="table-container">
+        <table class="table is-fullwidth is-striped">
+          <thead>
+            <tr>
+              <th>Driver</th>
+              <th>Username</th>
+              <th>Relationship Start</th>
+              <th>Streak Days</th>
+              <th>Total Trips</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for driver in active_drivers %}
+            <tr>
+              <td><strong>{{ driver.first_name }} {{ driver.last_name }}</strong></td>
+              <td>@{{ driver.username }}</td>
+              <td>{{ driver.relationship_start_date|date:"M d, Y" }}</td>
+              <td>
+                <span class="tag is-success">{{ driver.streak_days }} days</span>
+              </td>
+              <td>{{ driver.total_trips }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <p class="has-text-grey">No active drivers.</p>
+      {% endif %}
+    </div>
+    
+    <!-- Pending Applications -->
+    <div class="box">
+      <h2 class="subtitle">
+        <span class="icon has-text-warning">
+          <i class="fas fa-clock"></i>
+        </span>
+        Pending Applications ({{ pending_applications|length }})
+      </h2>
+      
+      {% if pending_applications %}
+      <div class="table-container">
+        <table class="table is-fullwidth is-striped">
+          <thead>
+            <tr>
+              <th>Application ID</th>
+              <th>Driver</th>
+              <th>Username</th>
+              <th>Application Date</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for app in pending_applications %}
+            <tr>
+              <td>{{ app.application_id }}</td>
+              <td><strong>{{ app.driver_first_name }} {{ app.driver_last_name }}</strong></td>
+              <td>@{{ app.driver_username }}</td>
+              <td>{{ app.application_date|date:"M d, Y" }}</td>
+              <td>
+                <a href="{% url 'sponsor_view_application' app.application_id %}" class="button is-small is-info">
+                  <span class="icon"><i class="fas fa-eye"></i></span>
+                  <span>View</span>
+                </a>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <p class="has-text-grey">No pending applications.</p>
+      {% endif %}
+    </div>
+    
+    <!-- Relationship History -->
+    <div class="box">
+      <h2 class="subtitle">
+        <span class="icon has-text-info">
+          <i class="fas fa-history"></i>
+        </span>
+        Relationship History
+      </h2>
+      
+      {% if relationship_history %}
+      <div class="table-container">
+        <table class="table is-fullwidth is-striped">
+          <thead>
+            <tr>
+              <th>Driver</th>
+              <th>Username</th>
+              <th>Start Date</th>
+              <th>End Date</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for rel in relationship_history %}
+            <tr>
+              <td><strong>{{ rel.driver_first_name }} {{ rel.driver_last_name }}</strong></td>
+              <td>@{{ rel.driver_username }}</td>
+              <td>{{ rel.start_date|date:"M d, Y" }}</td>
+              <td>
+                {% if rel.end_date %}
+                  {{ rel.end_date|date:"M d, Y" }}
+                {% else %}
+                  <span class="tag is-success">Active</span>
+                {% endif %}
+              </td>
+              <td>
+                {% if rel.status == 'active' %}
+                  <span class="tag is-success">Active</span>
+                {% elif rel.status == 'ended' %}
+                  <span class="tag is-light">Ended</span>
+                {% else %}
+                  <span class="tag">{{ rel.status }}</span>
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <p class="has-text-grey">No relationship history.</p>
+      {% endif %}
+    </div>
+    
+    <!-- Action Buttons -->
+    <div class="field is-grouped is-grouped-centered">
+      <div class="control">
+        <form method="post" action="{% url 'admin_update_sponsor_status' sponsor.userID %}">
+          {% csrf_token %}
+          {% if sponsor.is_active %}
+            <button type="submit" class="button is-warning">
+              <span class="icon"><i class="fas fa-pause"></i></span>
+              <span>Deactivate Sponsor</span>
+            </button>
+          {% else %}
+            <button type="submit" class="button is-success">
+              <span class="icon"><i class="fas fa-play"></i></span>
+              <span>Activate Sponsor</span>
+            </button>
+          {% endif %}
+        </form>
+      </div>
+      
+      <div class="control">
+        <a href="{% url 'admin_sponsor_list' %}" class="button is-light">
+          <span class="icon"><i class="fas fa-arrow-left"></i></span>
+          <span>Back to List</span>
+        </a>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

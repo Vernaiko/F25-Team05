@@ -11,3 +11,7 @@ media/
 
 # Local env files
 server_requirements.txt
+*.pyc
+safedriverprogram/driver_program/__pycache__/models.cpython-312.pyc
+safedriverprogram/driver_program/__pycache__/urls.cpython-312.pyc
+*.pyc
