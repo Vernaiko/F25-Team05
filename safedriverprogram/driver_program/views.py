@@ -625,18 +625,29 @@ def get_user_wishlist(user_id):
 
 
 @db_login_required
-def add_to_wishlist(request):
-    """Add a product to the logged-in user's wishlist. Expects POST with 'product_id'."""
-    if request.method != 'POST':
+def add_to_wishlist(request, product_id=None):
+    """Add a product to the logged-in user's wishlist.
+
+    Accepts product_id either as a POST form field or as a URL parameter (optional).
+    """
+    if request.method != 'POST' and product_id is None:
         messages.error(request, "Invalid request method")
         return redirect('view_products')
 
-    product_id = request.POST.get('product_id')
+    # Prefer POST product_id, fall back to URL param
+    if request.method == 'POST':
+        product_id = request.POST.get('product_id') or product_id
+
     if not product_id:
         messages.error(request, "No product specified")
         return redirect('view_products')
 
-    user_id = request.session.get('user_id')
+    # session keys were inconsistent across the codebase; accept either
+    user_id = request.session.get('user_id') or request.session.get('userID')
+    if not user_id:
+        messages.error(request, "You must be logged in to add items to wishlist.")
+        return redirect('login_page')
+
     cursor = connection.cursor()
     try:
         cursor.execute("""
@@ -654,9 +665,9 @@ def add_to_wishlist(request):
             cursor.execute("INSERT INTO user_wishlist (user_id, product_id) VALUES (%s, %s)", [user_id, int(product_id)])
             connection.commit()
             messages.success(request, "Added to your wishlist")
-        except Exception:
-            # Ignore duplicate key or other errors
-            messages.info(request, "Product already in wishlist")
+        except Exception as ex:
+            # Likely duplicate insertion or constraint error; report info
+            messages.info(request, f"Product already in wishlist or could not be added: {ex}")
 
     except Exception as e:
         messages.error(request, f"Error adding to wishlist: {str(e)}")
@@ -2312,7 +2323,6 @@ def view_products(request):
 @db_login_required
 def view_product(request, product_id):
     """Display a single product's details from Fake Store API"""
-    import requests
 
     try:
         response = requests.get(f'https://fakestoreapi.com/products/{product_id}')
@@ -3044,7 +3054,8 @@ def sponsor_adjust_points(request):
 @db_login_required
 def wishlist_page(request):
     """Display the user's wishlist"""
-    user_id = request.session.get('userID')
+    # Accept either session key name used elsewhere ('user_id' or 'userID')
+    user_id = request.session.get('user_id') or request.session.get('userID')
     cursor = connection.cursor()
     
     try:
@@ -3054,11 +3065,6 @@ def wishlist_page(request):
             SELECT product_id FROM user_wishlist WHERE user_id = %s
         """, [user_id])
         product_ids = [row[0] for row in cursor.fetchall()]
-        
-        # If no products in wishlist, add a test product for debugging
-        if not product_ids:
-            product_ids = [1, 2]  # Test with first two products
-            
         # Fetch product details from Fake Store API
         wishlist_items = []
         for product_id in product_ids:
@@ -3067,11 +3073,14 @@ def wishlist_page(request):
                 if response.status_code == 200:
                     product_data = response.json()
                     wishlist_items.append(product_data)
-                    print(f"Added product to wishlist: {product_data['title']}")  # Debug print
             except Exception as e:
-                print(f"Error fetching product {product_id}: {str(e)}")  # Debug print
+                # Skip product on error but log to console
+                print(f"Error fetching product {product_id}: {str(e)}")
         
-        print(f"Total wishlist items: {len(wishlist_items)}")  # Debug print
+        # Optional: add info message when wishlist is empty
+        if not wishlist_items:
+            messages.info(request, "Your wishlist is empty.")
+
         return render(request, 'wishlist.html', {'wishlist_items': wishlist_items})
     
     except Exception as e:

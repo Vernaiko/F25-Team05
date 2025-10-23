@@ -48,10 +48,6 @@ urlpatterns = [
 
     # Sponsor-specific pages - FIXED: Remove duplicates
     path('sponsor/home/', views.sponsor_home, name='sponsor_home'),
-    
-    # Wishlist
-    path('wishlist/', views.wishlist_page, name='wishlist'),
-    path('wishlist/add/<int:product_id>/', views.add_to_wishlist, name='add_to_wishlist'),
     path('sponsor/profile/', views.sponsor_profile, name='sponsor_profile'),
     path('sponsor/drivers/', views.sponsor_drivers, name='sponsor_drivers'),
     path('sponsor/adjust-points/', views.sponsor_adjust_points, name='sponsor_adjust_points'),
@@ -67,4 +63,6 @@ urlpatterns = [
     # Products
     path('products/', views.view_products, name='view_products'),
     path('products/<int:product_id>/', views.view_product, name='view_product'),
+    path('wishlist/', views.wishlist_page, name='wishlist'),
+    path('wishlist/add/<int:product_id>', views.add_to_wishlist, name='add_to_wishlist'),
 ]
