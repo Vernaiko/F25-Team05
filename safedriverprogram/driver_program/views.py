@@ -3088,3 +3088,135 @@ def wishlist_page(request):
         return redirect('homepage')
     finally:
         cursor.close()
+
+@db_login_required
+def admin_manage_admins(request):
+    """Admin page to view and manage all admin accounts"""
+    
+    # Check if user is logged in and is an admin
+    if not request.session.get('is_authenticated'):
+        messages.error(request, "Please log in to access this page.")
+        return redirect('login_page')
+    
+    if request.session.get('account_type') != 'admin':
+        messages.error(request, "Access denied. Only administrators can view this page.")
+        return redirect('homepage')
+    
+    cursor = connection.cursor()
+    
+    try:
+        # Get all admin users from the users table
+        cursor.execute("""
+            SELECT userID, username, first_name, last_name, email,
+                   phone_number, address, is_active, created_at
+            FROM users
+            WHERE account_type = 'admin'
+            ORDER BY created_at DESC
+        """)
+        
+        admins_data = cursor.fetchall()
+        
+        admins_list = []
+        for admin in admins_data:
+            admins_list.append({
+                'userID': admin[0],
+                'username': admin[1],
+                'first_name': admin[2],
+                'last_name': admin[3],
+                'email': admin[4],
+                'phone_number': admin[5],
+                'address': admin[6],
+                'is_active': admin[7],
+                'created_at': admin[8]
+            })
+        
+        # Get statistics
+        total_admins = len(admins_list)
+        active_admins = len([a for a in admins_list if a['is_active']])
+        inactive_admins = total_admins - active_admins
+        
+        context = {
+            'admins': admins_list,
+            'total_admins': total_admins,
+            'active_admins': active_admins,
+            'inactive_admins': inactive_admins,
+            'current_user_id': request.session.get('user_id')
+        }
+        
+        return render(request, 'admin_manage_admins.html', context)
+        
+    except Exception as e:
+        messages.error(request, f"Error loading admins: {str(e)}")
+        print(f"Admin manage admins error: {e}")
+        return redirect('account_page')
+    finally:
+        cursor.close()
+
+
+@db_login_required
+def admin_update_admin_status(request, admin_id):
+    """Toggle admin active/inactive status"""
+    
+    if request.method != 'POST':
+        messages.error(request, "Invalid request method.")
+        return redirect('admin_manage_admins')
+    
+    # Check if user is logged in and is an admin
+    if not request.session.get('is_authenticated'):
+        messages.error(request, "Please log in to access this page.")
+        return redirect('login_page')
+    
+    if request.session.get('account_type') != 'admin':
+        messages.error(request, "Access denied. Only administrators can perform this action.")
+        return redirect('homepage')
+    
+    current_user_id = request.session.get('user_id')
+    
+    # Prevent admin from deactivating themselves
+    if int(admin_id) == current_user_id:
+        messages.error(request, "You cannot change your own account status.")
+        return redirect('admin_manage_admins')
+    
+    cursor = connection.cursor()
+    
+    try:
+        # Get current admin status
+        cursor.execute("""
+            SELECT username, first_name, last_name, is_active, account_type
+            FROM users
+            WHERE userID = %s
+        """, [admin_id])
+        
+        admin_data = cursor.fetchone()
+        
+        if not admin_data:
+            messages.error(request, "Admin not found.")
+            return redirect('admin_manage_admins')
+        
+        if admin_data[4] != 'admin':
+            messages.error(request, "This user is not an admin.")
+            return redirect('admin_manage_admins')
+        
+        username = admin_data[0]
+        full_name = f"{admin_data[1]} {admin_data[2]}"
+        current_status = admin_data[3]
+        
+        # Toggle status
+        new_status = 0 if current_status else 1
+        
+        cursor.execute("""
+            UPDATE users
+            SET is_active = %s
+            WHERE userID = %s
+        """, [new_status, admin_id])
+        
+        status_text = "activated" if new_status else "deactivated"
+        messages.success(request, f"Admin {full_name} (@{username}) has been {status_text}.")
+        
+    except Exception as e:
+        messages.error(request, f"Error updating admin status: {str(e)}")
+        print(f"Update admin status error: {e}")
+    finally:
+        cursor.close()
+    
+    return redirect('admin_manage_admins')

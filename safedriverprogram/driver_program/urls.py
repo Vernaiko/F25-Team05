@@ -45,7 +45,11 @@ urlpatterns = [
     path('useradmin/sponsors/<int:sponsor_id>/', views.admin_sponsor_details, name='admin_sponsor_details'),
     path('useradmin/sponsors/<int:sponsor_id>/update-status/', views.admin_update_sponsor_status, name='admin_update_sponsor_status'),
     path('useradmin/sponsors/<int:sponsor_id>/delete/', views.admin_delete_sponsor, name='admin_delete_sponsor'),
-
+    
+    #admin admin management
+    path('useradmin/admins/', views.admin_manage_admins, name='admin_manage_admins'),
+    path('useradmin/admins/<int:admin_id>/update-status/', views.admin_update_admin_status, name='admin_update_admin_status'),
+    
     # Sponsor-specific pages - FIXED: Remove duplicates
     path('sponsor/home/', views.sponsor_home, name='sponsor_home'),
     path('sponsor/profile/', views.sponsor_profile, name='sponsor_profile'),
