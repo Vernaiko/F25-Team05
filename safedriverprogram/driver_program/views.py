@@ -3220,3 +3220,269 @@ def admin_update_admin_status(request, admin_id):
         cursor.close()
     
     return redirect('admin_manage_admins')
+
+
+# ============================================================================
+# WALLET HISTORY VIEWS
+# ============================================================================
+
+def sponsor_wallet_history(request, driver_id=None):
+    """
+    View wallet transaction history for drivers sponsored by this sponsor.
+    If driver_id is provided, show history for that specific driver.
+    Otherwise, show aggregated view for all drivers.
+    """
+    # Only sponsors can access this page
+    if request.session.get('account_type') != 'sponsor':
+        messages.error(request, "Access denied. Only sponsors can view this page.")
+        return redirect('homepage')
+    
+    sponsor_id = request.session.get('user_id')
+    cursor = connection.cursor()
+    
+    try:
+        # Get all drivers sponsored by this sponsor
+        cursor.execute("""
+            SELECT 
+                u.userID, u.username, u.first_name, u.last_name,
+                dw.wallet_id, dw.points_balance, dw.last_transaction_date
+            FROM sponsor_driver_relationships sdr
+            JOIN users u ON sdr.driver_user_id = u.userID
+            LEFT JOIN driver_wallets dw ON dw.driver_id = u.userID
+            WHERE sdr.sponsor_user_id = %s AND sdr.relationship_status = 'active'
+            ORDER BY u.last_name, u.first_name
+        """, [sponsor_id])
+        
+        sponsored_drivers = cursor.fetchall()
+        drivers_list = []
+        
+        for driver in sponsored_drivers:
+            drivers_list.append({
+                'user_id': driver[0],
+                'username': driver[1],
+                'first_name': driver[2],
+                'last_name': driver[3],
+                'wallet_id': driver[4],
+                'points_balance': driver[5] or 0,
+                'last_transaction_date': driver[6]
+            })
+        
+        transactions = []
+        selected_driver = None
+        
+        if driver_id:
+            # Verify this sponsor has access to this driver
+            driver_found = next((d for d in drivers_list if d['user_id'] == driver_id), None)
+            
+            if not driver_found:
+                messages.error(request, "You don't have access to this driver's wallet history.")
+                return redirect('sponsor_wallet_history')
+            
+            selected_driver = driver_found
+            
+            # Get transaction history for specific driver
+            cursor.execute("""
+                SELECT 
+                    wth.transaction_id, wth.transaction_type, wth.points_amount,
+                    wth.points_before, wth.points_after, wth.description,
+                    wth.reference_type, wth.status, wth.transaction_date,
+                    wth.processed_by, wth.notes,
+                    sponsor.username as sponsor_username,
+                    admin.username as admin_username
+                FROM wallet_transaction_history wth
+                LEFT JOIN users sponsor ON wth.sponsor_id = sponsor.userID
+                LEFT JOIN users admin ON wth.admin_id = admin.userID
+                WHERE wth.driver_id = %s
+                ORDER BY wth.transaction_date DESC
+                LIMIT 100
+            """, [driver_id])
+            
+            transaction_rows = cursor.fetchall()
+            
+            for tx in transaction_rows:
+                transactions.append({
+                    'transaction_id': tx[0],
+                    'transaction_type': tx[1],
+                    'points_amount': tx[2],
+                    'points_before': tx[3],
+                    'points_after': tx[4],
+                    'description': tx[5],
+                    'reference_type': tx[6],
+                    'status': tx[7],
+                    'transaction_date': tx[8],
+                    'processed_by': tx[9],
+                    'notes': tx[10],
+                    'sponsor_username': tx[11],
+                    'admin_username': tx[12]
+                })
+        
+        context = {
+            'drivers': drivers_list,
+            'selected_driver': selected_driver,
+            'transactions': transactions,
+            'total_drivers': len(drivers_list)
+        }
+        
+        return render(request, 'sponsor_wallet_history.html', context)
+        
+    except Exception as e:
+        messages.error(request, f"Error loading wallet history: {str(e)}")
+        print(f"Sponsor wallet history error: {e}")
+        return redirect('sponsor_home')
+    finally:
+        cursor.close()
+
+
+def admin_wallet_history(request, driver_id=None):
+    """
+    Admin view for wallet transaction history.
+    Can view all drivers or filter by specific driver.
+    """
+    # Only admins can access this page
+    if request.session.get('account_type') != 'admin':
+        messages.error(request, "Access denied. Only admins can view this page.")
+        return redirect('homepage')
+    
+    cursor = connection.cursor()
+    
+    try:
+        # Get all drivers with wallets
+        cursor.execute("""
+            SELECT 
+                u.userID, u.username, u.first_name, u.last_name, u.email,
+                dw.wallet_id, dw.points_balance, dw.last_transaction_date, dw.is_active,
+                sp.organization_name
+            FROM users u
+            LEFT JOIN driver_wallets dw ON dw.driver_id = u.userID
+            LEFT JOIN driver_program_profile p ON p.user_id = u.userID
+            LEFT JOIN driver_program_sponsorprofile sp ON p.sponsor_id = sp.id
+            WHERE u.account_type = 'driver'
+            ORDER BY u.last_name, u.first_name
+        """)
+        
+        all_drivers = cursor.fetchall()
+        drivers_list = []
+        
+        for driver in all_drivers:
+            drivers_list.append({
+                'user_id': driver[0],
+                'username': driver[1],
+                'first_name': driver[2],
+                'last_name': driver[3],
+                'email': driver[4],
+                'wallet_id': driver[5],
+                'points_balance': driver[6] or 0,
+                'last_transaction_date': driver[7],
+                'wallet_active': driver[8] if driver[8] is not None else False,
+                'sponsor_organization': driver[9]
+            })
+        
+        transactions = []
+        selected_driver = None
+        transaction_stats = {}
+        
+        if driver_id:
+            # Get specific driver info
+            selected_driver = next((d for d in drivers_list if d['user_id'] == driver_id), None)
+            
+            if not selected_driver:
+                messages.error(request, "Driver not found.")
+                return redirect('admin_wallet_history')
+            
+            # Get transaction history for specific driver
+            cursor.execute("""
+                SELECT 
+                    wth.transaction_id, wth.transaction_type, wth.points_amount,
+                    wth.points_before, wth.points_after, wth.description,
+                    wth.reference_id, wth.reference_type, wth.status, 
+                    wth.transaction_date, wth.processed_by, wth.notes,
+                    sponsor.username as sponsor_username, sponsor.first_name as sponsor_first_name,
+                    sponsor.last_name as sponsor_last_name,
+                    admin.username as admin_username, admin.first_name as admin_first_name,
+                    admin.last_name as admin_last_name
+                FROM wallet_transaction_history wth
+                LEFT JOIN users sponsor ON wth.sponsor_id = sponsor.userID
+                LEFT JOIN users admin ON wth.admin_id = admin.userID
+                WHERE wth.driver_id = %s
+                ORDER BY wth.transaction_date DESC
+            """, [driver_id])
+            
+            transaction_rows = cursor.fetchall()
+            
+            for tx in transaction_rows:
+                transactions.append({
+                    'transaction_id': tx[0],
+                    'transaction_type': tx[1],
+                    'points_amount': tx[2],
+                    'points_before': tx[3],
+                    'points_after': tx[4],
+                    'description': tx[5],
+                    'reference_id': tx[6],
+                    'reference_type': tx[7],
+                    'status': tx[8],
+                    'transaction_date': tx[9],
+                    'processed_by': tx[10],
+                    'notes': tx[11],
+                    'sponsor_username': tx[12],
+                    'sponsor_full_name': f"{tx[13]} {tx[14]}" if tx[13] else None,
+                    'admin_username': tx[15],
+                    'admin_full_name': f"{tx[16]} {tx[17]}" if tx[16] else None
+                })
+            
+            # Calculate transaction statistics
+            cursor.execute("""
+                SELECT 
+                    transaction_type,
+                    COUNT(*) as count,
+                    SUM(points_amount) as total_points,
+                    AVG(points_amount) as avg_points
+                FROM wallet_transaction_history
+                WHERE driver_id = %s
+                GROUP BY transaction_type
+            """, [driver_id])
+            
+            stats_rows = cursor.fetchall()
+            transaction_stats = {}
+            for stat in stats_rows:
+                transaction_stats[stat[0]] = {
+                    'count': stat[1],
+                    'total_points': stat[2],
+                    'avg_points': round(stat[3], 2) if stat[3] else 0
+                }
+        
+        # Get overall statistics
+        cursor.execute("""
+            SELECT 
+                COUNT(DISTINCT driver_id) as total_drivers_with_wallets,
+                COUNT(*) as total_transactions,
+                SUM(CASE WHEN points_amount > 0 THEN points_amount ELSE 0 END) as total_points_added,
+                SUM(CASE WHEN points_amount < 0 THEN points_amount ELSE 0 END) as total_points_deducted
+            FROM wallet_transaction_history
+        """)
+        
+        overall_stats = cursor.fetchone()
+        
+        context = {
+            'drivers': drivers_list,
+            'selected_driver': selected_driver,
+            'transactions': transactions,
+            'transaction_stats': transaction_stats,
+            'total_drivers': len(drivers_list),
+            'overall_stats': {
+                'total_drivers_with_wallets': overall_stats[0] if overall_stats else 0,
+                'total_transactions': overall_stats[1] if overall_stats else 0,
+                'total_points_added': overall_stats[2] if overall_stats else 0,
+                'total_points_deducted': overall_stats[3] if overall_stats else 0
+            } if overall_stats else {}
+        }
+        
+        return render(request, 'admin_wallet_history.html', context)
+        
+    except Exception as e:
+        messages.error(request, f"Error loading wallet history: {str(e)}")
+        print(f"Admin wallet history error: {e}")
+        import traceback
+        traceback.print_exc()
+        return redirect('homepage')
+    finally:
+        cursor.close()

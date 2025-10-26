@@ -35,6 +35,18 @@
       </div>
     </div>
 
+    <!-- Quick Action Buttons -->
+    <div class="buttons is-centered mb-4">
+      <a href="{% url 'sponsor_wallet_history' %}" class="button is-success">
+        <span class="icon"><i class="fas fa-wallet"></i></span>
+        <span>View Wallet History</span>
+      </a>
+      <a href="{% url 'sponsor_home' %}" class="button is-light">
+        <span class="icon"><i class="fas fa-home"></i></span>
+        <span>Back to Dashboard</span>
+      </a>
+    </div>
+
     <!-- Single points form (select driver then record points) -->
     <div class="has-text-centered" style="margin-top:1rem; margin-bottom:1rem;">
       <form method="post" action="{% url 'sponsor_adjust_points' %}" style="display:inline-block; min-width:320px; max-width:720px; width:100%;">

@@ -58,6 +58,12 @@ urlpatterns = [
     path('sponsor/applications/', views.sponsor_manage_applications, name='sponsor_manage_applications'),
     path('sponsor/application/<int:application_id>/', views.sponsor_view_application, name='sponsor_view_application'),
     path('sponsor-application-action/<int:application_id>/', views.sponsor_application_action, name='sponsor_application_action'),
+    
+    # Wallet history pages
+    path('sponsor/wallet-history/', views.sponsor_wallet_history, name='sponsor_wallet_history'),
+    path('sponsor/wallet-history/<int:driver_id>/', views.sponsor_wallet_history, name='sponsor_wallet_history_driver'),
+    path('useradmin/wallet-history/', views.admin_wallet_history, name='admin_wallet_history'),
+    path('useradmin/wallet-history/<int:driver_id>/', views.admin_wallet_history, name='admin_wallet_history_driver'),
 
     # Admin review pages
     path('review/admins/', views.review_admin_status, name='review_admin_status'),
