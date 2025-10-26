@@ -217,9 +217,61 @@ def login_page(request):
             messages.success(request, f"Welcome back, {first_name}!")
             return redirect('account_page')
         else:
+            # Log failed login attempt
+            log_failed_login_attempt(request, username, "Invalid username or password")
             messages.error(request, "Invalid username or password.")
     
     return render(request, 'login.html')
+
+
+def log_failed_login_attempt(request, username, reason):
+    """Log a failed login attempt to the database"""
+    cursor = connection.cursor()
+    try:
+        # Get IP address
+        x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
+        if x_forwarded_for:
+            ip_address = x_forwarded_for.split(',')[0]
+        else:
+            ip_address = request.META.get('REMOTE_ADDR')
+        
+        # Get user agent
+        user_agent = request.META.get('HTTP_USER_AGENT', '')[:500]  # Limit length
+        
+        # Try to determine account type from username
+        cursor.execute("SELECT account_type FROM users WHERE username = %s", [username])
+        result = cursor.fetchone()
+        account_type = result[0] if result else 'unknown'
+        
+        # Ensure table exists
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS failed_login_attempts (
+                attempt_id INT AUTO_INCREMENT PRIMARY KEY,
+                username VARCHAR(150) NOT NULL,
+                attempted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                ip_address VARCHAR(45),
+                user_agent TEXT,
+                failure_reason VARCHAR(255),
+                account_type VARCHAR(50),
+                INDEX idx_username (username),
+                INDEX idx_attempted_at (attempted_at),
+                INDEX idx_ip_address (ip_address)
+            )
+        """)
+        
+        # Insert the failed attempt
+        cursor.execute("""
+            INSERT INTO failed_login_attempts 
+            (username, ip_address, user_agent, failure_reason, account_type)
+            VALUES (%s, %s, %s, %s, %s)
+        """, [username, ip_address, user_agent, reason, account_type])
+        
+        connection.commit()
+        
+    except Exception as e:
+        print(f"Error logging failed login attempt: {e}")
+    finally:
+        cursor.close()
 
 def logout_view(request):
     """Handle user logout"""
@@ -3086,5 +3138,604 @@ def wishlist_page(request):
     except Exception as e:
         messages.error(request, f"Error fetching wishlist: {str(e)}")
         return redirect('homepage')
+    finally:
+        cursor.close()
+
+@db_login_required
+def admin_manage_admins(request):
+    """Admin page to view and manage all admin accounts"""
+    
+    # Check if user is logged in and is an admin
+    if not request.session.get('is_authenticated'):
+        messages.error(request, "Please log in to access this page.")
+        return redirect('login_page')
+    
+    if request.session.get('account_type') != 'admin':
+        messages.error(request, "Access denied. Only administrators can view this page.")
+        return redirect('homepage')
+    
+    cursor = connection.cursor()
+    
+    try:
+        # Get all admin users from the users table
+        cursor.execute("""
+            SELECT userID, username, first_name, last_name, email,
+                   phone_number, address, is_active, created_at
+            FROM users
+            WHERE account_type = 'admin'
+            ORDER BY created_at DESC
+        """)
+        
+        admins_data = cursor.fetchall()
+        
+        admins_list = []
+        for admin in admins_data:
+            admins_list.append({
+                'userID': admin[0],
+                'username': admin[1],
+                'first_name': admin[2],
+                'last_name': admin[3],
+                'email': admin[4],
+                'phone_number': admin[5],
+                'address': admin[6],
+                'is_active': admin[7],
+                'created_at': admin[8]
+            })
+        
+        # Get statistics
+        total_admins = len(admins_list)
+        active_admins = len([a for a in admins_list if a['is_active']])
+        inactive_admins = total_admins - active_admins
+        
+        context = {
+            'admins': admins_list,
+            'total_admins': total_admins,
+            'active_admins': active_admins,
+            'inactive_admins': inactive_admins,
+            'current_user_id': request.session.get('user_id')
+        }
+        
+        return render(request, 'admin_manage_admins.html', context)
+        
+    except Exception as e:
+        messages.error(request, f"Error loading admins: {str(e)}")
+        print(f"Admin manage admins error: {e}")
+        return redirect('account_page')
+    finally:
+        cursor.close()
+
+
+@db_login_required
+def admin_update_admin_status(request, admin_id):
+    """Toggle admin active/inactive status"""
+    
+    if request.method != 'POST':
+        messages.error(request, "Invalid request method.")
+        return redirect('admin_manage_admins')
+    
+    # Check if user is logged in and is an admin
+    if not request.session.get('is_authenticated'):
+        messages.error(request, "Please log in to access this page.")
+        return redirect('login_page')
+    
+    if request.session.get('account_type') != 'admin':
+        messages.error(request, "Access denied. Only administrators can perform this action.")
+        return redirect('homepage')
+    
+    current_user_id = request.session.get('user_id')
+    
+    # Prevent admin from deactivating themselves
+    if int(admin_id) == current_user_id:
+        messages.error(request, "You cannot change your own account status.")
+        return redirect('admin_manage_admins')
+    
+    cursor = connection.cursor()
+    
+    try:
+        # Get current admin status
+        cursor.execute("""
+            SELECT username, first_name, last_name, is_active, account_type
+            FROM users
+            WHERE userID = %s
+        """, [admin_id])
+        
+        admin_data = cursor.fetchone()
+        
+        if not admin_data:
+            messages.error(request, "Admin not found.")
+            return redirect('admin_manage_admins')
+        
+        if admin_data[4] != 'admin':
+            messages.error(request, "This user is not an admin.")
+            return redirect('admin_manage_admins')
+        
+        username = admin_data[0]
+        full_name = f"{admin_data[1]} {admin_data[2]}"
+        current_status = admin_data[3]
+        
+        # Toggle status
+        new_status = 0 if current_status else 1
+        
+        cursor.execute("""
+            UPDATE users
+            SET is_active = %s
+            WHERE userID = %s
+        """, [new_status, admin_id])
+        
+        status_text = "activated" if new_status else "deactivated"
+        messages.success(request, f"Admin {full_name} (@{username}) has been {status_text}.")
+        
+    except Exception as e:
+        messages.error(request, f"Error updating admin status: {str(e)}")
+        print(f"Update admin status error: {e}")
+    finally:
+        cursor.close()
+    
+    return redirect('admin_manage_admins')
+
+
+# ============================================================================
+# WALLET HISTORY VIEWS
+# ============================================================================
+
+def sponsor_wallet_history(request, driver_id=None):
+    """
+    View wallet transaction history for drivers sponsored by this sponsor.
+    If driver_id is provided, show history for that specific driver.
+    Otherwise, show aggregated view for all drivers.
+    """
+    # Only sponsors can access this page
+    if request.session.get('account_type') != 'sponsor':
+        messages.error(request, "Access denied. Only sponsors can view this page.")
+        return redirect('homepage')
+    
+    sponsor_id = request.session.get('user_id')
+    cursor = connection.cursor()
+    
+    try:
+        # Get all drivers sponsored by this sponsor
+        cursor.execute("""
+            SELECT 
+                u.userID, u.username, u.first_name, u.last_name,
+                dw.wallet_id, dw.points_balance, dw.last_transaction_date
+            FROM sponsor_driver_relationships sdr
+            JOIN users u ON sdr.driver_user_id = u.userID
+            LEFT JOIN driver_wallets dw ON dw.driver_id = u.userID
+            WHERE sdr.sponsor_user_id = %s AND sdr.relationship_status = 'active'
+            ORDER BY u.last_name, u.first_name
+        """, [sponsor_id])
+        
+        sponsored_drivers = cursor.fetchall()
+        drivers_list = []
+        
+        for driver in sponsored_drivers:
+            drivers_list.append({
+                'user_id': driver[0],
+                'username': driver[1],
+                'first_name': driver[2],
+                'last_name': driver[3],
+                'wallet_id': driver[4],
+                'points_balance': driver[5] or 0,
+                'last_transaction_date': driver[6]
+            })
+        
+        transactions = []
+        selected_driver = None
+        
+        if driver_id:
+            # Verify this sponsor has access to this driver
+            driver_found = next((d for d in drivers_list if d['user_id'] == driver_id), None)
+            
+            if not driver_found:
+                messages.error(request, "You don't have access to this driver's wallet history.")
+                return redirect('sponsor_wallet_history')
+            
+            selected_driver = driver_found
+            
+            # Get transaction history for specific driver
+            cursor.execute("""
+                SELECT 
+                    wth.transaction_id, wth.transaction_type, wth.points_amount,
+                    wth.points_before, wth.points_after, wth.description,
+                    wth.reference_type, wth.status, wth.transaction_date,
+                    wth.processed_by, wth.notes,
+                    sponsor.username as sponsor_username,
+                    admin.username as admin_username
+                FROM wallet_transaction_history wth
+                LEFT JOIN users sponsor ON wth.sponsor_id = sponsor.userID
+                LEFT JOIN users admin ON wth.admin_id = admin.userID
+                WHERE wth.driver_id = %s
+                ORDER BY wth.transaction_date DESC
+                LIMIT 100
+            """, [driver_id])
+            
+            transaction_rows = cursor.fetchall()
+            
+            for tx in transaction_rows:
+                transactions.append({
+                    'transaction_id': tx[0],
+                    'transaction_type': tx[1],
+                    'points_amount': tx[2],
+                    'points_before': tx[3],
+                    'points_after': tx[4],
+                    'description': tx[5],
+                    'reference_type': tx[6],
+                    'status': tx[7],
+                    'transaction_date': tx[8],
+                    'processed_by': tx[9],
+                    'notes': tx[10],
+                    'sponsor_username': tx[11],
+                    'admin_username': tx[12]
+                })
+        
+        context = {
+            'drivers': drivers_list,
+            'selected_driver': selected_driver,
+            'transactions': transactions,
+            'total_drivers': len(drivers_list)
+        }
+        
+        return render(request, 'sponsor_wallet_history.html', context)
+        
+    except Exception as e:
+        messages.error(request, f"Error loading wallet history: {str(e)}")
+        print(f"Sponsor wallet history error: {e}")
+        return redirect('sponsor_home')
+    finally:
+        cursor.close()
+
+
+def admin_wallet_history(request, driver_id=None):
+    """
+    Admin view for wallet transaction history.
+    Can view all drivers or filter by specific driver.
+    """
+    # Only admins can access this page
+    if request.session.get('account_type') != 'admin':
+        messages.error(request, "Access denied. Only admins can view this page.")
+        return redirect('homepage')
+    
+    cursor = connection.cursor()
+    
+    try:
+        # Get all drivers with wallets
+        cursor.execute("""
+            SELECT 
+                u.userID, u.username, u.first_name, u.last_name, u.email,
+                dw.wallet_id, dw.points_balance, dw.last_transaction_date, dw.is_active,
+                sp.organization_name
+            FROM users u
+            LEFT JOIN driver_wallets dw ON dw.driver_id = u.userID
+            LEFT JOIN driver_program_profile p ON p.user_id = u.userID
+            LEFT JOIN driver_program_sponsorprofile sp ON p.sponsor_id = sp.id
+            WHERE u.account_type = 'driver'
+            ORDER BY u.last_name, u.first_name
+        """)
+        
+        all_drivers = cursor.fetchall()
+        drivers_list = []
+        
+        for driver in all_drivers:
+            drivers_list.append({
+                'user_id': driver[0],
+                'username': driver[1],
+                'first_name': driver[2],
+                'last_name': driver[3],
+                'email': driver[4],
+                'wallet_id': driver[5],
+                'points_balance': driver[6] or 0,
+                'last_transaction_date': driver[7],
+                'wallet_active': driver[8] if driver[8] is not None else False,
+                'sponsor_organization': driver[9]
+            })
+        
+        transactions = []
+        selected_driver = None
+        transaction_stats = {}
+        
+        if driver_id:
+            # Get specific driver info
+            selected_driver = next((d for d in drivers_list if d['user_id'] == driver_id), None)
+            
+            if not selected_driver:
+                messages.error(request, "Driver not found.")
+                return redirect('admin_wallet_history')
+            
+            # Get transaction history for specific driver
+            cursor.execute("""
+                SELECT 
+                    wth.transaction_id, wth.transaction_type, wth.points_amount,
+                    wth.points_before, wth.points_after, wth.description,
+                    wth.reference_id, wth.reference_type, wth.status, 
+                    wth.transaction_date, wth.processed_by, wth.notes,
+                    sponsor.username as sponsor_username, sponsor.first_name as sponsor_first_name,
+                    sponsor.last_name as sponsor_last_name,
+                    admin.username as admin_username, admin.first_name as admin_first_name,
+                    admin.last_name as admin_last_name
+                FROM wallet_transaction_history wth
+                LEFT JOIN users sponsor ON wth.sponsor_id = sponsor.userID
+                LEFT JOIN users admin ON wth.admin_id = admin.userID
+                WHERE wth.driver_id = %s
+                ORDER BY wth.transaction_date DESC
+            """, [driver_id])
+            
+            transaction_rows = cursor.fetchall()
+            
+            for tx in transaction_rows:
+                transactions.append({
+                    'transaction_id': tx[0],
+                    'transaction_type': tx[1],
+                    'points_amount': tx[2],
+                    'points_before': tx[3],
+                    'points_after': tx[4],
+                    'description': tx[5],
+                    'reference_id': tx[6],
+                    'reference_type': tx[7],
+                    'status': tx[8],
+                    'transaction_date': tx[9],
+                    'processed_by': tx[10],
+                    'notes': tx[11],
+                    'sponsor_username': tx[12],
+                    'sponsor_full_name': f"{tx[13]} {tx[14]}" if tx[13] else None,
+                    'admin_username': tx[15],
+                    'admin_full_name': f"{tx[16]} {tx[17]}" if tx[16] else None
+                })
+            
+            # Calculate transaction statistics
+            cursor.execute("""
+                SELECT 
+                    transaction_type,
+                    COUNT(*) as count,
+                    SUM(points_amount) as total_points,
+                    AVG(points_amount) as avg_points
+                FROM wallet_transaction_history
+                WHERE driver_id = %s
+                GROUP BY transaction_type
+            """, [driver_id])
+            
+            stats_rows = cursor.fetchall()
+            transaction_stats = {}
+            for stat in stats_rows:
+                transaction_stats[stat[0]] = {
+                    'count': stat[1],
+                    'total_points': stat[2],
+                    'avg_points': round(stat[3], 2) if stat[3] else 0
+                }
+        
+        # Get overall statistics
+        cursor.execute("""
+            SELECT 
+                COUNT(DISTINCT driver_id) as total_drivers_with_wallets,
+                COUNT(*) as total_transactions,
+                SUM(CASE WHEN points_amount > 0 THEN points_amount ELSE 0 END) as total_points_added,
+                SUM(CASE WHEN points_amount < 0 THEN points_amount ELSE 0 END) as total_points_deducted
+            FROM wallet_transaction_history
+        """)
+        
+        overall_stats = cursor.fetchone()
+        
+        context = {
+            'drivers': drivers_list,
+            'selected_driver': selected_driver,
+            'transactions': transactions,
+            'transaction_stats': transaction_stats,
+            'total_drivers': len(drivers_list),
+            'overall_stats': {
+                'total_drivers_with_wallets': overall_stats[0] if overall_stats else 0,
+                'total_transactions': overall_stats[1] if overall_stats else 0,
+                'total_points_added': overall_stats[2] if overall_stats else 0,
+                'total_points_deducted': overall_stats[3] if overall_stats else 0
+            } if overall_stats else {}
+        }
+        
+        return render(request, 'admin_wallet_history.html', context)
+        
+    except Exception as e:
+        messages.error(request, f"Error loading wallet history: {str(e)}")
+        print(f"Admin wallet history error: {e}")
+        import traceback
+        traceback.print_exc()
+        return redirect('homepage')
+    finally:
+        cursor.close()
+
+
+# ============================================================================
+# FAILED LOGIN ATTEMPTS - ADMIN SECURITY LOG
+# ============================================================================
+
+@admin_required
+def admin_failed_login_log(request):
+    """
+    Admin view to monitor failed login attempts across all users.
+    Provides security insights and potential threat detection.
+    """
+    cursor = connection.cursor()
+    
+    try:
+        # Get filter parameters
+        username_filter = request.GET.get('username', '').strip()
+        account_type_filter = request.GET.get('account_type', '')
+        time_range = request.GET.get('time_range', '24h')  # 1h, 24h, 7d, 30d, all
+        
+        # Ensure table exists
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS failed_login_attempts (
+                attempt_id INT AUTO_INCREMENT PRIMARY KEY,
+                username VARCHAR(150) NOT NULL,
+                attempted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                ip_address VARCHAR(45),
+                user_agent TEXT,
+                failure_reason VARCHAR(255),
+                account_type VARCHAR(50),
+                INDEX idx_username (username),
+                INDEX idx_attempted_at (attempted_at),
+                INDEX idx_ip_address (ip_address)
+            )
+        """)
+        
+        # Build WHERE clause based on filters
+        where_conditions = []
+        query_params = []
+        
+        if username_filter:
+            where_conditions.append("username LIKE %s")
+            query_params.append(f"%{username_filter}%")
+        
+        if account_type_filter:
+            where_conditions.append("account_type = %s")
+            query_params.append(account_type_filter)
+        
+        # Time range filter
+        if time_range == '1h':
+            where_conditions.append("attempted_at >= DATE_SUB(NOW(), INTERVAL 1 HOUR)")
+        elif time_range == '24h':
+            where_conditions.append("attempted_at >= DATE_SUB(NOW(), INTERVAL 24 HOUR)")
+        elif time_range == '7d':
+            where_conditions.append("attempted_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)")
+        elif time_range == '30d':
+            where_conditions.append("attempted_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)")
+        # 'all' - no time filter
+        
+        where_clause = "WHERE " + " AND ".join(where_conditions) if where_conditions else ""
+        
+        # Get failed login attempts
+        query = f"""
+            SELECT 
+                attempt_id, username, attempted_at, ip_address,
+                user_agent, failure_reason, account_type
+            FROM failed_login_attempts
+            {where_clause}
+            ORDER BY attempted_at DESC
+            LIMIT 500
+        """
+        
+        cursor.execute(query, query_params)
+        attempts_rows = cursor.fetchall()
+        
+        attempts_list = []
+        for row in attempts_rows:
+            attempts_list.append({
+                'attempt_id': row[0],
+                'username': row[1],
+                'attempted_at': row[2],
+                'ip_address': row[3],
+                'user_agent': row[4][:100] if row[4] else '',  # Truncate for display
+                'failure_reason': row[5],
+                'account_type': row[6]
+            })
+        
+        # Get statistics - Top 10 usernames with most failures
+        stats_query = f"""
+            SELECT 
+                username,
+                account_type,
+                COUNT(*) as attempt_count,
+                MAX(attempted_at) as last_attempt,
+                COUNT(DISTINCT ip_address) as unique_ips
+            FROM failed_login_attempts
+            {where_clause}
+            GROUP BY username, account_type
+            ORDER BY attempt_count DESC
+            LIMIT 10
+        """
+        
+        cursor.execute(stats_query, query_params)
+        top_failures_rows = cursor.fetchall()
+        
+        top_failures = []
+        for row in top_failures_rows:
+            top_failures.append({
+                'username': row[0],
+                'account_type': row[1],
+                'attempt_count': row[2],
+                'last_attempt': row[3],
+                'unique_ips': row[4]
+            })
+        
+        # Get IP address statistics
+        ip_stats_query = f"""
+            SELECT 
+                ip_address,
+                COUNT(*) as attempt_count,
+                COUNT(DISTINCT username) as unique_usernames,
+                MAX(attempted_at) as last_attempt
+            FROM failed_login_attempts
+            {where_clause}
+            GROUP BY ip_address
+            ORDER BY attempt_count DESC
+            LIMIT 10
+        """
+        
+        cursor.execute(ip_stats_query, query_params)
+        ip_stats_rows = cursor.fetchall()
+        
+        ip_stats = []
+        for row in ip_stats_rows:
+            ip_stats.append({
+                'ip_address': row[0],
+                'attempt_count': row[1],
+                'unique_usernames': row[2],
+                'last_attempt': row[3]
+            })
+        
+        # Overall statistics
+        overall_query = f"""
+            SELECT 
+                COUNT(*) as total_attempts,
+                COUNT(DISTINCT username) as unique_usernames,
+                COUNT(DISTINCT ip_address) as unique_ips,
+                COUNT(DISTINCT DATE(attempted_at)) as days_with_attempts
+            FROM failed_login_attempts
+            {where_clause}
+        """
+        
+        cursor.execute(overall_query, query_params)
+        overall_stats = cursor.fetchone()
+        
+        # Get account type breakdown
+        account_type_query = f"""
+            SELECT 
+                account_type,
+                COUNT(*) as count
+            FROM failed_login_attempts
+            {where_clause}
+            GROUP BY account_type
+            ORDER BY count DESC
+        """
+        
+        cursor.execute(account_type_query, query_params)
+        account_type_stats = cursor.fetchall()
+        
+        account_type_breakdown = {}
+        for row in account_type_stats:
+            account_type_breakdown[row[0]] = row[1]
+        
+        context = {
+            'attempts': attempts_list,
+            'top_failures': top_failures,
+            'ip_stats': ip_stats,
+            'overall_stats': {
+                'total_attempts': overall_stats[0] if overall_stats else 0,
+                'unique_usernames': overall_stats[1] if overall_stats else 0,
+                'unique_ips': overall_stats[2] if overall_stats else 0,
+                'days_with_attempts': overall_stats[3] if overall_stats else 0
+            } if overall_stats else {},
+            'account_type_breakdown': account_type_breakdown,
+            'filters': {
+                'username': username_filter,
+                'account_type': account_type_filter,
+                'time_range': time_range
+            }
+        }
+        
+        return render(request, 'admin_failed_login_log.html', context)
+        
+    except Exception as e:
+        messages.error(request, f"Error loading failed login log: {str(e)}")
+        print(f"Failed login log error: {e}")
+        import traceback
+        traceback.print_exc()
+        return redirect('account_page')
     finally:
         cursor.close()

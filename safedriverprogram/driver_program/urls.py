@@ -45,7 +45,14 @@ urlpatterns = [
     path('useradmin/sponsors/<int:sponsor_id>/', views.admin_sponsor_details, name='admin_sponsor_details'),
     path('useradmin/sponsors/<int:sponsor_id>/update-status/', views.admin_update_sponsor_status, name='admin_update_sponsor_status'),
     path('useradmin/sponsors/<int:sponsor_id>/delete/', views.admin_delete_sponsor, name='admin_delete_sponsor'),
-
+    
+    #admin admin management
+    path('useradmin/admins/', views.admin_manage_admins, name='admin_manage_admins'),
+    path('useradmin/admins/<int:admin_id>/update-status/', views.admin_update_admin_status, name='admin_update_admin_status'),
+    
+    # Admin security log
+    path('useradmin/failed-login-log/', views.admin_failed_login_log, name='admin_failed_login_log'),
+    
     # Sponsor-specific pages - FIXED: Remove duplicates
     path('sponsor/home/', views.sponsor_home, name='sponsor_home'),
     path('sponsor/profile/', views.sponsor_profile, name='sponsor_profile'),
@@ -54,6 +61,12 @@ urlpatterns = [
     path('sponsor/applications/', views.sponsor_manage_applications, name='sponsor_manage_applications'),
     path('sponsor/application/<int:application_id>/', views.sponsor_view_application, name='sponsor_view_application'),
     path('sponsor-application-action/<int:application_id>/', views.sponsor_application_action, name='sponsor_application_action'),
+    
+    # Wallet history pages
+    path('sponsor/wallet-history/', views.sponsor_wallet_history, name='sponsor_wallet_history'),
+    path('sponsor/wallet-history/<int:driver_id>/', views.sponsor_wallet_history, name='sponsor_wallet_history_driver'),
+    path('useradmin/wallet-history/', views.admin_wallet_history, name='admin_wallet_history'),
+    path('useradmin/wallet-history/<int:driver_id>/', views.admin_wallet_history, name='admin_wallet_history_driver'),
 
     # Admin review pages
     path('review/admins/', views.review_admin_status, name='review_admin_status'),

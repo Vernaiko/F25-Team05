@@ -1,0 +1,135 @@
+{% extends 'base.html' %}
+
+{% block title %}Manage Admins - Admin Dashboard{% endblock %}
+
+{% block content %}
+<div class="container">
+  <div class="box">
+    <h1 class="title has-text-centered">
+      <span class="icon is-large has-text-danger">
+        <i class="fas fa-user-shield fa-2x"></i>
+      </span>
+      <br>
+      Admin Management
+    </h1>
+    
+    <!-- Statistics -->
+    <div class="columns is-multiline" style="margin-bottom: 2rem;">
+      <div class="column is-4">
+        <div class="box has-background-info-light">
+          <div class="heading">Total Admins</div>
+          <div class="title is-3 has-text-info">{{ total_admins }}</div>
+        </div>
+      </div>
+      <div class="column is-4">
+        <div class="box has-background-success-light">
+          <div class="heading">Active Admins</div>
+          <div class="title is-3 has-text-success">{{ active_admins }}</div>
+        </div>
+      </div>
+      <div class="column is-4">
+        <div class="box has-background-warning-light">
+          <div class="heading">Inactive Admins</div>
+          <div class="title is-3 has-text-warning">{{ inactive_admins }}</div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Admin List -->
+    <div class="box">
+      <h2 class="subtitle">
+        <span class="icon has-text-danger">
+          <i class="fas fa-list"></i>
+        </span>
+        All Admin Accounts
+      </h2>
+      
+      {% if admins %}
+      <div class="table-container">
+        <table class="table is-fullwidth is-striped is-hoverable">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Name</th>
+              <th>Username</th>
+              <th>Email</th>
+              <th>Phone</th>
+              <th>Status</th>
+              <th>Created</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for admin in admins %}
+            <tr>
+              <td>{{ admin.userID }}</td>
+              <td>
+                <strong>{{ admin.first_name }} {{ admin.last_name }}</strong>
+              </td>
+              <td>@{{ admin.username }}</td>
+              <td>{{ admin.email }}</td>
+              <td>{{ admin.phone_number|default:"N/A" }}</td>
+              <td>
+                {% if admin.is_active %}
+                  <span class="tag is-success">
+                    <span class="icon"><i class="fas fa-check"></i></span>
+                    <span>Active</span>
+                  </span>
+                {% else %}
+                  <span class="tag is-danger">
+                    <span class="icon"><i class="fas fa-ban"></i></span>
+                    <span>Inactive</span>
+                  </span>
+                {% endif %}
+              </td>
+              <td>{{ admin.created_at|date:"M d, Y" }}</td>
+              <td>
+                <div class="buttons are-small">
+                  {% if admin.userID != current_user_id %}
+                  <form method="post" action="{% url 'admin_update_admin_status' admin.userID %}" style="display: inline;">
+                    {% csrf_token %}
+                    <button type="submit" 
+                            class="button is-small {% if admin.is_active %}is-warning{% else %}is-success{% endif %}"
+                            title="{% if admin.is_active %}Deactivate{% else %}Activate{% endif %}"
+                            onclick="return confirm('Are you sure you want to {% if admin.is_active %}deactivate{% else %}activate{% endif %} {{ admin.first_name }} {{ admin.last_name }}?')">
+                      <span class="icon">
+                        <i class="fas fa-{% if admin.is_active %}pause{% else %}play{% endif %}"></i>
+                      </span>
+                      <span>{% if admin.is_active %}Deactivate{% else %}Activate{% endif %}</span>
+                    </button>
+                  </form>
+                  {% else %}
+                  <button class="button is-small is-static" title="You cannot modify your own account">
+                    <span class="icon"><i class="fas fa-lock"></i></span>
+                    <span>Your Account</span>
+                  </button>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="notification is-info">
+        <span class="icon">
+          <i class="fas fa-info-circle"></i>
+        </span>
+        No admin accounts found.
+      </div>
+      {% endif %}
+    </div>
+    
+    <!-- Back Button -->
+    <div class="has-text-centered" style="margin-top: 2rem;">
+      <a href="{% url 'account_page' %}" class="button is-light is-large">
+        <span class="icon">
+          <i class="fas fa-arrow-left"></i>
+        </span>
+        <span>Back to Dashboard</span>
+      </a>
+    </div>
+  </div>
+</div>
+{% endblock %}
