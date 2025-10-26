@@ -50,6 +50,9 @@ urlpatterns = [
     path('useradmin/admins/', views.admin_manage_admins, name='admin_manage_admins'),
     path('useradmin/admins/<int:admin_id>/update-status/', views.admin_update_admin_status, name='admin_update_admin_status'),
     
+    # Admin security log
+    path('useradmin/failed-login-log/', views.admin_failed_login_log, name='admin_failed_login_log'),
+    
     # Sponsor-specific pages - FIXED: Remove duplicates
     path('sponsor/home/', views.sponsor_home, name='sponsor_home'),
     path('sponsor/profile/', views.sponsor_profile, name='sponsor_profile'),

@@ -217,9 +217,61 @@ def login_page(request):
             messages.success(request, f"Welcome back, {first_name}!")
             return redirect('account_page')
         else:
+            # Log failed login attempt
+            log_failed_login_attempt(request, username, "Invalid username or password")
             messages.error(request, "Invalid username or password.")
     
     return render(request, 'login.html')
+
+
+def log_failed_login_attempt(request, username, reason):
+    """Log a failed login attempt to the database"""
+    cursor = connection.cursor()
+    try:
+        # Get IP address
+        x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
+        if x_forwarded_for:
+            ip_address = x_forwarded_for.split(',')[0]
+        else:
+            ip_address = request.META.get('REMOTE_ADDR')
+        
+        # Get user agent
+        user_agent = request.META.get('HTTP_USER_AGENT', '')[:500]  # Limit length
+        
+        # Try to determine account type from username
+        cursor.execute("SELECT account_type FROM users WHERE username = %s", [username])
+        result = cursor.fetchone()
+        account_type = result[0] if result else 'unknown'
+        
+        # Ensure table exists
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS failed_login_attempts (
+                attempt_id INT AUTO_INCREMENT PRIMARY KEY,
+                username VARCHAR(150) NOT NULL,
+                attempted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                ip_address VARCHAR(45),
+                user_agent TEXT,
+                failure_reason VARCHAR(255),
+                account_type VARCHAR(50),
+                INDEX idx_username (username),
+                INDEX idx_attempted_at (attempted_at),
+                INDEX idx_ip_address (ip_address)
+            )
+        """)
+        
+        # Insert the failed attempt
+        cursor.execute("""
+            INSERT INTO failed_login_attempts 
+            (username, ip_address, user_agent, failure_reason, account_type)
+            VALUES (%s, %s, %s, %s, %s)
+        """, [username, ip_address, user_agent, reason, account_type])
+        
+        connection.commit()
+        
+    except Exception as e:
+        print(f"Error logging failed login attempt: {e}")
+    finally:
+        cursor.close()
 
 def logout_view(request):
     """Handle user logout"""
@@ -3484,5 +3536,206 @@ def admin_wallet_history(request, driver_id=None):
         import traceback
         traceback.print_exc()
         return redirect('homepage')
+    finally:
+        cursor.close()
+
+
+# ============================================================================
+# FAILED LOGIN ATTEMPTS - ADMIN SECURITY LOG
+# ============================================================================
+
+@admin_required
+def admin_failed_login_log(request):
+    """
+    Admin view to monitor failed login attempts across all users.
+    Provides security insights and potential threat detection.
+    """
+    cursor = connection.cursor()
+    
+    try:
+        # Get filter parameters
+        username_filter = request.GET.get('username', '').strip()
+        account_type_filter = request.GET.get('account_type', '')
+        time_range = request.GET.get('time_range', '24h')  # 1h, 24h, 7d, 30d, all
+        
+        # Ensure table exists
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS failed_login_attempts (
+                attempt_id INT AUTO_INCREMENT PRIMARY KEY,
+                username VARCHAR(150) NOT NULL,
+                attempted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                ip_address VARCHAR(45),
+                user_agent TEXT,
+                failure_reason VARCHAR(255),
+                account_type VARCHAR(50),
+                INDEX idx_username (username),
+                INDEX idx_attempted_at (attempted_at),
+                INDEX idx_ip_address (ip_address)
+            )
+        """)
+        
+        # Build WHERE clause based on filters
+        where_conditions = []
+        query_params = []
+        
+        if username_filter:
+            where_conditions.append("username LIKE %s")
+            query_params.append(f"%{username_filter}%")
+        
+        if account_type_filter:
+            where_conditions.append("account_type = %s")
+            query_params.append(account_type_filter)
+        
+        # Time range filter
+        if time_range == '1h':
+            where_conditions.append("attempted_at >= DATE_SUB(NOW(), INTERVAL 1 HOUR)")
+        elif time_range == '24h':
+            where_conditions.append("attempted_at >= DATE_SUB(NOW(), INTERVAL 24 HOUR)")
+        elif time_range == '7d':
+            where_conditions.append("attempted_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)")
+        elif time_range == '30d':
+            where_conditions.append("attempted_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)")
+        # 'all' - no time filter
+        
+        where_clause = "WHERE " + " AND ".join(where_conditions) if where_conditions else ""
+        
+        # Get failed login attempts
+        query = f"""
+            SELECT 
+                attempt_id, username, attempted_at, ip_address,
+                user_agent, failure_reason, account_type
+            FROM failed_login_attempts
+            {where_clause}
+            ORDER BY attempted_at DESC
+            LIMIT 500
+        """
+        
+        cursor.execute(query, query_params)
+        attempts_rows = cursor.fetchall()
+        
+        attempts_list = []
+        for row in attempts_rows:
+            attempts_list.append({
+                'attempt_id': row[0],
+                'username': row[1],
+                'attempted_at': row[2],
+                'ip_address': row[3],
+                'user_agent': row[4][:100] if row[4] else '',  # Truncate for display
+                'failure_reason': row[5],
+                'account_type': row[6]
+            })
+        
+        # Get statistics - Top 10 usernames with most failures
+        stats_query = f"""
+            SELECT 
+                username,
+                account_type,
+                COUNT(*) as attempt_count,
+                MAX(attempted_at) as last_attempt,
+                COUNT(DISTINCT ip_address) as unique_ips
+            FROM failed_login_attempts
+            {where_clause}
+            GROUP BY username, account_type
+            ORDER BY attempt_count DESC
+            LIMIT 10
+        """
+        
+        cursor.execute(stats_query, query_params)
+        top_failures_rows = cursor.fetchall()
+        
+        top_failures = []
+        for row in top_failures_rows:
+            top_failures.append({
+                'username': row[0],
+                'account_type': row[1],
+                'attempt_count': row[2],
+                'last_attempt': row[3],
+                'unique_ips': row[4]
+            })
+        
+        # Get IP address statistics
+        ip_stats_query = f"""
+            SELECT 
+                ip_address,
+                COUNT(*) as attempt_count,
+                COUNT(DISTINCT username) as unique_usernames,
+                MAX(attempted_at) as last_attempt
+            FROM failed_login_attempts
+            {where_clause}
+            GROUP BY ip_address
+            ORDER BY attempt_count DESC
+            LIMIT 10
+        """
+        
+        cursor.execute(ip_stats_query, query_params)
+        ip_stats_rows = cursor.fetchall()
+        
+        ip_stats = []
+        for row in ip_stats_rows:
+            ip_stats.append({
+                'ip_address': row[0],
+                'attempt_count': row[1],
+                'unique_usernames': row[2],
+                'last_attempt': row[3]
+            })
+        
+        # Overall statistics
+        overall_query = f"""
+            SELECT 
+                COUNT(*) as total_attempts,
+                COUNT(DISTINCT username) as unique_usernames,
+                COUNT(DISTINCT ip_address) as unique_ips,
+                COUNT(DISTINCT DATE(attempted_at)) as days_with_attempts
+            FROM failed_login_attempts
+            {where_clause}
+        """
+        
+        cursor.execute(overall_query, query_params)
+        overall_stats = cursor.fetchone()
+        
+        # Get account type breakdown
+        account_type_query = f"""
+            SELECT 
+                account_type,
+                COUNT(*) as count
+            FROM failed_login_attempts
+            {where_clause}
+            GROUP BY account_type
+            ORDER BY count DESC
+        """
+        
+        cursor.execute(account_type_query, query_params)
+        account_type_stats = cursor.fetchall()
+        
+        account_type_breakdown = {}
+        for row in account_type_stats:
+            account_type_breakdown[row[0]] = row[1]
+        
+        context = {
+            'attempts': attempts_list,
+            'top_failures': top_failures,
+            'ip_stats': ip_stats,
+            'overall_stats': {
+                'total_attempts': overall_stats[0] if overall_stats else 0,
+                'unique_usernames': overall_stats[1] if overall_stats else 0,
+                'unique_ips': overall_stats[2] if overall_stats else 0,
+                'days_with_attempts': overall_stats[3] if overall_stats else 0
+            } if overall_stats else {},
+            'account_type_breakdown': account_type_breakdown,
+            'filters': {
+                'username': username_filter,
+                'account_type': account_type_filter,
+                'time_range': time_range
+            }
+        }
+        
+        return render(request, 'admin_failed_login_log.html', context)
+        
+    except Exception as e:
+        messages.error(request, f"Error loading failed login log: {str(e)}")
+        print(f"Failed login log error: {e}")
+        import traceback
+        traceback.print_exc()
+        return redirect('account_page')
     finally:
         cursor.close()
