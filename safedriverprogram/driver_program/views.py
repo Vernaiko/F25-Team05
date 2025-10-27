@@ -1,5 +1,5 @@
 import hashlib
-from django.shortcuts import render, redirect
+from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
 from django.db import connection
 from django.views.decorators.csrf import csrf_protect
@@ -9,11 +9,10 @@ import os
 import requests
 from django.core.files.storage import default_storage
 from django.contrib.auth.models import User
-from django.contrib.auth.decorators import user_passes_test
-from django.contrib import messages
-from django.shortcuts import render, redirect, get_object_or_404
+from django.contrib.auth.decorators import user_passes_test, login_required  # <-- added login_required
 from datetime import datetime
-from django.db import connection
+from driver_program.decorators import admin_required
+
 
 # Database authentication helper functions
 class DatabaseUser:
@@ -3262,5 +3261,30 @@ def driver_order_history(request):
         ]
 
         return render(request, 'driver_order_history.html', {'orders': order_list})
+    finally:
+        cursor.close()
+
+@admin_required
+def review_all_accounts(request):
+    cursor = connection.cursor()
+    try:
+        cursor.execute("""
+            SELECT userID, first_name, last_name, username, email, account_type, is_active
+            FROM users
+        """)
+        users = cursor.fetchall()
+        user_list = [
+            {
+                'userID': row[0],
+                'first_name': row[1],
+                'last_name': row[2],
+                'username': row[3],
+                'email': row[4],
+                'account_type': row[5],
+                'is_active': row[6],
+            }
+            for row in users
+        ]
+        return render(request, 'review_all_accounts.html', {'users': user_list})
     finally:
         cursor.close()

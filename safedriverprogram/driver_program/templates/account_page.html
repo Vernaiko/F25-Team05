@@ -35,7 +35,29 @@
               Administrator Dashboard
             </h2>
             <p class="mb-4">Manage system users and review account statuses.</p>
-            
+
+            <!-- Summary of all account types -->
+            <div class="columns is-multiline mb-4">
+              <div class="column is-one-third">
+                <div class="box has-background-danger-light has-text-centered">
+                  <p class="heading">Admins</p>
+                  <p class="title">{{ total_admins|default:0 }}</p>
+                </div>
+              </div>
+              <div class="column is-one-third">
+                <div class="box has-background-success-light has-text-centered">
+                  <p class="heading">Drivers</p>
+                  <p class="title">{{ total_drivers|default:0 }}</p>
+                </div>
+              </div>
+              <div class="column is-one-third">
+                <div class="box has-background-primary-light has-text-centered">
+                  <p class="heading">Sponsors</p>
+                  <p class="title">{{ total_sponsors|default:0 }}</p>
+                </div>
+              </div>
+            </div>
+
             <div class="field is-grouped is-grouped-multiline">
               <div class="control">
                 <a href="{% url 'add_admin' %}" class="button is-danger">
@@ -43,57 +65,54 @@
                   <span>Add Admin</span>
                 </a>
               </div>
-              
               <div class="control">
                 <a href="{% url 'admin_manage_admins' %}" class="button is-danger">
                   <span class="icon"><i class="fas fa-user-shield"></i></span>
                   <span>Manage Admins</span>
                 </a>
               </div>
-              
               <div class="control">
                 <a href="{% url 'driver_list' %}" class="button is-success">
                   <span class="icon"><i class="fas fa-car"></i></span>
                   <span>Manage Drivers</span>
                 </a>
               </div>
-              
               <div class="control">
                 <a href="{% url 'admin_sponsor_list' %}" class="button is-primary">
                   <span class="icon"><i class="fas fa-user-tie"></i></span>
                   <span>Manage Sponsors</span>
                 </a>
               </div>
-              
               <div class="control">
                 <a href="{% url 'view_sponsor_requests' %}" class="button is-warning">
                   <span class="icon"><i class="fas fa-clipboard-check"></i></span>
                   <span>Review Applications</span>
                 </a>
               </div>
-
-              <!-- NEW REVIEW BUTTONS -->
               <div class="control">
                 <a href="{% url 'review_admin_status' %}" class="button is-danger">
                   <span class="icon"><i class="fas fa-user-shield"></i></span>
                   <span>Review Admins</span>
                 </a>
               </div>
-
               <div class="control">
                 <a href="{% url 'review_driver_status' %}" class="button is-success">
                   <span class="icon"><i class="fas fa-car"></i></span>
                   <span>Review Drivers</span>
                 </a>
               </div>
-
               <div class="control">
                 <a href="{% url 'review_sponsor_status' %}" class="button is-primary">
                   <span class="icon"><i class="fas fa-user-tie"></i></span>
                   <span>Review Sponsors</span>
                 </a>
               </div>
-              <!-- END NEW BUTTONS -->
+              <div class="control">
+                <a href="{% url 'review_all_accounts' %}" class="button is-warning is-small">
+                  <span class="icon"><i class="fas fa-users"></i></span>
+                  <span>Review All Accounts</span>
+                </a>
+              </div>
             </div>
           </div>
           {% endif %}
@@ -163,6 +182,12 @@
               <div class="control"><a href="{% url 'sponsor_drivers' %}" class="button is-success"><i class="fas fa-users"></i>&nbsp;My Drivers</a></div>
               <div class="control"><a href="{% url 'sponsor_wallet_history' %}" class="button is-warning"><i class="fas fa-wallet"></i>&nbsp;Driver Wallet History</a></div>
               <div class="control"><a href="{% url 'sponsor_profile' %}" class="button is-light"><i class="fas fa-user-cog"></i>&nbsp;Sponsor Profile</a></div>
+              <div class="control">
+                <a href="{% url 'review_driver_points' %}" class="button is-warning">
+                  <span class="icon"><i class="fas fa-file-alt"></i></span>
+                  <span>Generate Driver Point History Report</span>
+                </a>
+              </div>
             </div>
           </div>
           {% endif %}

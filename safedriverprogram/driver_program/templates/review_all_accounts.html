@@ -1,0 +1,43 @@
+{% extends 'base.html' %}
+
+{% block title %}Review All Accounts - Admin{% endblock %}
+
+{% block content %}
+<div class="container">
+    <h1 class="title has-text-centered">All User Accounts</h1>
+    <div class="box">
+        <table class="table is-fullwidth is-striped is-hoverable">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>First Name</th>
+                    <th>Last Name</th>
+                    <th>Username</th>
+                    <th>Email</th>
+                    <th>Account Type</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for user in users %}
+                <tr>
+                    <td>{{ user.userID }}</td>
+                    <td>{{ user.first_name }}</td>
+                    <td>{{ user.last_name }}</td>
+                    <td>{{ user.username }}</td>
+                    <td>{{ user.email }}</td>
+                    <td>{{ user.account_type|title }}</td>
+                    <td>
+                        {% if user.is_active %}
+                            <span class="tag is-success">Active</span>
+                        {% else %}
+                            <span class="tag is-danger">Inactive</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

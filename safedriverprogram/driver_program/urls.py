@@ -81,5 +81,6 @@ urlpatterns = [
 
     path('sponsor/report/', views.generate_driver_point_report, name='generate_driver_point_report'),
     path('driver/order_history/', views.driver_order_history, name='driver_order_history'),
+    path('review/all-accounts/', review_all_accounts, name='review_all_accounts'),
 
 ]
