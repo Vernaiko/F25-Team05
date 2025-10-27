@@ -56,6 +56,7 @@
           <span>Manage Drivers</span>
         </a>
       </div>
+
       <div class="control">
         <a href="{% url 'sponsor_wallet_history' %}" class="button is-success is-large">
           <span class="icon">
@@ -64,6 +65,7 @@
           <span>Wallet History</span>
         </a>
       </div>
+
       <div class="control">
         <a href="{% url 'sponsor_profile' %}" class="button is-info is-large">
           <span class="icon">
@@ -72,7 +74,17 @@
           <span>Edit Profile</span>
         </a>
       </div>
+
+      <div class="control">
+        <a href="{% url 'generate_driver_point_report' %}" class="button is-warning is-large">
+          <span class="icon">
+            <i class="fas fa-chart-line"></i>
+          </span>
+          <span>Generate Driver Point History Report by Date Range</span>
+        </a>
+      </div>
     </div>
+
   </div>
 </div>
 {% endblock %}

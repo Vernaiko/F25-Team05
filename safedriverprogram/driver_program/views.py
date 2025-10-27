@@ -12,6 +12,8 @@ from django.contrib.auth.models import User
 from django.contrib.auth.decorators import user_passes_test
 from django.contrib import messages
 from django.shortcuts import render, redirect, get_object_or_404
+from datetime import datetime
+from django.db import connection
 
 # Database authentication helper functions
 class DatabaseUser:
@@ -3201,3 +3203,35 @@ def review_sponsor_status(request):
 
     context = {'users': sponsors, 'account_type': 'Sponsor'}
     return render(request, 'review_status.html', context)
+
+@login_required
+def generate_driver_point_report(request):
+    sponsor_id = request.session.get('user_id')
+    start_date = request.GET.get('start_date')
+    end_date = request.GET.get('end_date')
+    report_data = []
+
+    if start_date and end_date:
+        try:
+            start = datetime.strptime(start_date, "%Y-%m-%d")
+            end = datetime.strptime(end_date, "%Y-%m-%d")
+
+            with connection.cursor() as cursor:
+                cursor.execute("""
+                    SELECT d.first_name, d.last_name, p.points, p.date_awarded
+                    FROM driver_points p
+                    JOIN users d ON p.driver_id = d.userID
+                    WHERE p.sponsor_id = %s AND p.date_awarded BETWEEN %s AND %s
+                    ORDER BY p.date_awarded DESC
+                """, [sponsor_id, start, end])
+                report_data = cursor.fetchall()
+
+        except Exception as e:
+            print("Error generating report:", e)
+
+    context = {
+        'report_data': report_data,
+        'start_date': start_date,
+        'end_date': end_date,
+    }
+    return render(request, 'generate_driver_point_report.html', context)

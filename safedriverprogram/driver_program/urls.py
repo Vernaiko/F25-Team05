@@ -78,4 +78,7 @@ urlpatterns = [
     path('products/<int:product_id>/', views.view_product, name='view_product'),
     path('wishlist/', views.wishlist_page, name='wishlist'),
     path('wishlist/add/<int:product_id>', views.add_to_wishlist, name='add_to_wishlist'),
+
+    path('sponsor/report/', views.generate_driver_point_report, name='generate_driver_point_report'),
+
 ]
