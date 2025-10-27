@@ -216,9 +216,61 @@ def login_page(request):
             messages.success(request, f"Welcome back, {first_name}!")
             return redirect('account_page')
         else:
+            # Log failed login attempt
+            log_failed_login_attempt(request, username, "Invalid username or password")
             messages.error(request, "Invalid username or password.")
     
     return render(request, 'login.html')
+
+
+def log_failed_login_attempt(request, username, reason):
+    """Log a failed login attempt to the database"""
+    cursor = connection.cursor()
+    try:
+        # Get IP address
+        x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
+        if x_forwarded_for:
+            ip_address = x_forwarded_for.split(',')[0]
+        else:
+            ip_address = request.META.get('REMOTE_ADDR')
+        
+        # Get user agent
+        user_agent = request.META.get('HTTP_USER_AGENT', '')[:500]  # Limit length
+        
+        # Try to determine account type from username
+        cursor.execute("SELECT account_type FROM users WHERE username = %s", [username])
+        result = cursor.fetchone()
+        account_type = result[0] if result else 'unknown'
+        
+        # Ensure table exists
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS failed_login_attempts (
+                attempt_id INT AUTO_INCREMENT PRIMARY KEY,
+                username VARCHAR(150) NOT NULL,
+                attempted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                ip_address VARCHAR(45),
+                user_agent TEXT,
+                failure_reason VARCHAR(255),
+                account_type VARCHAR(50),
+                INDEX idx_username (username),
+                INDEX idx_attempted_at (attempted_at),
+                INDEX idx_ip_address (ip_address)
+            )
+        """)
+        
+        # Insert the failed attempt
+        cursor.execute("""
+            INSERT INTO failed_login_attempts 
+            (username, ip_address, user_agent, failure_reason, account_type)
+            VALUES (%s, %s, %s, %s, %s)
+        """, [username, ip_address, user_agent, reason, account_type])
+        
+        connection.commit()
+        
+    except Exception as e:
+        print(f"Error logging failed login attempt: {e}")
+    finally:
+        cursor.close()
 
 def logout_view(request):
     """Handle user logout"""

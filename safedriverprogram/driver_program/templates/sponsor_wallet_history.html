@@ -1,0 +1,253 @@
+{% extends 'base.html' %}
+
+{% block title %}Driver Wallet History - Safe Driver Program{% endblock %}
+
+{% block content %}
+<div class="container">
+  <div class="box">
+    <h1 class="title has-text-centered">
+      <span class="icon is-large has-text-primary">
+        <i class="fas fa-wallet fa-2x"></i>
+      </span>
+      <br>
+      Driver Wallet History
+    </h1>
+
+    <!-- Back to drivers button -->
+    <div class="mb-4">
+      <a href="{% url 'sponsor_drivers' %}" class="button is-light">
+        <span class="icon"><i class="fas fa-arrow-left"></i></span>
+        <span>Back to My Drivers</span>
+      </a>
+    </div>
+
+    <!-- Statistics -->
+    <div class="level mb-5">
+      <div class="level-item has-text-centered">
+        <div>
+          <p class="heading">Total Drivers</p>
+          <p class="title">{{ total_drivers }}</p>
+        </div>
+      </div>
+      {% if selected_driver %}
+      <div class="level-item has-text-centered">
+        <div>
+          <p class="heading">Current Balance</p>
+          <p class="title has-text-success">{{ selected_driver.points_balance }}</p>
+        </div>
+      </div>
+      <div class="level-item has-text-centered">
+        <div>
+          <p class="heading">Total Transactions</p>
+          <p class="title">{{ transactions|length }}</p>
+        </div>
+      </div>
+      {% endif %}
+    </div>
+
+    <!-- Driver Selection -->
+    <div class="box has-background-light mb-5">
+      <h2 class="subtitle">Select a Driver</h2>
+      <div class="field has-addons">
+        <div class="control is-expanded">
+          <div class="select is-fullwidth">
+            <select id="driverSelect" onchange="navigateToDriver()">
+              <option value="">-- View All Drivers --</option>
+              {% for driver in drivers %}
+              <option value="{{ driver.user_id }}" 
+                      {% if selected_driver and selected_driver.user_id == driver.user_id %}selected{% endif %}>
+                {{ driver.first_name }} {{ driver.last_name }} (@{{ driver.username }}) - {{ driver.points_balance }} points
+              </option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+        <div class="control">
+          <button class="button is-primary" onclick="navigateToDriver()">
+            <span class="icon"><i class="fas fa-eye"></i></span>
+            <span>View History</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Driver Info (if selected) -->
+    {% if selected_driver %}
+    <div class="box has-background-info-light mb-5">
+      <h2 class="subtitle has-text-info">
+        <span class="icon"><i class="fas fa-user"></i></span>
+        Driver Information
+      </h2>
+      <div class="columns">
+        <div class="column">
+          <p><strong>Name:</strong> {{ selected_driver.first_name }} {{ selected_driver.last_name }}</p>
+          <p><strong>Username:</strong> @{{ selected_driver.username }}</p>
+        </div>
+        <div class="column">
+          <p><strong>Current Balance:</strong> <span class="tag is-success is-medium">{{ selected_driver.points_balance }} points</span></p>
+          <p><strong>Last Transaction:</strong> 
+            {% if selected_driver.last_transaction_date %}
+              {{ selected_driver.last_transaction_date|date:"M d, Y g:i A" }}
+            {% else %}
+              <em>No transactions yet</em>
+            {% endif %}
+          </p>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+
+    <!-- Transactions List -->
+    {% if selected_driver %}
+      {% if transactions %}
+      <div class="box">
+        <h2 class="subtitle">
+          <span class="icon"><i class="fas fa-history"></i></span>
+          Transaction History
+        </h2>
+        <div class="table-container">
+          <table class="table is-fullwidth is-striped is-hoverable">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Type</th>
+                <th>Amount</th>
+                <th>Balance Before</th>
+                <th>Balance After</th>
+                <th>Description</th>
+                <th>Status</th>
+                <th>Processed By</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for tx in transactions %}
+              <tr>
+                <td>{{ tx.transaction_date|date:"M d, Y g:i A" }}</td>
+                <td>
+                  <span class="tag 
+                    {% if tx.transaction_type == 'reward' %}is-success
+                    {% elif tx.transaction_type == 'purchase' %}is-info
+                    {% elif tx.transaction_type == 'penalty' %}is-danger
+                    {% elif tx.transaction_type == 'refund' %}is-warning
+                    {% else %}is-light{% endif %}">
+                    {{ tx.transaction_type|title }}
+                  </span>
+                </td>
+                <td>
+                  <strong class="{% if tx.points_amount > 0 %}has-text-success{% else %}has-text-danger{% endif %}">
+                    {% if tx.points_amount > 0 %}+{% endif %}{{ tx.points_amount }}
+                  </strong>
+                </td>
+                <td>{{ tx.points_before }}</td>
+                <td>{{ tx.points_after }}</td>
+                <td>
+                  {{ tx.description|default:"—" }}
+                  {% if tx.notes %}
+                    <br><small class="has-text-grey-light">{{ tx.notes }}</small>
+                  {% endif %}
+                </td>
+                <td>
+                  <span class="tag 
+                    {% if tx.status == 'completed' %}is-success
+                    {% elif tx.status == 'pending' %}is-warning
+                    {% elif tx.status == 'failed' %}is-danger
+                    {% else %}is-light{% endif %}">
+                    {{ tx.status|title }}
+                  </span>
+                </td>
+                <td>
+                  {% if tx.sponsor_username %}
+                    Sponsor: @{{ tx.sponsor_username }}
+                  {% elif tx.admin_username %}
+                    Admin: @{{ tx.admin_username }}
+                  {% elif tx.processed_by %}
+                    {{ tx.processed_by }}
+                  {% else %}
+                    System
+                  {% endif %}
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      {% else %}
+      <div class="notification is-info">
+        <p class="has-text-centered">
+          <span class="icon is-large"><i class="fas fa-info-circle fa-2x"></i></span>
+        </p>
+        <p class="has-text-centered">No transactions found for this driver yet.</p>
+      </div>
+      {% endif %}
+    {% else %}
+      <!-- Show driver cards when no specific driver is selected -->
+      <div class="box">
+        <h2 class="subtitle">Your Drivers</h2>
+        <div class="columns is-multiline">
+          {% for driver in drivers %}
+          <div class="column is-half">
+            <div class="card">
+              <div class="card-content">
+                <div class="media">
+                  <div class="media-left">
+                    <span class="icon is-large has-text-primary">
+                      <i class="fas fa-user-circle fa-3x"></i>
+                    </span>
+                  </div>
+                  <div class="media-content">
+                    <p class="title is-5">{{ driver.first_name }} {{ driver.last_name }}</p>
+                    <p class="subtitle is-6">@{{ driver.username }}</p>
+                  </div>
+                </div>
+                <div class="content">
+                  <div class="level">
+                    <div class="level-item has-text-centered">
+                      <div>
+                        <p class="heading">Balance</p>
+                        <p class="title is-5 has-text-success">{{ driver.points_balance }}</p>
+                      </div>
+                    </div>
+                    <div class="level-item has-text-centered">
+                      <div>
+                        <p class="heading">Last Transaction</p>
+                        <p class="is-size-7">
+                          {% if driver.last_transaction_date %}
+                            {{ driver.last_transaction_date|date:"M d, Y" }}
+                          {% else %}
+                            <em>None</em>
+                          {% endif %}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                  <a href="{% url 'sponsor_wallet_history_driver' driver.user_id %}" class="button is-primary is-fullwidth">
+                    <span class="icon"><i class="fas fa-history"></i></span>
+                    <span>View History</span>
+                  </a>
+                </div>
+              </div>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+    {% endif %}
+
+  </div>
+</div>
+
+<script>
+function navigateToDriver() {
+  const select = document.getElementById('driverSelect');
+  const driverId = select.value;
+  
+  if (driverId) {
+    window.location.href = "{% url 'sponsor_wallet_history' %}" + driverId + "/";
+  } else {
+    window.location.href = "{% url 'sponsor_wallet_history' %}";
+  }
+}
+</script>
+
+{% endblock %}
