@@ -3235,3 +3235,32 @@ def generate_driver_point_report(request):
         'end_date': end_date,
     }
     return render(request, 'generate_driver_point_report.html', context)
+
+
+@login_required
+def driver_order_history(request):
+    user_id = request.user.id  # Get logged-in driver's ID
+    cursor = connection.cursor()
+    try:
+        cursor.execute("""
+            SELECT order_id, product_name, order_date, points_used, status
+            FROM orders
+            WHERE driver_id = %s
+            ORDER BY order_date DESC
+        """, [user_id])
+        orders = cursor.fetchall()
+
+        order_list = [
+            {
+                'order_id': row[0],
+                'product_name': row[1],
+                'order_date': row[2],
+                'points_used': row[3],
+                'status': row[4],
+            }
+            for row in orders
+        ]
+
+        return render(request, 'driver_order_history.html', {'orders': order_list})
+    finally:
+        cursor.close()

@@ -80,5 +80,6 @@ urlpatterns = [
     path('wishlist/add/<int:product_id>', views.add_to_wishlist, name='add_to_wishlist'),
 
     path('sponsor/report/', views.generate_driver_point_report, name='generate_driver_point_report'),
+    path('driver/order_history/', views.driver_order_history, name='driver_order_history'),
 
 ]
