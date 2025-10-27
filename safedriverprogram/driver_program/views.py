@@ -8,7 +8,6 @@ from django.conf import settings
 import os
 import requests
 from django.core.files.storage import default_storage
-
 from django.contrib.auth.models import User
 from django.contrib.auth.decorators import user_passes_test
 from django.contrib import messages
@@ -3088,3 +3087,65 @@ def wishlist_page(request):
         return redirect('homepage')
     finally:
         cursor.close()
+
+# --- Helper and Decorator ---
+def is_admin(user):
+    return user.is_staff or user.is_superuser
+
+
+def admin_required(view_func):
+    return user_passes_test(is_admin, login_url='/login/')(view_func)
+
+
+# --- Review Admin Accounts ---
+@admin_required
+def review_admin_status(request):
+    cursor = connection.cursor()
+    try:
+        cursor.execute("""
+            SELECT userID, first_name, last_name, username, email, is_active 
+            FROM users
+            WHERE account_type = 'admin'
+        """)
+        admins = cursor.fetchall()
+    finally:
+        cursor.close()
+
+    context = {'users': admins, 'account_type': 'Admin'}
+    return render(request, 'review_status.html', context)
+
+
+# --- Review Driver Accounts ---
+@admin_required
+def review_driver_status(request):
+    cursor = connection.cursor()
+    try:
+        cursor.execute("""
+            SELECT userID, first_name, last_name, username, email, is_active 
+            FROM users
+            WHERE account_type = 'driver'
+        """)
+        drivers = cursor.fetchall()
+    finally:
+        cursor.close()
+
+    context = {'users': drivers, 'account_type': 'Driver'}
+    return render(request, 'review_status.html', context)
+
+
+# --- Review Sponsor Accounts ---
+@admin_required
+def review_sponsor_status(request):
+    cursor = connection.cursor()
+    try:
+        cursor.execute("""
+            SELECT userID, first_name, last_name, username, email, is_active 
+            FROM users
+            WHERE account_type = 'sponsor'
+        """)
+        sponsors = cursor.fetchall()
+    finally:
+        cursor.close()
+
+    context = {'users': sponsors, 'account_type': 'Sponsor'}
+    return render(request, 'review_status.html', context)

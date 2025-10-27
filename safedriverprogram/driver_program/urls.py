@@ -57,8 +57,8 @@ urlpatterns = [
 
     # Admin review pages
     path('review/admins/', views.review_admin_status, name='review_admin_status'),
-    path('review/sponsors/', views.review_sponsor_status, name='review_sponsor_status'),
     path('review/drivers/', views.review_driver_status, name='review_driver_status'),
+    path('review/sponsors/', views.review_sponsor_status, name='review_sponsor_status'),
     
     # Products
     path('products/', views.view_products, name='view_products'),
