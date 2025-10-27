@@ -34,7 +34,7 @@
               </span>
               Administrator Dashboard
             </h2>
-            <p class="mb-4">Manage system users and settings.</p>
+            <p class="mb-4">Manage system users and review account statuses.</p>
             
             <div class="field is-grouped is-grouped-multiline">
               <div class="control">
@@ -71,20 +71,29 @@
                   <span>Review Applications</span>
                 </a>
               </div>
-              
+
+              <!-- NEW REVIEW BUTTONS -->
               <div class="control">
-                <a href="{% url 'admin_wallet_history' %}" class="button is-info">
-                  <span class="icon"><i class="fas fa-wallet"></i></span>
-                  <span>Wallet History</span>
+                <a href="{% url 'review_admin_status' %}" class="button is-danger">
+                  <span class="icon"><i class="fas fa-user-shield"></i></span>
+                  <span>Review Admins</span>
                 </a>
               </div>
-              
+
               <div class="control">
-                <a href="{% url 'admin_failed_login_log' %}" class="button is-dark">
-                  <span class="icon"><i class="fas fa-shield-alt"></i></span>
-                  <span>Security Log</span>
+                <a href="{% url 'review_driver_status' %}" class="button is-success">
+                  <span class="icon"><i class="fas fa-car"></i></span>
+                  <span>Review Drivers</span>
                 </a>
               </div>
+
+              <div class="control">
+                <a href="{% url 'review_sponsor_status' %}" class="button is-primary">
+                  <span class="icon"><i class="fas fa-user-tie"></i></span>
+                  <span>Review Sponsors</span>
+                </a>
+              </div>
+              <!-- END NEW BUTTONS -->
             </div>
           </div>
           {% endif %}
@@ -314,15 +323,6 @@
                   <span>Manage Addresses</span>
                 </a>
               </div>
-              
-              {% if user_info.account_type == 'admin' %}
-              <div class="control">
-                <a href="{% url 'driver_list' %}" class="button is-dark">
-                  <span class="icon"><i class="fas fa-users"></i></span>
-                  <span>All Drivers</span>
-                </a>
-              </div>
-              {% endif %}
             </div>
           </div>
           
