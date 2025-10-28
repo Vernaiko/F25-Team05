@@ -1,5 +1,5 @@
 import hashlib
-from django.shortcuts import render, redirect
+from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
 from django.db import connection
 from django.views.decorators.csrf import csrf_protect
@@ -8,11 +8,11 @@ from django.conf import settings
 import os
 import requests
 from django.core.files.storage import default_storage
-
 from django.contrib.auth.models import User
-from django.contrib.auth.decorators import user_passes_test
-from django.contrib import messages
-from django.shortcuts import render, redirect, get_object_or_404
+from django.contrib.auth.decorators import user_passes_test, login_required  # <-- added login_required
+from datetime import datetime
+from driver_program.decorators import admin_required
+
 
 # Database authentication helper functions
 class DatabaseUser:
@@ -217,9 +217,61 @@ def login_page(request):
             messages.success(request, f"Welcome back, {first_name}!")
             return redirect('account_page')
         else:
+            # Log failed login attempt
+            log_failed_login_attempt(request, username, "Invalid username or password")
             messages.error(request, "Invalid username or password.")
     
     return render(request, 'login.html')
+
+
+def log_failed_login_attempt(request, username, reason):
+    """Log a failed login attempt to the database"""
+    cursor = connection.cursor()
+    try:
+        # Get IP address
+        x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
+        if x_forwarded_for:
+            ip_address = x_forwarded_for.split(',')[0]
+        else:
+            ip_address = request.META.get('REMOTE_ADDR')
+        
+        # Get user agent
+        user_agent = request.META.get('HTTP_USER_AGENT', '')[:500]  # Limit length
+        
+        # Try to determine account type from username
+        cursor.execute("SELECT account_type FROM users WHERE username = %s", [username])
+        result = cursor.fetchone()
+        account_type = result[0] if result else 'unknown'
+        
+        # Ensure table exists
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS failed_login_attempts (
+                attempt_id INT AUTO_INCREMENT PRIMARY KEY,
+                username VARCHAR(150) NOT NULL,
+                attempted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                ip_address VARCHAR(45),
+                user_agent TEXT,
+                failure_reason VARCHAR(255),
+                account_type VARCHAR(50),
+                INDEX idx_username (username),
+                INDEX idx_attempted_at (attempted_at),
+                INDEX idx_ip_address (ip_address)
+            )
+        """)
+        
+        # Insert the failed attempt
+        cursor.execute("""
+            INSERT INTO failed_login_attempts 
+            (username, ip_address, user_agent, failure_reason, account_type)
+            VALUES (%s, %s, %s, %s, %s)
+        """, [username, ip_address, user_agent, reason, account_type])
+        
+        connection.commit()
+        
+    except Exception as e:
+        print(f"Error logging failed login attempt: {e}")
+    finally:
+        cursor.close()
 
 def logout_view(request):
     """Handle user logout"""
@@ -3095,5 +3147,153 @@ def wishlist_page(request):
     except Exception as e:
         messages.error(request, f"Error fetching wishlist: {str(e)}")
         return redirect('homepage')
+    finally:
+        cursor.close()
+
+# --- Helper and Decorator ---
+def is_admin(user):
+    return user.is_staff or user.is_superuser
+
+
+def admin_required(view_func):
+    return user_passes_test(is_admin, login_url='/login/')(view_func)
+
+
+# --- Review Admin Accounts ---
+@admin_required
+def review_admin_status(request):
+    cursor = connection.cursor()
+    try:
+        cursor.execute("""
+            SELECT userID, first_name, last_name, username, email, is_active 
+            FROM users
+            WHERE account_type = 'admin'
+        """)
+        admins = cursor.fetchall()
+    finally:
+        cursor.close()
+
+    context = {'users': admins, 'account_type': 'Admin'}
+    return render(request, 'review_status.html', context)
+
+
+# --- Review Driver Accounts ---
+@admin_required
+def review_driver_status(request):
+    cursor = connection.cursor()
+    try:
+        cursor.execute("""
+            SELECT userID, first_name, last_name, username, email, is_active 
+            FROM users
+            WHERE account_type = 'driver'
+        """)
+        drivers = cursor.fetchall()
+    finally:
+        cursor.close()
+
+    context = {'users': drivers, 'account_type': 'Driver'}
+    return render(request, 'review_status.html', context)
+
+
+# --- Review Sponsor Accounts ---
+@admin_required
+def review_sponsor_status(request):
+    cursor = connection.cursor()
+    try:
+        cursor.execute("""
+            SELECT userID, first_name, last_name, username, email, is_active 
+            FROM users
+            WHERE account_type = 'sponsor'
+        """)
+        sponsors = cursor.fetchall()
+    finally:
+        cursor.close()
+
+    context = {'users': sponsors, 'account_type': 'Sponsor'}
+    return render(request, 'review_status.html', context)
+
+@login_required
+def generate_driver_point_report(request):
+    sponsor_id = request.session.get('user_id')
+    start_date = request.GET.get('start_date')
+    end_date = request.GET.get('end_date')
+    report_data = []
+
+    if start_date and end_date:
+        try:
+            start = datetime.strptime(start_date, "%Y-%m-%d")
+            end = datetime.strptime(end_date, "%Y-%m-%d")
+
+            with connection.cursor() as cursor:
+                cursor.execute("""
+                    SELECT d.first_name, d.last_name, p.points, p.date_awarded
+                    FROM driver_points p
+                    JOIN users d ON p.driver_id = d.userID
+                    WHERE p.sponsor_id = %s AND p.date_awarded BETWEEN %s AND %s
+                    ORDER BY p.date_awarded DESC
+                """, [sponsor_id, start, end])
+                report_data = cursor.fetchall()
+
+        except Exception as e:
+            print("Error generating report:", e)
+
+    context = {
+        'report_data': report_data,
+        'start_date': start_date,
+        'end_date': end_date,
+    }
+    return render(request, 'generate_driver_point_report.html', context)
+
+
+@login_required
+def driver_order_history(request):
+    user_id = request.user.id  # Get logged-in driver's ID
+    cursor = connection.cursor()
+    try:
+        cursor.execute("""
+            SELECT order_id, product_name, order_date, points_used, status
+            FROM orders
+            WHERE driver_id = %s
+            ORDER BY order_date DESC
+        """, [user_id])
+        orders = cursor.fetchall()
+
+        order_list = [
+            {
+                'order_id': row[0],
+                'product_name': row[1],
+                'order_date': row[2],
+                'points_used': row[3],
+                'status': row[4],
+            }
+            for row in orders
+        ]
+
+        return render(request, 'driver_order_history.html', {'orders': order_list})
+    finally:
+        cursor.close()
+
+@admin_required
+def review_all_accounts(request):
+    cursor = connection.cursor()
+    try:
+        cursor.execute("""
+            SELECT userID, first_name, last_name, username, email, account_type, is_active
+            FROM users
+        """)
+        users = cursor.fetchall()
+        user_list = [
+            {
+                'userID': row[0],
+                'first_name': row[1],
+                'last_name': row[2],
+                'username': row[3],
+                'email': row[4],
+                'account_type': row[5],
+                'is_active': row[6],
+            }
+            for row in users
+        ]
+        return render(request, 'review_all_accounts.html', {'users': user_list})
     finally:
         cursor.close()

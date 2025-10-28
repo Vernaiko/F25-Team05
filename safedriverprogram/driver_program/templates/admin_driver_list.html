@@ -5,6 +5,19 @@
 {% block content %}
 <div class="container">
   <h1 class="title">All Drivers</h1>
+  
+  <!-- Quick Action Buttons -->
+  <div class="buttons mb-4">
+    <a href="{% url 'admin_wallet_history' %}" class="button is-success">
+      <span class="icon"><i class="fas fa-wallet"></i></span>
+      <span>View Wallet History</span>
+    </a>
+    <a href="{% url 'account_page' %}" class="button is-light">
+      <span class="icon"><i class="fas fa-arrow-left"></i></span>
+      <span>Back to Account</span>
+    </a>
+  </div>
+  
   <div class="box">
     <table class="table is-fullwidth is-striped">
       <thead>
@@ -46,6 +59,17 @@
       </tbody>
     </table>
   </div>
-  <a href="{% url 'account_page' %}" class="button is-light">Back to Account</a>
+  
+  <!-- Navigation buttons at bottom -->
+  <div class="buttons">
+    <a href="{% url 'admin_wallet_history' %}" class="button is-success">
+      <span class="icon"><i class="fas fa-wallet"></i></span>
+      <span>View Wallet History</span>
+    </a>
+    <a href="{% url 'account_page' %}" class="button is-light">
+      <span class="icon"><i class="fas fa-arrow-left"></i></span>
+      <span>Back to Account</span>
+    </a>
+  </div>
 </div>
 {% endblock %}
