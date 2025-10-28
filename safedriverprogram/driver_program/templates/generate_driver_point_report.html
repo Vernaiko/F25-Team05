@@ -1,0 +1,63 @@
+{% extends 'base.html' %}
+
+{% block title %}Driver Point History Report{% endblock %}
+
+{% block content %}
+<div class="container">
+  <div class="box">
+    <h1 class="title has-text-centered">
+      <span class="icon has-text-warning">
+        <i class="fas fa-chart-line"></i>
+      </span>
+      Driver Point History Report
+    </h1>
+
+    <form method="get" class="box has-background-light">
+      <div class="columns is-centered">
+        <div class="column is-3">
+          <label class="label">Start Date</label>
+          <input type="date" name="start_date" value="{{ start_date }}" class="input" required>
+        </div>
+        <div class="column is-3">
+          <label class="label">End Date</label>
+          <input type="date" name="end_date" value="{{ end_date }}" class="input" required>
+        </div>
+        <div class="column is-2 is-flex is-align-items-end">
+          <button type="submit" class="button is-warning is-fullwidth">
+            <span class="icon"><i class="fas fa-search"></i></span>
+            <span>Generate</span>
+          </button>
+        </div>
+      </div>
+    </form>
+
+    {% if report_data %}
+    <div class="box">
+      <h2 class="subtitle has-text-centered">Results from {{ start_date }} to {{ end_date }}</h2>
+      <table class="table is-fullwidth is-striped">
+        <thead>
+          <tr>
+            <th>Driver Name</th>
+            <th>Points</th>
+            <th>Date Awarded</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in report_data %}
+          <tr>
+            <td>{{ row.0 }} {{ row.1 }}</td>
+            <td>{{ row.2 }}</td>
+            <td>{{ row.3|date:"F j, Y" }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% elif start_date and end_date %}
+    <div class="notification is-warning has-text-centered">
+      No driver point history found for the selected date range.
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

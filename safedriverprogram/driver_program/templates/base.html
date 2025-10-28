@@ -25,11 +25,15 @@
         <div class="navbar-end">
           <div class="navbar-item">
             <div class="buttons">
-              {% if request.session.is_authenticated %}
+                {% if request.session.is_authenticated %}
                 <!-- Logged in user navigation -->
                 <a class="button is-primary" href="{% url 'account_page' %}">
                   <span class="icon"><i class="fas fa-user"></i></span>
                   <span>My Account</span>
+                </a>
+                <a class="button is-warning" href="{% url 'wishlist' %}">
+                  <span class="icon"><i class="fas fa-heart"></i></span>
+                  <span>My Wishlist</span>
                 </a>
                 {% if request.session.account_type == 'admin' %}
                   <a class="button is-success" href="{% url 'signup_page' %}">
