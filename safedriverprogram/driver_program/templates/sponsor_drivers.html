@@ -33,6 +33,12 @@
           <p class="title">{{ pending_applications|length }}</p>
         </div>
       </div>
+      <div class="level-item has-text-centered">
+        <div>
+          <p class="heading">Total Outstanding Points</p>
+          <p class="title has-text-success">{{ total_outstanding_points|default:0 }}</p>
+        </div>
+      </div>
     </div>
 
     <!-- Quick Action Buttons -->
@@ -146,6 +152,25 @@
         <i class="fas fa-info-circle"></i>
       </span>
       You don't have any sponsored drivers yet.
+    </div>
+    {% endif %}
+
+    <!-- Summary Section -->
+    {% if sponsored_drivers %}
+    <div class="box has-background-light" style="margin-top: 2rem; padding: 1.5rem;">
+      <div class="has-text-centered">
+        <h3 class="title is-5" style="margin-bottom: 1rem;">
+          <span class="icon has-text-success">
+            <i class="fas fa-coins"></i>
+          </span>
+          Points Summary
+        </h3>
+        <div class="content">
+          <p class="heading" style="margin-bottom: 0.5rem;">Total Outstanding Points</p>
+          <p class="title is-2 has-text-success" style="margin-bottom: 0.5rem;">{{ total_outstanding_points|default:0 }}</p>
+          <p class="subtitle is-6 has-text-grey">Across all {{ total_drivers }} driver{{ total_drivers|pluralize }}</p>
+        </div>
+      </div>
     </div>
     {% endif %}
 
