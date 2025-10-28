@@ -1,0 +1,320 @@
+{% extends 'base.html' %}
+
+{% block title %}Admin - Wallet History - Safe Driver Program{% endblock %}
+
+{% block content %}
+<div class="container">
+  <div class="box">
+    <h1 class="title has-text-centered">
+      <span class="icon is-large has-text-danger">
+        <i class="fas fa-wallet fa-2x"></i>
+      </span>
+      <br>
+      Wallet Transaction Management
+    </h1>
+
+    <p class="subtitle has-text-centered has-text-grey">Admin Dashboard - Monitor All Driver Wallets</p>
+
+    <!-- Overall Statistics -->
+    <div class="box has-background-primary-light mb-5">
+      <h2 class="subtitle has-text-primary">
+        <span class="icon"><i class="fas fa-chart-bar"></i></span>
+        Overall Statistics
+      </h2>
+      <div class="level">
+        <div class="level-item has-text-centered">
+          <div>
+            <p class="heading">Total Drivers</p>
+            <p class="title">{{ total_drivers }}</p>
+          </div>
+        </div>
+        <div class="level-item has-text-centered">
+          <div>
+            <p class="heading">Drivers with Wallets</p>
+            <p class="title">{{ overall_stats.total_drivers_with_wallets|default:0 }}</p>
+          </div>
+        </div>
+        <div class="level-item has-text-centered">
+          <div>
+            <p class="heading">Total Transactions</p>
+            <p class="title">{{ overall_stats.total_transactions|default:0 }}</p>
+          </div>
+        </div>
+        <div class="level-item has-text-centered">
+          <div>
+            <p class="heading">Points Added</p>
+            <p class="title has-text-success">+{{ overall_stats.total_points_added|default:0 }}</p>
+          </div>
+        </div>
+        <div class="level-item has-text-centered">
+          <div>
+            <p class="heading">Points Deducted</p>
+            <p class="title has-text-danger">{{ overall_stats.total_points_deducted|default:0 }}</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Driver Selection -->
+    <div class="box has-background-light mb-5">
+      <h2 class="subtitle">Filter by Driver</h2>
+      <div class="field has-addons">
+        <div class="control is-expanded">
+          <div class="select is-fullwidth">
+            <select id="driverSelect" onchange="navigateToDriver()">
+              <option value="">-- View All Drivers --</option>
+              {% for driver in drivers %}
+              <option value="{{ driver.user_id }}" 
+                      {% if selected_driver and selected_driver.user_id == driver.user_id %}selected{% endif %}>
+                {{ driver.first_name }} {{ driver.last_name }} (@{{ driver.username }}) - 
+                {{ driver.points_balance }} pts
+                {% if driver.sponsor_organization %} | {{ driver.sponsor_organization }}{% endif %}
+              </option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+        <div class="control">
+          <button class="button is-danger" onclick="navigateToDriver()">
+            <span class="icon"><i class="fas fa-search"></i></span>
+            <span>View Details</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Selected Driver Info -->
+    {% if selected_driver %}
+    <div class="box has-background-danger-light mb-5">
+      <h2 class="subtitle has-text-danger">
+        <span class="icon"><i class="fas fa-user"></i></span>
+        Driver Details
+      </h2>
+      <div class="columns">
+        <div class="column">
+          <p><strong>Name:</strong> {{ selected_driver.first_name }} {{ selected_driver.last_name }}</p>
+          <p><strong>Username:</strong> @{{ selected_driver.username }}</p>
+          <p><strong>Email:</strong> {{ selected_driver.email }}</p>
+        </div>
+        <div class="column">
+          <p><strong>Current Balance:</strong> 
+            <span class="tag is-success is-medium">{{ selected_driver.points_balance }} points</span>
+          </p>
+          <p><strong>Wallet Status:</strong> 
+            <span class="tag {% if selected_driver.wallet_active %}is-success{% else %}is-danger{% endif %}">
+              {% if selected_driver.wallet_active %}Active{% else %}Inactive{% endif %}
+            </span>
+          </p>
+          <p><strong>Sponsor Organization:</strong> {{ selected_driver.sponsor_organization|default:"None" }}</p>
+        </div>
+        <div class="column">
+          <p><strong>Last Transaction:</strong> 
+            {% if selected_driver.last_transaction_date %}
+              {{ selected_driver.last_transaction_date|date:"M d, Y g:i A" }}
+            {% else %}
+              <em>No transactions</em>
+            {% endif %}
+          </p>
+          <p><strong>Total Transactions:</strong> {{ transactions|length }}</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Transaction Statistics by Type -->
+    {% if transaction_stats %}
+    <div class="box mb-5">
+      <h2 class="subtitle">Transaction Breakdown</h2>
+      <div class="columns is-multiline">
+        {% for type, stats in transaction_stats.items %}
+        <div class="column is-one-quarter">
+          <div class="box has-text-centered">
+            <p class="heading">{{ type|title }}</p>
+            <p class="title is-4">{{ stats.count }}</p>
+            <p class="subtitle is-6">
+              Total: 
+              <span class="{% if stats.total_points > 0 %}has-text-success{% else %}has-text-danger{% endif %}">
+                {{ stats.total_points }}
+              </span>
+            </p>
+            <p class="is-size-7">Avg: {{ stats.avg_points }}</p>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+
+    <!-- Transactions Table -->
+    {% if selected_driver %}
+      {% if transactions %}
+      <div class="box">
+        <h2 class="subtitle">
+          <span class="icon"><i class="fas fa-history"></i></span>
+          Transaction History
+        </h2>
+        <div class="table-container">
+          <table class="table is-fullwidth is-striped is-hoverable is-narrow">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Date</th>
+                <th>Type</th>
+                <th>Amount</th>
+                <th>Before</th>
+                <th>After</th>
+                <th>Description</th>
+                <th>Reference</th>
+                <th>Status</th>
+                <th>Processed By</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for tx in transactions %}
+              <tr>
+                <td><code>{{ tx.transaction_id }}</code></td>
+                <td class="is-size-7">{{ tx.transaction_date|date:"M d, Y H:i" }}</td>
+                <td>
+                  <span class="tag is-small
+                    {% if tx.transaction_type == 'reward' %}is-success
+                    {% elif tx.transaction_type == 'purchase' %}is-info
+                    {% elif tx.transaction_type == 'penalty' %}is-danger
+                    {% elif tx.transaction_type == 'refund' %}is-warning
+                    {% else %}is-light{% endif %}">
+                    {{ tx.transaction_type|upper }}
+                  </span>
+                </td>
+                <td>
+                  <strong class="{% if tx.points_amount > 0 %}has-text-success{% else %}has-text-danger{% endif %}">
+                    {% if tx.points_amount > 0 %}+{% endif %}{{ tx.points_amount }}
+                  </strong>
+                </td>
+                <td>{{ tx.points_before }}</td>
+                <td>{{ tx.points_after }}</td>
+                <td class="is-size-7">
+                  {{ tx.description|default:"—"|truncatewords:10 }}
+                  {% if tx.notes %}
+                    <br><em class="has-text-grey-light">{{ tx.notes|truncatewords:8 }}</em>
+                  {% endif %}
+                </td>
+                <td class="is-size-7">
+                  {% if tx.reference_type %}
+                    <span class="tag is-light is-small">{{ tx.reference_type }}</span>
+                    {% if tx.reference_id %}
+                      <br><code class="is-size-7">{{ tx.reference_id|truncatechars:12 }}</code>
+                    {% endif %}
+                  {% else %}
+                    —
+                  {% endif %}
+                </td>
+                <td>
+                  <span class="tag is-small
+                    {% if tx.status == 'completed' %}is-success
+                    {% elif tx.status == 'pending' %}is-warning
+                    {% elif tx.status == 'failed' %}is-danger
+                    {% else %}is-light{% endif %}">
+                    {{ tx.status|upper }}
+                  </span>
+                </td>
+                <td class="is-size-7">
+                  {% if tx.sponsor_full_name %}
+                    <strong>Sponsor:</strong><br>
+                    {{ tx.sponsor_full_name }}<br>
+                    <small>@{{ tx.sponsor_username }}</small>
+                  {% elif tx.admin_full_name %}
+                    <strong>Admin:</strong><br>
+                    {{ tx.admin_full_name }}<br>
+                    <small>@{{ tx.admin_username }}</small>
+                  {% elif tx.processed_by %}
+                    {{ tx.processed_by }}
+                  {% else %}
+                    System
+                  {% endif %}
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      {% else %}
+      <div class="notification is-info">
+        <p class="has-text-centered">
+          <span class="icon is-large"><i class="fas fa-info-circle fa-2x"></i></span>
+        </p>
+        <p class="has-text-centered">No transactions found for this driver.</p>
+      </div>
+      {% endif %}
+    {% else %}
+      <!-- Show all drivers list when no specific driver is selected -->
+      <div class="box">
+        <h2 class="subtitle">All Drivers with Wallets</h2>
+        <div class="table-container">
+          <table class="table is-fullwidth is-striped is-hoverable">
+            <thead>
+              <tr>
+                <th>Driver</th>
+                <th>Username</th>
+                <th>Email</th>
+                <th>Balance</th>
+                <th>Wallet Status</th>
+                <th>Sponsor</th>
+                <th>Last Transaction</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for driver in drivers %}
+              <tr>
+                <td>{{ driver.first_name }} {{ driver.last_name }}</td>
+                <td>@{{ driver.username }}</td>
+                <td>{{ driver.email }}</td>
+                <td>
+                  <span class="tag is-medium {% if driver.points_balance > 0 %}is-success{% else %}is-light{% endif %}">
+                    {{ driver.points_balance }}
+                  </span>
+                </td>
+                <td>
+                  <span class="tag {% if driver.wallet_active %}is-success{% else %}is-danger{% endif %}">
+                    {% if driver.wallet_active %}Active{% else %}Inactive{% endif %}
+                  </span>
+                </td>
+                <td>{{ driver.sponsor_organization|default:"—" }}</td>
+                <td class="is-size-7">
+                  {% if driver.last_transaction_date %}
+                    {{ driver.last_transaction_date|date:"M d, Y" }}
+                  {% else %}
+                    <em>None</em>
+                  {% endif %}
+                </td>
+                <td>
+                  <a href="{% url 'admin_wallet_history_driver' driver.user_id %}" class="button is-small is-danger">
+                    <span class="icon is-small"><i class="fas fa-eye"></i></span>
+                    <span>View</span>
+                  </a>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    {% endif %}
+    {% endif %}
+
+  </div>
+</div>
+
+<script>
+function navigateToDriver() {
+  const select = document.getElementById('driverSelect');
+  const driverId = select.value;
+  
+  if (driverId) {
+    window.location.href = "{% url 'admin_wallet_history' %}" + driverId + "/";
+  } else {
+    window.location.href = "{% url 'admin_wallet_history' %}";
+  }
+}
+</script>
+
+{% endblock %}

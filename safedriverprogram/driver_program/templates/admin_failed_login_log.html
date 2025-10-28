@@ -1,0 +1,323 @@
+{% extends 'base.html' %}
+
+{% block title %}Failed Login Attempts - Admin Security Log{% endblock %}
+
+{% block content %}
+<div class="container">
+  <div class="box">
+    <h1 class="title has-text-centered">
+      <span class="icon is-large has-text-danger">
+        <i class="fas fa-shield-alt fa-2x"></i>
+      </span>
+      <br>
+      Failed Login Attempts Log
+    </h1>
+    
+    <p class="subtitle has-text-centered has-text-grey">Security Monitoring Dashboard</p>
+
+    <!-- Overall Statistics -->
+    <div class="box has-background-danger-light mb-5">
+      <h2 class="subtitle has-text-danger">
+        <span class="icon"><i class="fas fa-chart-line"></i></span>
+        Overall Statistics
+      </h2>
+      <div class="level">
+        <div class="level-item has-text-centered">
+          <div>
+            <p class="heading">Total Attempts</p>
+            <p class="title has-text-danger">{{ overall_stats.total_attempts }}</p>
+          </div>
+        </div>
+        <div class="level-item has-text-centered">
+          <div>
+            <p class="heading">Unique Usernames</p>
+            <p class="title">{{ overall_stats.unique_usernames }}</p>
+          </div>
+        </div>
+        <div class="level-item has-text-centered">
+          <div>
+            <p class="heading">Unique IP Addresses</p>
+            <p class="title">{{ overall_stats.unique_ips }}</p>
+          </div>
+        </div>
+        <div class="level-item has-text-centered">
+          <div>
+            <p class="heading">Days with Attempts</p>
+            <p class="title">{{ overall_stats.days_with_attempts }}</p>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Account Type Breakdown -->
+      {% if account_type_breakdown %}
+      <div class="tags are-medium mt-3">
+        <span class="tag is-light">Account Types:</span>
+        {% for account_type, count in account_type_breakdown.items %}
+          <span class="tag 
+            {% if account_type == 'admin' %}is-danger
+            {% elif account_type == 'sponsor' %}is-primary
+            {% elif account_type == 'driver' %}is-success
+            {% else %}is-info{% endif %}">
+            {{ account_type|title }}: {{ count }}
+          </span>
+        {% endfor %}
+      </div>
+      {% endif %}
+    </div>
+
+    <!-- Filters -->
+    <div class="box has-background-light mb-5">
+      <h2 class="subtitle">
+        <span class="icon"><i class="fas fa-filter"></i></span>
+        Filter Results
+      </h2>
+      <form method="get" action="{% url 'admin_failed_login_log' %}">
+        <div class="columns">
+          <div class="column">
+            <div class="field">
+              <label class="label">Username</label>
+              <div class="control has-icons-left">
+                <input class="input" type="text" name="username" placeholder="Search by username..." 
+                       value="{{ filters.username }}">
+                <span class="icon is-small is-left">
+                  <i class="fas fa-user"></i>
+                </span>
+              </div>
+            </div>
+          </div>
+          
+          <div class="column">
+            <div class="field">
+              <label class="label">Account Type</label>
+              <div class="control">
+                <div class="select is-fullwidth">
+                  <select name="account_type">
+                    <option value="">All Types</option>
+                    <option value="admin" {% if filters.account_type == 'admin' %}selected{% endif %}>Admin</option>
+                    <option value="sponsor" {% if filters.account_type == 'sponsor' %}selected{% endif %}>Sponsor</option>
+                    <option value="driver" {% if filters.account_type == 'driver' %}selected{% endif %}>Driver</option>
+                    <option value="unknown" {% if filters.account_type == 'unknown' %}selected{% endif %}>Unknown</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <div class="column">
+            <div class="field">
+              <label class="label">Time Range</label>
+              <div class="control">
+                <div class="select is-fullwidth">
+                  <select name="time_range">
+                    <option value="1h" {% if filters.time_range == '1h' %}selected{% endif %}>Last Hour</option>
+                    <option value="24h" {% if filters.time_range == '24h' %}selected{% endif %}>Last 24 Hours</option>
+                    <option value="7d" {% if filters.time_range == '7d' %}selected{% endif %}>Last 7 Days</option>
+                    <option value="30d" {% if filters.time_range == '30d' %}selected{% endif %}>Last 30 Days</option>
+                    <option value="all" {% if filters.time_range == 'all' %}selected{% endif %}>All Time</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <div class="column is-narrow">
+            <div class="field">
+              <label class="label">&nbsp;</label>
+              <div class="control">
+                <button type="submit" class="button is-danger">
+                  <span class="icon"><i class="fas fa-search"></i></span>
+                  <span>Filter</span>
+                </button>
+              </div>
+            </div>
+          </div>
+          
+          <div class="column is-narrow">
+            <div class="field">
+              <label class="label">&nbsp;</label>
+              <div class="control">
+                <a href="{% url 'admin_failed_login_log' %}" class="button is-light">
+                  <span class="icon"><i class="fas fa-redo"></i></span>
+                  <span>Reset</span>
+                </a>
+              </div>
+            </div>
+          </div>
+        </div>
+      </form>
+    </div>
+
+    <!-- Top Offenders -->
+    {% if top_failures %}
+    <div class="box mb-5">
+      <h2 class="subtitle has-text-danger">
+        <span class="icon"><i class="fas fa-exclamation-triangle"></i></span>
+        Top Failed Login Attempts by Username
+      </h2>
+      <div class="table-container">
+        <table class="table is-fullwidth is-striped is-hoverable">
+          <thead>
+            <tr>
+              <th>Username</th>
+              <th>Account Type</th>
+              <th>Attempts</th>
+              <th>Unique IPs</th>
+              <th>Last Attempt</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for failure in top_failures %}
+            <tr>
+              <td><strong>{{ failure.username }}</strong></td>
+              <td>
+                <span class="tag 
+                  {% if failure.account_type == 'admin' %}is-danger
+                  {% elif failure.account_type == 'sponsor' %}is-primary
+                  {% elif failure.account_type == 'driver' %}is-success
+                  {% else %}is-light{% endif %}">
+                  {{ failure.account_type|title }}
+                </span>
+              </td>
+              <td>
+                <span class="tag is-danger is-medium">{{ failure.attempt_count }}</span>
+              </td>
+              <td>{{ failure.unique_ips }}</td>
+              <td>{{ failure.last_attempt|date:"M d, Y H:i" }}</td>
+              <td>
+                <a href="?username={{ failure.username }}" class="button is-small is-info">
+                  <span class="icon is-small"><i class="fas fa-search"></i></span>
+                  <span>View All</span>
+                </a>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    {% endif %}
+
+    <!-- IP Address Statistics -->
+    {% if ip_stats %}
+    <div class="box mb-5">
+      <h2 class="subtitle has-text-warning">
+        <span class="icon"><i class="fas fa-network-wired"></i></span>
+        Top IP Addresses with Failed Attempts
+      </h2>
+      <div class="table-container">
+        <table class="table is-fullwidth is-striped is-hoverable">
+          <thead>
+            <tr>
+              <th>IP Address</th>
+              <th>Total Attempts</th>
+              <th>Unique Usernames</th>
+              <th>Last Attempt</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for ip in ip_stats %}
+            <tr>
+              <td><code>{{ ip.ip_address }}</code></td>
+              <td>
+                <span class="tag is-warning is-medium">{{ ip.attempt_count }}</span>
+              </td>
+              <td>{{ ip.unique_usernames }}</td>
+              <td>{{ ip.last_attempt|date:"M d, Y H:i" }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    {% endif %}
+
+    <!-- All Failed Attempts -->
+    <div class="box">
+      <h2 class="subtitle">
+        <span class="icon"><i class="fas fa-list"></i></span>
+        Failed Login Attempts Log
+        <span class="tag is-light is-medium">{{ attempts|length }} records</span>
+      </h2>
+      
+      {% if attempts %}
+      <div class="table-container">
+        <table class="table is-fullwidth is-striped is-hoverable is-narrow">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Username</th>
+              <th>Type</th>
+              <th>Date/Time</th>
+              <th>IP Address</th>
+              <th>Reason</th>
+              <th>User Agent</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for attempt in attempts %}
+            <tr>
+              <td><code>{{ attempt.attempt_id }}</code></td>
+              <td><strong>{{ attempt.username }}</strong></td>
+              <td>
+                <span class="tag is-small
+                  {% if attempt.account_type == 'admin' %}is-danger
+                  {% elif attempt.account_type == 'sponsor' %}is-primary
+                  {% elif attempt.account_type == 'driver' %}is-success
+                  {% else %}is-light{% endif %}">
+                  {{ attempt.account_type|upper }}
+                </span>
+              </td>
+              <td class="is-size-7">{{ attempt.attempted_at|date:"M d, Y H:i:s" }}</td>
+              <td><code class="is-size-7">{{ attempt.ip_address }}</code></td>
+              <td class="is-size-7">{{ attempt.failure_reason }}</td>
+              <td class="is-size-7">{{ attempt.user_agent|truncatewords:5 }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      
+      {% if attempts|length >= 500 %}
+      <div class="notification is-warning mt-3">
+        <p><strong>Note:</strong> Showing the most recent 500 records. Use filters to narrow down results.</p>
+      </div>
+      {% endif %}
+      
+      {% else %}
+      <div class="notification is-success">
+        <p class="has-text-centered">
+          <span class="icon is-large"><i class="fas fa-check-circle fa-2x"></i></span>
+        </p>
+        <p class="has-text-centered">
+          <strong>Great news!</strong> No failed login attempts found with the current filters.
+        </p>
+      </div>
+      {% endif %}
+    </div>
+
+    <!-- Navigation -->
+    <div class="buttons">
+      <a href="{% url 'account_page' %}" class="button is-light">
+        <span class="icon"><i class="fas fa-arrow-left"></i></span>
+        <span>Back to Account</span>
+      </a>
+      <a href="{% url 'admin_manage_admins' %}" class="button is-danger">
+        <span class="icon"><i class="fas fa-user-shield"></i></span>
+        <span>Manage Admins</span>
+      </a>
+    </div>
+
+  </div>
+</div>
+
+<style>
+/* Responsive table scrolling for mobile */
+@media screen and (max-width: 768px) {
+  .table-container {
+    overflow-x: auto;
+  }
+}
+</style>
+
+{% endblock %}
