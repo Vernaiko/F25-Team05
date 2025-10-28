@@ -12,6 +12,8 @@ from django.contrib.auth.models import User
 from django.contrib.auth.decorators import user_passes_test, login_required  # <-- added login_required
 from datetime import datetime
 from driver_program.decorators import admin_required
+from django.contrib.auth.decorators import login_required
+
 
 
 # Database authentication helper functions

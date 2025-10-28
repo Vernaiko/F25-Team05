@@ -82,9 +82,10 @@ urlpatterns = [
     path('products/<int:product_id>/', views.view_product, name='view_product'),
     path('wishlist/', views.wishlist_page, name='wishlist'),
     path('wishlist/add/<int:product_id>', views.add_to_wishlist, name='add_to_wishlist'),
-
-    path('sponsor/report/', views.generate_driver_point_report, name='generate_driver_point_report'),
-    path('driver/order_history/', views.driver_order_history, name='driver_order_history'),
-    path('review/all-accounts/', views.review_all_accounts, name='review_all_accounts'),
+    
+    # Reports and Account Review
+    path('sponsor/driver-point-report/', views.generate_driver_point_report, name='generate_driver_point_report'),
+    path('driver/order-history/', views.driver_order_history, name='driver_order_history'),
+    path('admin/review-all-accounts/', views.review_all_accounts, name='review_all_accounts'),
 
 ]
