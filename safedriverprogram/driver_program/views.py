@@ -3532,3 +3532,116 @@ def review_driver_points(request):
     """Placeholder for review driver points view."""
     from django.http import HttpResponse
     return HttpResponse("Review driver points feature is not yet implemented.")
+@db_login_required
+def view_cart(request):
+    """Display the logged-in driver's shopping cart."""
+    # Check login and driver role
+    if not request.session.get('is_authenticated'):
+        messages.error(request, "Please log in to view your cart.")
+        return redirect('login_page')
+    if request.session.get('account_type') != 'driver':
+        messages.error(request, "Only drivers can access the cart.")
+        return redirect('homepage')
+
+    user_id = request.session.get('user_id')
+    cursor = connection.cursor()
+
+    try:
+        # Create table if it doesn't exist
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS user_cart (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                user_id INT NOT NULL,
+                product_id INT NOT NULL,
+                quantity INT DEFAULT 1,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE KEY uniq_user_product (user_id, product_id),
+                INDEX idx_user_id (user_id)
+            )
+        """)
+
+        # Fetch all cart items
+        cursor.execute("""
+            SELECT product_id, quantity FROM user_cart WHERE user_id = %s
+        """, [user_id])
+        rows = cursor.fetchall()
+
+        cart_items = []
+        total = 0
+
+        # Fetch live product info from API for each item
+        import requests
+        for product_id, qty in rows:
+            try:
+                response = requests.get(f"https://fakestoreapi.com/products/{product_id}", timeout=5)
+                if response.status_code == 200:
+                    product = response.json()
+                    product['quantity'] = qty
+                    product['subtotal'] = product['price'] * qty
+                    total += product['subtotal']
+                    cart_items.append(product)
+            except Exception as e:
+                print(f"Error fetching product {product_id}: {e}")
+
+        if not cart_items:
+            messages.info(request, "Your cart is empty.")
+
+        context = {
+            'cart_items': cart_items,
+            'total': round(total, 2),
+        }
+        return render(request, 'cart.html', context)
+
+    except Exception as e:
+        messages.error(request, f"Error loading your cart: {str(e)}")
+        return redirect('homepage')
+    finally:
+        try:
+            cursor.close()
+        except:
+            pass
+
+@db_login_required
+def add_to_cart(request, product_id):
+    """Add a product to the logged-in driver’s cart."""
+    if not request.session.get('is_authenticated'):
+        messages.error(request, "Please log in to add items to your cart.")
+        return redirect('login_page')
+    if request.session.get('account_type') != 'driver':
+        messages.error(request, "Only drivers can add products to the cart.")
+        return redirect('homepage')
+
+    user_id = request.session.get('user_id')
+    cursor = connection.cursor()
+
+    try:
+        # Make sure table exists
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS user_cart (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                user_id INT NOT NULL,
+                product_id INT NOT NULL,
+                quantity INT DEFAULT 1,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE KEY uniq_user_product (user_id, product_id)
+            )
+        """)
+
+        # Try inserting; if already there, increment quantity
+        cursor.execute("""
+            INSERT INTO user_cart (user_id, product_id, quantity)
+            VALUES (%s, %s, 1)
+            ON DUPLICATE KEY UPDATE quantity = quantity + 1
+        """, [user_id, product_id])
+
+        messages.success(request, "Product added to your cart!")
+        return redirect('view_cart')
+
+    except Exception as e:
+        messages.error(request, f"Error adding to cart: {e}")
+        return redirect('view_products')
+    finally:
+        try:
+            cursor.close()
+        except:
+            pass

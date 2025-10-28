@@ -35,6 +35,15 @@
                   <span class="icon"><i class="fas fa-heart"></i></span>
                   <span>My Wishlist</span>
                 </a>
+
+                {# ✅ NEW CART BUTTON FOR DRIVERS ONLY #}
+                {% if request.session.account_type == 'driver' %}
+                <a class="button is-link" href="{% url 'view_cart' %}">
+                  <span class="icon"><i class="fas fa-shopping-cart"></i></span>
+                  <span>My Cart</span>
+                </a>
+                {% endif %}
+
                 {% if request.session.account_type == 'admin' %}
                   <a class="button is-success" href="{% url 'signup_page' %}">
                     <span class="icon"><i class="fas fa-user-plus"></i></span>

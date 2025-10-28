@@ -77,27 +77,44 @@
         <div class="columns is-multiline">
             {% for product in products %}
             <div class="column is-one-quarter">
-                <a href="{% url 'view_product' product.id %}" style="color: inherit;">
                 <div class="card">
                     <div class="card-image">
                         <figure class="image is-4by3">
-                            <img src="{{ product.image }}" alt="{{ product.title }}" style="object-fit: contain; padding: 1rem;">
+                            <a href="{% url 'view_product' product.id %}">
+                                <img src="{{ product.image }}" alt="{{ product.title }}" style="object-fit: contain; padding: 1rem;">
+                            </a>
                         </figure>
                     </div>
+
                     <div class="card-content">
                         <div class="content">
-                            <h4 class="title is-5">{{ product.title }}</h4>
+                            <h4 class="title is-5">
+                                <a href="{% url 'view_product' product.id %}" class="has-text-dark">
+                                    {{ product.title }}
+                                </a>
+                            </h4>
                             <p class="subtitle is-6">${{ product.price }}</p>
-                            <div class="tags">
+
+                            <div class="tags mb-2">
                                 <span class="tag is-primary">{{ product.category }}</span>
                             </div>
-                            <div class="has-text-grey-light is-size-7">
+
+                            <div class="has-text-grey-light is-size-7 mb-3">
                                 Rating: {{ product.rating.rate }} ({{ product.rating.count }} reviews)
                             </div>
+
+                            {# ✅ ADD TO CART BUTTON (Visible only for Drivers) #}
+                            {% if request.session.account_type == 'driver' %}
+                            <div class="mt-3">
+                                <a href="{% url 'add_to_cart' product.id %}" class="button is-link is-small">
+                                    <span class="icon"><i class="fas fa-cart-plus"></i></span>
+                                    <span>Add to Cart</span>
+                                </a>
+                            </div>
+                            {% endif %}
                         </div>
                     </div>
                 </div>
-                </a>
             </div>
             {% endfor %}
         </div>

@@ -26,7 +26,6 @@ urlpatterns = [
     path('account/delete/', views.delete_account, name='delete_account'),
     path('organzation_page/', views.to_organization_page, name='organization_page'),
 
-    
     # Applications
     path('sponsor-application/', views.sponsor_application, name='sponsor_application'),
     path('application-success/', views.application_success, name='application_success'),
@@ -57,6 +56,8 @@ urlpatterns = [
     path('useradmin/failed-login-log/', views.admin_failed_login_log, name='admin_failed_login_log'),
     
     # Sponsor-specific pages - FIXED: Remove duplicates
+
+    # Sponsor-specific pages
     path('sponsor/home/', views.sponsor_home, name='sponsor_home'),
     path('sponsor/profile/', views.sponsor_profile, name='sponsor_profile'),
     path('sponsor/drivers/', views.sponsor_drivers, name='sponsor_drivers'),
@@ -77,7 +78,7 @@ urlpatterns = [
     path('review/sponsors/', views.review_sponsor_status, name='review_sponsor_status'),
     path('review/driver-points/', views.review_driver_points, name='review_driver_points'),
     
-    # Products
+    # Products and driver store pages
     path('products/', views.view_products, name='view_products'),
     path('products/<int:product_id>/', views.view_product, name='view_product'),
     path('wishlist/', views.wishlist_page, name='wishlist'),
@@ -88,4 +89,7 @@ urlpatterns = [
     path('driver/order-history/', views.driver_order_history, name='driver_order_history'),
     path('admin/review-all-accounts/', views.review_all_accounts, name='review_all_accounts'),
 
+]
+    path('cart/add/<int:product_id>/', views.add_to_cart, name='add_to_cart'),
+    path('cart/', views.view_cart, name='view_cart'),
 ]
