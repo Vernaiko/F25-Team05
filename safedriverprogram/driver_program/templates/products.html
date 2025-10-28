@@ -5,7 +5,27 @@
 {% block content %}
 <section class="section">
     <div class="container">
-        <h1 class="title">Available Products</h1>
+        <div class="level">
+            <div class="level-left">
+                <div class="level-item">
+                    <h1 class="title">Available Products</h1>
+                </div>
+            </div>
+            <div class="level-right">
+                <div class="level-item">
+                    <div class="buttons has-addons">
+                        <a href="{% url 'view_products' %}?sort=price_asc" 
+                           class="button {% if current_sort == 'price_asc' %}is-primary{% endif %}">
+                            Price: Low to High
+                        </a>
+                        <a href="{% url 'view_products' %}?sort=price_desc" 
+                           class="button {% if current_sort == 'price_desc' %}is-primary{% endif %}">
+                            Price: High to Low
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
         
         {% if error_message %}
         <div class="notification is-danger">

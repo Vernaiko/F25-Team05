@@ -2302,17 +2302,26 @@ def review_driver_status(request):
     return render(request, "driver_status.html", {"drivers": drivers})
 
 def view_products(request):
-    """Display products from Fake Store API"""
+    """Display products from Fake Store API with optional sorting"""
     import requests
-
+    
+    sort_order = request.GET.get('sort', '')  # Get sort parameter from query string
+    
     try:
         # Fetch products from the Fake Store API
         response = requests.get('https://fakestoreapi.com/products')
         response.raise_for_status()  # Raise an exception for error status codes
         products = response.json()
-
+        
+        # Sort products if requested
+        if sort_order == 'price_asc':
+            products.sort(key=lambda x: float(x['price']))
+        elif sort_order == 'price_desc':
+            products.sort(key=lambda x: float(x['price']), reverse=True)
+            
         return render(request, 'products.html', {
-            'products': products
+            'products': products,
+            'current_sort': sort_order
         })
     except requests.RequestException as e:
         return render(request, 'products.html', {
