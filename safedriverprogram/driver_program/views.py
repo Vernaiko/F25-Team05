@@ -1770,11 +1770,15 @@ def sponsor_drivers(request):
                 'goals_description': app[9]
             })
         
+        # Calculate total outstanding points
+        total_outstanding_points = sum(d['points'] for d in drivers_list)
+        
         context = {
             'sponsored_drivers': drivers_list,
             'pending_applications': applications_list,
             'total_drivers': len(drivers_list),
-            'active_drivers': len([d for d in drivers_list if d['relationship_status'] == 'active'])
+            'active_drivers': len([d for d in drivers_list if d['relationship_status'] == 'active']),
+            'total_outstanding_points': total_outstanding_points
         }
         
         return render(request, 'sponsor_drivers.html', context)
@@ -1846,13 +1850,14 @@ def driver_list(request):
 
 @admin_required
 def admin_driver_dashboard(request):
-    """Admin dashboard: list all drivers from the custom `users` table (account_type='driver').
+    """Admin dashboard: list all drivers with their points from all sponsors.
 
     This uses the same session-based admin check (`admin_required`) used elsewhere in the app
     so it works with your database-backed login/session system.
     """
     cursor = connection.cursor()
     try:
+        # Get all drivers
         cursor.execute("""
             SELECT userID, username, first_name, last_name, email,
                    phone_number, account_type, is_active, created_at
@@ -1863,8 +1868,10 @@ def admin_driver_dashboard(request):
 
         rows = cursor.fetchall()
         drivers = []
+        total_points_across_all_drivers = 0
+        
         for r in rows:
-            drivers.append({
+            driver_data = {
                 'user_id': r[0],
                 'username': r[1],
                 'first_name': r[2],
@@ -1873,11 +1880,56 @@ def admin_driver_dashboard(request):
                 'phone_number': r[5],
                 'account_type': r[6],
                 'is_active': bool(r[7]),
-                'created_at': r[8]
-            })
+                'created_at': r[8],
+                'total_points': 0,
+                'sponsor_breakdown': []
+            }
+            
+            # Get points from all sponsors for this driver
+            try:
+                cursor.execute("""
+                    SELECT 
+                        dpt.sponsor_user_id,
+                        u.first_name AS sponsor_first_name,
+                        u.last_name AS sponsor_last_name,
+                        u.username AS sponsor_username,
+                        SUM(dpt.points) AS total_points_from_sponsor,
+                        COUNT(dpt.id) AS transaction_count
+                    FROM driver_points_transactions dpt
+                    JOIN users u ON dpt.sponsor_user_id = u.userID
+                    WHERE dpt.driver_user_id = %s
+                    GROUP BY dpt.sponsor_user_id, u.first_name, u.last_name, u.username
+                    ORDER BY total_points_from_sponsor DESC
+                """, [r[0]])
+                
+                sponsor_points = cursor.fetchall()
+                driver_total = 0
+                
+                for sp in sponsor_points:
+                    points_from_sponsor = sp[4] or 0
+                    driver_total += points_from_sponsor
+                    driver_data['sponsor_breakdown'].append({
+                        'sponsor_id': sp[0],
+                        'sponsor_name': f"{sp[1]} {sp[2]}",
+                        'sponsor_username': sp[3],
+                        'points': points_from_sponsor,
+                        'transaction_count': sp[5]
+                    })
+                
+                driver_data['total_points'] = driver_total
+                total_points_across_all_drivers += driver_total
+                
+            except Exception as e:
+                print(f"Error loading points for driver {r[0]}: {e}")
+                driver_data['total_points'] = 0
+                driver_data['sponsor_breakdown'] = []
+            
+            drivers.append(driver_data)
 
         return render(request, 'admin_driver_list.html', {
             'drivers': drivers,
+            'total_drivers': len(drivers),
+            'total_points_all_drivers': total_points_across_all_drivers
         })
 
     except Exception as e:
@@ -1940,6 +1992,137 @@ def admin_delete_driver(request, user_id):
             pass
 
 # Add these functions to your existing driver_program/views.py file
+
+
+@admin_required
+def admin_drivers_csv_export(request):
+    """Export all drivers and their point transactions to CSV format."""
+    import csv
+    from django.http import HttpResponse
+    from datetime import datetime
+    
+    cursor = connection.cursor()
+    
+    try:
+        # Create the HTTP response with CSV content type
+        response = HttpResponse(content_type='text/csv')
+        response['Content-Disposition'] = f'attachment; filename="drivers_export_{datetime.now().strftime("%Y%m%d_%H%M%S")}.csv"'
+        
+        writer = csv.writer(response)
+        
+        # Write the header row
+        writer.writerow([
+            'Driver ID',
+            'Username', 
+            'First Name',
+            'Last Name',
+            'Email',
+            'Phone',
+            'Status',
+            'Join Date',
+            'Total Points',
+            'Transaction Date',
+            'Transaction Points',
+            'Transaction Message',
+            'Sponsor Name',
+            'Sponsor Username'
+        ])
+        
+        # Get all drivers
+        cursor.execute("""
+            SELECT userID, username, first_name, last_name, email,
+                   phone_number, is_active, created_at
+            FROM users
+            WHERE account_type = %s
+            ORDER BY last_name, first_name
+        """, ['driver'])
+        
+        drivers = cursor.fetchall()
+        
+        for driver in drivers:
+            driver_id = driver[0]
+            username = driver[1]
+            first_name = driver[2]
+            last_name = driver[3]
+            email = driver[4]
+            phone = driver[5] or ''
+            is_active = 'Active' if driver[6] else 'Inactive'
+            join_date = driver[7].strftime('%Y-%m-%d') if driver[7] else ''
+            
+            # Get all transactions for this driver
+            cursor.execute("""
+                SELECT 
+                    dpt.points,
+                    dpt.message,
+                    dpt.created_at,
+                    u.first_name AS sponsor_first_name,
+                    u.last_name AS sponsor_last_name,
+                    u.username AS sponsor_username
+                FROM driver_points_transactions dpt
+                JOIN users u ON dpt.sponsor_user_id = u.userID
+                WHERE dpt.driver_user_id = %s
+                ORDER BY dpt.created_at DESC
+            """, [driver_id])
+            
+            transactions = cursor.fetchall()
+            
+            # Calculate total points
+            total_points = sum(t[0] for t in transactions) if transactions else 0
+            
+            if transactions:
+                # Write one row per transaction
+                for transaction in transactions:
+                    transaction_points = transaction[0]
+                    transaction_message = transaction[1] or ''
+                    transaction_date = transaction[2].strftime('%Y-%m-%d %H:%M:%S') if transaction[2] else ''
+                    sponsor_name = f"{transaction[3]} {transaction[4]}"
+                    sponsor_username = transaction[5]
+                    
+                    writer.writerow([
+                        driver_id,
+                        username,
+                        first_name,
+                        last_name,
+                        email,
+                        phone,
+                        is_active,
+                        join_date,
+                        total_points,
+                        transaction_date,
+                        transaction_points,
+                        transaction_message,
+                        sponsor_name,
+                        sponsor_username
+                    ])
+            else:
+                # Write one row for drivers with no transactions
+                writer.writerow([
+                    driver_id,
+                    username,
+                    first_name,
+                    last_name,
+                    email,
+                    phone,
+                    is_active,
+                    join_date,
+                    0,  # total_points
+                    '',  # transaction_date
+                    '',  # transaction_points
+                    '',  # transaction_message
+                    '',  # sponsor_name
+                    ''   # sponsor_username
+                ])
+        
+        return response
+        
+    except Exception as e:
+        messages.error(request, f"Error generating CSV export: {str(e)}")
+        return redirect('admin_driver_dashboard')
+    finally:
+        try:
+            cursor.close()
+        except:
+            pass
 
 @db_login_required
 def sponsor_manage_applications(request):
@@ -2359,6 +2542,10 @@ def view_products(request):
     
     sort_order = request.GET.get('sort', '')  # Get sort parameter from query string
     
+    """Display products from Fake Store API with search functionality"""
+
+    search_query = request.GET.get('search', '').strip()
+
     try:
         # Fetch products from the Fake Store API
         response = requests.get('https://fakestoreapi.com/products')
@@ -2374,11 +2561,30 @@ def view_products(request):
         return render(request, 'products.html', {
             'products': products,
             'current_sort': sort_order
+
+        # Filter products based on search query
+        if search_query:
+            filtered_products = []
+            search_lower = search_query.lower()
+            for product in products:
+                # Search in title, description, and category
+                if (search_lower in product.get('title', '').lower() or 
+                    search_lower in product.get('description', '').lower() or 
+                    search_lower in product.get('category', '').lower()):
+                    filtered_products.append(product)
+            products = filtered_products
+
+        return render(request, 'products.html', {
+            'products': products,
+            'search_query': search_query,
+            'total_products': len(products)
         })
     except requests.RequestException as e:
         return render(request, 'products.html', {
             'error_message': f"Failed to fetch products: {str(e)}",
-            'products': []
+            'products': [],
+            'search_query': search_query,
+            'total_products': 0
         })
 
 @db_login_required
@@ -3297,3 +3503,35 @@ def review_all_accounts(request):
         return render(request, 'review_all_accounts.html', {'users': user_list})
     finally:
         cursor.close()
+
+
+# Placeholder functions for missing views
+@login_required
+def sponsor_wallet_history(request, driver_id=None):
+    """Placeholder for sponsor wallet history view."""
+    from django.http import HttpResponse
+    return HttpResponse("Sponsor wallet history feature is not yet implemented.")
+
+@login_required  
+def admin_wallet_history(request, driver_id=None):
+    """Placeholder for admin wallet history view."""
+    from django.http import HttpResponse
+    return HttpResponse("Admin wallet history feature is not yet implemented.")
+
+@login_required
+def admin_failed_login_log(request):
+    """Placeholder for admin failed login log view."""
+    from django.http import HttpResponse
+    return HttpResponse("Admin failed login log feature is not yet implemented.")
+
+@login_required
+def admin_update_admin_status(request, admin_id):
+    """Placeholder for admin update admin status view."""
+    from django.http import HttpResponse
+    return HttpResponse("Admin update admin status feature is not yet implemented.")
+
+@login_required
+def review_driver_points(request):
+    """Placeholder for review driver points view."""
+    from django.http import HttpResponse
+    return HttpResponse("Review driver points feature is not yet implemented.")

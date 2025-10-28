@@ -19,6 +19,9 @@ urlpatterns = [
     path('useradmin/add/', views.add_admin, name='add_admin'),
     path('useradmin/list/', views.admin_list, name='admin_list'),
     path('useradmin/delete/<int:admin_id>/', views.delete_admin, name='delete_admin'),
+    path('useradmin/drivers/', views.admin_driver_dashboard, name='admin_driver_dashboard'),
+    path('useradmin/drivers/export-csv/', views.admin_drivers_csv_export, name='admin_drivers_csv_export'),
+    path('useradmin/drivers/delete/<int:user_id>/', views.admin_delete_driver, name='admin_delete_driver'),
     path('drivers/', views.driver_list, name='driver_list'),
     path('account/delete/', views.delete_account, name='delete_account'),
     path('organzation_page/', views.to_organization_page, name='organization_page'),
@@ -47,7 +50,7 @@ urlpatterns = [
     path('useradmin/sponsors/<int:sponsor_id>/delete/', views.admin_delete_sponsor, name='admin_delete_sponsor'),
     
     #admin admin management
-    path('useradmin/admins/', views.admin_manage_admins, name='admin_manage_admins'),
+    path('useradmin/admins/', views.admin_list, name='admin_manage_admins'),
     path('useradmin/admins/<int:admin_id>/update-status/', views.admin_update_admin_status, name='admin_update_admin_status'),
     
     # Admin security log
@@ -72,6 +75,7 @@ urlpatterns = [
     path('review/admins/', views.review_admin_status, name='review_admin_status'),
     path('review/drivers/', views.review_driver_status, name='review_driver_status'),
     path('review/sponsors/', views.review_sponsor_status, name='review_sponsor_status'),
+    path('review/driver-points/', views.review_driver_points, name='review_driver_points'),
     
     # Products
     path('products/', views.view_products, name='view_products'),
@@ -81,6 +85,6 @@ urlpatterns = [
 
     path('sponsor/report/', views.generate_driver_point_report, name='generate_driver_point_report'),
     path('driver/order_history/', views.driver_order_history, name='driver_order_history'),
-    path('review/all-accounts/', review_all_accounts, name='review_all_accounts'),
+    path('review/all-accounts/', views.review_all_accounts, name='review_all_accounts'),
 
 ]

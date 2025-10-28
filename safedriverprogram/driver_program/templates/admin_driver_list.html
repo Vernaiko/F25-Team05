@@ -4,72 +4,154 @@
 
 {% block content %}
 <div class="container">
-  <h1 class="title">All Drivers</h1>
-  
-  <!-- Quick Action Buttons -->
-  <div class="buttons mb-4">
-    <a href="{% url 'admin_wallet_history' %}" class="button is-success">
-      <span class="icon"><i class="fas fa-wallet"></i></span>
-      <span>View Wallet History</span>
-    </a>
-    <a href="{% url 'account_page' %}" class="button is-light">
-      <span class="icon"><i class="fas fa-arrow-left"></i></span>
-      <span>Back to Account</span>
-    </a>
-  </div>
-  
   <div class="box">
-    <table class="table is-fullwidth is-striped">
-      <thead>
-        <tr>
-          <th>User ID</th>
-          <th>Username</th>
-          <th>Name</th>
-          <th>Email</th>
-          <th>Phone</th>
-          <th>Active</th>
-          <th>Joined</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for d in drivers %}
-        <tr>
-          <td>{{ d.user_id }}</td>
-          <td>{{ d.username }}</td>
-          <td>{{ d.first_name }} {{ d.last_name }}</td>
-          <td>{{ d.email }}</td>
-          <td>{{ d.phone_number|default:'-' }}</td>
-          <td>{% if d.is_active %}<span class="tag is-success">Yes</span>{% else %}<span class="tag is-danger">No</span>{% endif %}</td>
-          <td>{{ d.created_at|date:"F d, Y" }}</td>
-          <td>
-            <form method="post" action="{% url 'admin_delete_driver' d.user_id %}" onsubmit="return confirm('Delete driver {{ d.username }}? This will remove related data.');">
-              {% csrf_token %}
-              <button type="submit" class="button is-danger is-small">
-                <span class="icon"><i class="fas fa-trash"></i></span>
-                <span>Delete</span>
-              </button>
-            </form>
-          </td>
-        </tr>
-        {% empty %}
-        <tr>
-          <td colspan="8">No drivers found.</td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
-  
-  <!-- Navigation buttons at bottom -->
-  <div class="buttons">
-    <a href="{% url 'admin_wallet_history' %}" class="button is-success">
-      <span class="icon"><i class="fas fa-wallet"></i></span>
-      <span>View Wallet History</span>
-    </a>
-    <a href="{% url 'account_page' %}" class="button is-light">
-      <span class="icon"><i class="fas fa-arrow-left"></i></span>
-      <span>Back to Account</span>
-    </a>
+    <h1 class="title has-text-centered">
+      <span class="icon is-large has-text-primary">
+        <i class="fas fa-users fa-2x"></i>
+      </span>
+      <br>
+      All Drivers & Points
+    </h1>
+
+    <!-- Statistics -->
+    <div class="level">
+      <div class="level-item has-text-centered">
+        <div>
+          <p class="heading">Total Drivers</p>
+          <p class="title">{{ total_drivers }}</p>
+        </div>
+      </div>
+      <div class="level-item has-text-centered">
+        <div>
+          <p class="heading">Total Points System-Wide</p>
+          <p class="title has-text-success">{{ total_points_all_drivers|default:0 }}</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Quick Action Buttons -->
+    <div class="buttons is-centered mb-4">
+      <a href="{% url 'admin_drivers_csv_export' %}" class="button is-info">
+        <span class="icon"><i class="fas fa-download"></i></span>
+        <span>Download CSV</span>
+      </a>
+      <a href="{% url 'admin_wallet_history' %}" class="button is-success">
+        <span class="icon"><i class="fas fa-wallet"></i></span>
+        <span>View Wallet History</span>
+      </a>
+      <a href="{% url 'account_page' %}" class="button is-light">
+        <span class="icon"><i class="fas fa-arrow-left"></i></span>
+        <span>Back to Account</span>
+      </a>
+    </div>
+
+    {% if drivers %}
+    <div class="table-container">
+      <table class="table is-fullwidth is-striped is-hoverable">
+        <thead>
+          <tr>
+            <th>Driver</th>
+            <th>Contact</th>
+            <th>Status</th>
+            <th>Joined</th>
+            <th>Total Points</th>
+            <th>Sponsor Breakdown</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for d in drivers %}
+          <tr>
+            <td>
+              <strong>{{ d.first_name }} {{ d.last_name }}</strong>
+              <br>
+              <small>@{{ d.username }}</small>
+            </td>
+            <td>{{ d.email }}</td>
+            <td>
+              {% if d.is_active %}
+                <span class="tag is-success">Active</span>
+              {% else %}
+                <span class="tag is-danger">Inactive</span>
+              {% endif %}
+            </td>
+            <td>{{ d.created_at|date:"M d, Y" }}</td>
+            <td>
+              <span class="tag is-info is-large">{{ d.total_points|default:0 }}</span>
+            </td>
+            <td>
+              {% if d.sponsor_breakdown %}
+              <div style="max-width: 300px;">
+                {% for sponsor in d.sponsor_breakdown %}
+                <div class="mb-2">
+                  <strong>{{ sponsor.sponsor_name }}</strong>
+                  <span class="tag {% if sponsor.points > 0 %}is-success{% else %}is-danger{% endif %}">
+                    {{ sponsor.points }} pts
+                  </span>
+                  <br>
+                  <small class="has-text-grey">{{ sponsor.transaction_count }} transaction{{ sponsor.transaction_count|pluralize }}</small>
+                </div>
+                {% endfor %}
+              </div>
+              {% else %}
+                <small class="has-text-grey">No sponsors yet</small>
+              {% endif %}
+            </td>
+            <td>
+              <form method="post" action="{% url 'admin_delete_driver' d.user_id %}" onsubmit="return confirm('Delete driver {{ d.username }}? This will remove related data.');">
+                {% csrf_token %}
+                <button type="submit" class="button is-danger is-small">
+                  <span class="icon"><i class="fas fa-trash"></i></span>
+                  <span>Delete</span>
+                </button>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="notification is-info">
+      <span class="icon">
+        <i class="fas fa-info-circle"></i>
+      </span>
+      No drivers found in the system.
+    </div>
+    {% endif %}
+
+    <!-- Summary Section -->
+    {% if drivers %}
+    <div class="box has-background-light" style="margin-top: 2rem; padding: 1.5rem;">
+      <div class="has-text-centered">
+        <h3 class="title is-5" style="margin-bottom: 1rem;">
+          <span class="icon has-text-success">
+            <i class="fas fa-chart-line"></i>
+          </span>
+          System-Wide Points Summary
+        </h3>
+        <div class="content">
+          <p class="heading" style="margin-bottom: 0.5rem;">Total Outstanding Points</p>
+          <p class="title is-2 has-text-success" style="margin-bottom: 0.5rem;">{{ total_points_all_drivers|default:0 }}</p>
+          <p class="subtitle is-6 has-text-grey">Across all {{ total_drivers }} driver{{ total_drivers|pluralize }} in the system</p>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+
+    <!-- Navigation buttons at bottom -->
+    <div class="has-text-centered" style="margin-top: 2rem;">
+      <div class="buttons is-centered">
+        <a href="{% url 'admin_wallet_history' %}" class="button is-success">
+          <span class="icon"><i class="fas fa-wallet"></i></span>
+          <span>View Wallet History</span>
+        </a>
+        <a href="{% url 'account_page' %}" class="button is-primary">
+          <span class="icon"><i class="fas fa-arrow-left"></i></span>
+          <span>Back to Account</span>
+        </a>
+      </div>
+    </div>
   </div>
 </div>
 {% endblock %}
