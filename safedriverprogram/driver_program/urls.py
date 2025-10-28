@@ -48,15 +48,13 @@ urlpatterns = [
     path('useradmin/sponsors/<int:sponsor_id>/update-status/', views.admin_update_sponsor_status, name='admin_update_sponsor_status'),
     path('useradmin/sponsors/<int:sponsor_id>/delete/', views.admin_delete_sponsor, name='admin_delete_sponsor'),
     
-    #admin admin management
+    # Admin admin management
     path('useradmin/admins/', views.admin_list, name='admin_manage_admins'),
     path('useradmin/admins/<int:admin_id>/update-status/', views.admin_update_admin_status, name='admin_update_admin_status'),
     
     # Admin security log
     path('useradmin/failed-login-log/', views.admin_failed_login_log, name='admin_failed_login_log'),
     
-    # Sponsor-specific pages - FIXED: Remove duplicates
-
     # Sponsor-specific pages
     path('sponsor/home/', views.sponsor_home, name='sponsor_home'),
     path('sponsor/profile/', views.sponsor_profile, name='sponsor_profile'),
@@ -82,14 +80,14 @@ urlpatterns = [
     path('products/', views.view_products, name='view_products'),
     path('products/<int:product_id>/', views.view_product, name='view_product'),
     path('wishlist/', views.wishlist_page, name='wishlist'),
-    path('wishlist/add/<int:product_id>', views.add_to_wishlist, name='add_to_wishlist'),
-    
+    path('wishlist/add/<int:product_id>/', views.add_to_wishlist, name='add_to_wishlist'),
+
+    # Shopping cart
+    path('cart/add/<int:product_id>/', views.add_to_cart, name='add_to_cart'),
+    path('cart/', views.view_cart, name='view_cart'),
+
     # Reports and Account Review
     path('sponsor/driver-point-report/', views.generate_driver_point_report, name='generate_driver_point_report'),
     path('driver/order-history/', views.driver_order_history, name='driver_order_history'),
     path('admin/review-all-accounts/', views.review_all_accounts, name='review_all_accounts'),
-
-]
-    path('cart/add/<int:product_id>/', views.add_to_cart, name='add_to_cart'),
-    path('cart/', views.view_cart, name='view_cart'),
 ]
