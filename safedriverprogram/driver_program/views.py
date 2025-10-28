@@ -2539,19 +2539,16 @@ def review_driver_status(request):
     return render(request, "driver_status.html", {"drivers": drivers})
 
 def view_products(request):
-    """Display products from Fake Store API with optional sorting"""
+    """Display products from Fake Store API with optional sorting and search"""
     import requests
-    
-    sort_order = request.GET.get('sort', '')  # Get sort parameter from query string
-    
-    """Display products from Fake Store API with search functionality"""
 
+    sort_order = request.GET.get('sort', '')  # Get sort parameter from query string
     search_query = request.GET.get('search', '').strip()
 
     try:
         # Fetch products from the Fake Store API
         response = requests.get('https://fakestoreapi.com/products')
-        response.raise_for_status()  # Raise an exception for error status codes
+        response.raise_for_status()
         products = response.json()
         
         # Sort products if requested
@@ -2559,28 +2556,25 @@ def view_products(request):
             products.sort(key=lambda x: float(x['price']))
         elif sort_order == 'price_desc':
             products.sort(key=lambda x: float(x['price']), reverse=True)
-            
-        return render(request, 'products.html', {
-            'products': products,
-            'current_sort': sort_order
-
+        
         # Filter products based on search query
         if search_query:
-            filtered_products = []
             search_lower = search_query.lower()
-            for product in products:
-                # Search in title, description, and category
-                if (search_lower in product.get('title', '').lower() or 
-                    search_lower in product.get('description', '').lower() or 
-                    search_lower in product.get('category', '').lower()):
-                    filtered_products.append(product)
-            products = filtered_products
+            products = [
+                product for product in products
+                if (search_lower in product.get('title', '').lower() or
+                    search_lower in product.get('description', '').lower() or
+                    search_lower in product.get('category', '').lower())
+            ]
 
+        # Render template with products
         return render(request, 'products.html', {
             'products': products,
+            'current_sort': sort_order,
             'search_query': search_query,
             'total_products': len(products)
         })
+
     except requests.RequestException as e:
         return render(request, 'products.html', {
             'error_message': f"Failed to fetch products: {str(e)}",
@@ -2588,6 +2582,7 @@ def view_products(request):
             'search_query': search_query,
             'total_products': 0
         })
+
 
 @db_login_required
 def view_product(request, product_id):
