@@ -1521,6 +1521,18 @@ def sponsor_home(request):
     cursor = connection.cursor()
     
     try:
+        # Ensure sponsors_settings table exists so we can SELECT/INSERT safely
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS sponsors_settings (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                sponsor_user_id INT NOT NULL UNIQUE,
+                point_exchange_rate INT NOT NULL DEFAULT 100,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                INDEX idx_sponsor_user_id (sponsor_user_id)
+            )
+        """)
+
         # Get sponsor's basic information
         cursor.execute("""
             SELECT first_name, last_name, email, username
@@ -2482,6 +2494,63 @@ def sponsor_view_application(request, application_id):
         return redirect('sponsor_manage_applications')
     finally:
         cursor.close()
+        
+def sponsor_adjust_point_exchange_rate(request):
+    """Allow sponsors to adjust their point exchange rate."""
+    
+    # Check if user is logged in and is a sponsor
+    if not request.session.get('is_authenticated'):
+        messages.error(request, "Please log in to access this page.")
+        return redirect('login_page')
+    
+    if request.session.get('account_type') != 'sponsor':
+        messages.error(request, "Access denied. Only sponsors can perform this action.")
+        return redirect('homepage')
+    
+    sponsor_id = request.session.get('id')
+    cursor = connection.cursor()
+    
+    try:
+        if request.method == 'POST':
+            new_rate = request.POST.get('point_exchange_rate')
+            try:
+                new_rate = float(new_rate)
+                if new_rate <= 0:
+                    raise ValueError("Exchange rate must be positive.")
+                
+                # Update the sponsor's point exchange rate
+                cursor.execute("""
+                    UPDATE sponsors_settings
+                    SET point_exchange_rate = %s, updated_at = NOW()
+                    WHERE id = %s
+                """, [new_rate, sponsor_id])
+                
+                messages.success(request, "Point exchange rate updated successfully.")
+                return redirect('sponsor_home')
+                
+            except ValueError as ve:
+                messages.error(request, f"Invalid exchange rate: {str(ve)}")
+        
+        # Fetch current exchange rate for display
+        cursor.execute("""
+            SELECT point_exchange_rate
+            FROM sponsors_settings
+            WHERE id = %s
+        """, [sponsor_id])
+        
+        row = cursor.fetchone()
+        current_rate = row[0] if row else None
+        
+        return render(request, 'sponsor_adjust_point_exchange_rate.html', {
+            'current_rate': current_rate
+        })
+        
+    except Exception as e:
+        messages.error(request, f"Error updating exchange rate: {str(e)}")
+        return redirect('sponsor_home')
+    finally:
+        cursor.close()
+    
 
 # ADMIN DASHBOARD: REVIEW USER ACCOUNT STATUSES
 def is_admin(user):

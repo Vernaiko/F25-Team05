@@ -47,7 +47,7 @@
     </div>
     
     <!-- Quick Actions -->
-    <div class="field is-grouped is-grouped-centered">
+    <div class="field is-grouped is-grouped-multiline is-justify-content-center">
       <div class="control">
         <a href="{% url 'sponsor_drivers' %}" class="button is-primary is-large">
           <span class="icon">
@@ -72,6 +72,15 @@
             <i class="fas fa-user-edit"></i>
           </span>
           <span>Edit Profile</span>
+        </a>
+      </div>
+
+      <div class="control">
+        <a href="{% url 'sponsor_adjust_point_exchange_rate' %}" class="button is-link is-large">
+          <span class="icon">
+            <i class="fas fa-exchange-alt"></i>
+          </span>
+          <span>Edit Exchange Rate</span>
         </a>
       </div>
 
