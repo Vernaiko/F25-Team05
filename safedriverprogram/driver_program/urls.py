@@ -83,6 +83,7 @@ urlpatterns = [
     path('products/<int:product_id>/', views.view_product, name='view_product'),
     path('wishlist/', views.wishlist_page, name='wishlist'),
     path('wishlist/add/<int:product_id>/', views.add_to_wishlist, name='add_to_wishlist'),
+    path('wishlist/delete/<int:product_id>/', views.delete_from_wishlist, name='delete_from_wishlist'),
 
     # Shopping cart
     path('cart/add/<int:product_id>/', views.add_to_cart, name='add_to_cart'),

@@ -3516,7 +3516,44 @@ def wishlist_page(request):
         return redirect('homepage')
     finally:
         cursor.close()
+        
+@db_login_required
+def delete_from_wishlist(request, product_id):
+    """Remove a product from the logged-in user's wishlist.
 
+    Only accepts POST requests. Redirects back to the wishlist page after
+    attempting removal. Uses `user_wishlist` table which is created elsewhere
+    (and created on-demand in other code paths as well).
+    """
+    # Ensure this is a POST to avoid accidental deletions via GET
+    if request.method != 'POST':
+        return redirect('wishlist')
+
+    user_id = request.session.get('user_id') or request.session.get('userID') or request.session.get('id')
+    if not user_id:
+        messages.error(request, "Please log in to modify your wishlist.")
+        return redirect('login_page')
+
+    cursor = connection.cursor()
+    try:
+        cursor.execute("DELETE FROM user_wishlist WHERE user_id = %s AND product_id = %s", [user_id, product_id])
+        try:
+            connection.commit()
+        except Exception:
+            # If commit fails (e.g., autocommit enabled), ignore
+            pass
+
+        messages.success(request, "Product removed from wishlist.")
+    except Exception as e:
+        messages.error(request, f"Error removing product from wishlist: {str(e)}")
+    finally:
+        try:
+            cursor.close()
+        except Exception:
+            pass
+
+    return redirect('wishlist')
+        
 # --- Helper and Decorator ---
 def is_admin(user):
     return user.is_staff or user.is_superuser
