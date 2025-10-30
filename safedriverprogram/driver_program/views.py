@@ -2495,6 +2495,79 @@ def sponsor_view_application(request, application_id):
     finally:
         cursor.close()
         
+def adjust_catalogue(request):
+    """Allow a sponsor to select which catalogue categories should be displayed.
+
+    Stores selections in a simple DB table `sponsor_catalogue_preferences` as a
+    comma-separated list in `categories`.
+    """
+    # Auth checks
+    if not request.session.get('is_authenticated'):
+        messages.error(request, "Please log in to access this page.")
+        return redirect('login_page')
+
+    if request.session.get('account_type') != 'sponsor':
+        messages.error(request, "Access denied. Only sponsors can perform this action.")
+        return redirect('homepage')
+
+    sponsor_id = request.session.get('user_id') or request.session.get('id')
+    cursor = connection.cursor()
+
+    try:
+        # Create preferences table if it doesn't exist
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS sponsor_catalogue_preferences (
+                sponsor_user_id INT PRIMARY KEY,
+                categories TEXT,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+            )
+        """)
+
+        if request.method == 'POST':
+            # Expect multiple checkbox values under 'categories'
+            selected = request.POST.getlist('categories')
+            categories_str = ','.join([c.strip() for c in selected if c.strip()])
+
+            # Upsert preferences — REPLACE is portable for simple upsert here
+            cursor.execute(
+                "REPLACE INTO sponsor_catalogue_preferences (sponsor_user_id, categories) VALUES (%s, %s)",
+                [sponsor_id, categories_str]
+            )
+            connection.commit()
+            messages.success(request, "Catalogue preferences updated.")
+            return redirect('sponsor_adjust_catalogue')
+
+        # GET -> build form: preferred categories + available categories from API
+        try:
+            resp = requests.get('https://fakestoreapi.com/products/categories', timeout=5)
+            resp.raise_for_status()
+            all_categories = resp.json()
+        except Exception:
+            # Fallback: fetch products and derive categories
+            try:
+                resp = requests.get('https://fakestoreapi.com/products', timeout=5)
+                resp.raise_for_status()
+                products = resp.json()
+                all_categories = sorted(list({p.get('category') for p in products if p.get('category')}))
+            except Exception:
+                all_categories = []
+
+        # Load current selection
+        cursor.execute("SELECT categories FROM sponsor_catalogue_preferences WHERE sponsor_user_id = %s", [sponsor_id])
+        row = cursor.fetchone()
+        selected = [c for c in (row[0].split(',') if row and row[0] else []) if c]
+
+        return render(request, 'sponsor_adjust_catalogue.html', {
+            'categories': all_categories,
+            'selected': selected
+        })
+
+    except Exception as e:
+        messages.error(request, f"Error loading catalogue preferences: {str(e)}")
+        return redirect('sponsor_home')
+    finally:
+        cursor.close()
+        
 def sponsor_adjust_point_exchange_rate(request):
     """Allow sponsors to adjust their point exchange rate."""
     
@@ -2635,6 +2708,28 @@ def view_products(request):
                     search_lower in product.get('description', '').lower() or
                     search_lower in product.get('category', '').lower())
             ]
+
+        # If the current user is a sponsor, apply their catalogue category preferences (if any)
+        try:
+            if request.session.get('is_authenticated') and request.session.get('account_type') == 'sponsor':
+                sponsor_id = request.session.get('user_id') or request.session.get('id')
+                if sponsor_id:
+                    cur = connection.cursor()
+                    try:
+                        cur.execute("SELECT categories FROM sponsor_catalogue_preferences WHERE sponsor_user_id = %s", [sponsor_id])
+                        r = cur.fetchone()
+                        if r and r[0]:
+                            prefs = [c.strip() for c in r[0].split(',') if c.strip()]
+                            if prefs:
+                                products = [p for p in products if p.get('category') in prefs]
+                    finally:
+                        try:
+                            cur.close()
+                        except Exception:
+                            pass
+        except Exception:
+            # Don't fail the whole page if preferences lookup or filtering fails
+            pass
 
         # Render template with products
         return render(request, 'products.html', {
