@@ -3896,3 +3896,239 @@ def admin_change_user_type(request):
         return redirect('account_page')
     finally:
         cursor.close()
+
+@db_login_required
+def sponsor_create_user(request):
+    """Sponsor page to create new sponsor users for their organization"""
+    
+    # Verify user is a sponsor
+    if request.session.get('account_type') != 'sponsor':
+        messages.error(request, "Access denied. Only sponsors can create organization users.")
+        return redirect('homepage')
+    
+    sponsor_id = request.session.get('user_id')
+    cursor = connection.cursor()
+    
+    # Handle POST request for creating new sponsor user
+    if request.method == 'POST':
+        username = request.POST.get('username', '').strip()
+        email = request.POST.get('email', '').strip()
+        first_name = request.POST.get('first_name', '').strip()
+        last_name = request.POST.get('last_name', '').strip()
+        phone_number = request.POST.get('phone_number', '').strip()
+        password = request.POST.get('password', '')
+        confirm_password = request.POST.get('confirm_password', '')
+        
+        # Validation
+        if not all([username, email, first_name, last_name, password, confirm_password]):
+            messages.error(request, "All fields are required.")
+            return render(request, 'sponsor_create_user.html')
+        
+        if password != confirm_password:
+            messages.error(request, "Passwords do not match.")
+            return render(request, 'sponsor_create_user.html')
+        
+        if len(password) < 6:
+            messages.error(request, "Password must be at least 6 characters long.")
+            return render(request, 'sponsor_create_user.html')
+        
+        try:
+            # Check if username or email already exists
+            cursor.execute("""
+                SELECT username, email FROM users 
+                WHERE username = %s OR email = %s
+            """, [username, email])
+            
+            existing_user = cursor.fetchone()
+            if existing_user:
+                if existing_user[0] == username:
+                    messages.error(request, f"Username '{username}' is already taken.")
+                else:
+                    messages.error(request, f"Email '{email}' is already registered.")
+                return render(request, 'sponsor_create_user.html')
+            
+            # Get the creating sponsor's organization info
+            cursor.execute("""
+                SELECT organization, first_name, last_name
+                FROM users 
+                WHERE userID = %s
+            """, [sponsor_id])
+            
+            sponsor_info = cursor.fetchone()
+            sponsor_organization = sponsor_info[0] if sponsor_info else None
+            
+            # Hash password
+            import hashlib
+            hashed_password = hashlib.sha256(password.encode()).hexdigest()
+            
+            # Create new sponsor user with SAME organization as creator
+            cursor.execute("""
+                INSERT INTO users 
+                (username, email, password_hash, first_name, last_name, phone_number, 
+                 account_type, organization, is_active, created_at, updated_at)
+                VALUES (%s, %s, %s, %s, %s, %s, 'sponsor', %s, TRUE, NOW(), NOW())
+            """, [username, email, hashed_password, first_name, last_name, phone_number, sponsor_organization])
+            
+            new_user_id = cursor.lastrowid
+            
+            # Create a dummy driver application for the relationship tracking
+            cursor.execute("""
+                INSERT INTO driver_applications 
+                (driver_user_id, sponsor_user_id, application_status, application_date, 
+                  approval_date, driver_license_number, license_state, years_of_experience,
+                 motivation_essay, created_at, updated_at)
+                VALUES (%s, %s, 'approved', NOW(), NOW(), 'ORG_MEMBER', 'N/A', 0,
+                        'Organization member created by sponsor', NOW(), NOW())
+            """, [new_user_id, sponsor_id])
+            
+            application_id = cursor.lastrowid
+            
+            # Create organization relationship in sponsor_driver_relationships
+            cursor.execute("""
+                INSERT INTO sponsor_driver_relationships 
+                (sponsor_user_id, driver_user_id, application_id, relationship_status, 
+                 relationship_start_date, relationship_notes, created_at, updated_at)
+                VALUES (%s, %s, %s, 'active', NOW(), 
+                        'Organization member relationship', NOW(), NOW())
+            """, [sponsor_id, new_user_id, application_id])
+            
+            messages.success(request, 
+                f"Successfully created sponsor account for {first_name} {last_name} (@{username}) in organization: {sponsor_organization or 'Default'}.")
+            
+            return redirect('sponsor_create_user')
+            
+        except Exception as e:
+            messages.error(request, f"Error creating user: {str(e)}")
+            print(f"Sponsor create user error: {e}")
+    
+    try:
+        # Get current sponsor's info and organization
+        cursor.execute("""
+            SELECT username, first_name, last_name, email, organization
+            FROM users
+            WHERE userID = %s
+        """, [sponsor_id])
+        
+        sponsor_info = cursor.fetchone()
+        current_organization = sponsor_info[4] if sponsor_info else None
+        
+        # Get organization members (sponsors in the same organization)
+        cursor.execute("""
+            SELECT u.userID, u.username, u.first_name, u.last_name, u.email,
+                   u.phone_number, u.is_active, u.created_at, u.organization,
+                   sdr.relationship_start_date,
+                   sdr.relationship_status
+            FROM users u
+            LEFT JOIN sponsor_driver_relationships sdr ON (
+                u.userID = sdr.driver_user_id 
+                AND sdr.sponsor_user_id = %s 
+                AND sdr.relationship_notes = 'Organization member relationship'
+            )
+            WHERE u.account_type = 'sponsor'
+                AND u.organization = %s
+                AND u.userID != %s
+            ORDER BY u.created_at DESC
+        """, [sponsor_id, current_organization, sponsor_id])
+        
+        organization_members = cursor.fetchall()
+        
+        members_list = []
+        for member in organization_members:
+            members_list.append({
+                'userID': member[0],
+                'username': member[1],
+                'first_name': member[2],
+                'last_name': member[3],
+                'email': member[4],
+                'phone_number': member[5],
+                'is_active': member[6],
+                'created_at': member[7],
+                'organization': member[8],
+                'joined_organization': member[9] or member[7],  # Use relationship start or created date
+                'relationship_status': member[10] or ('active' if member[6] else 'inactive')
+            })
+        
+        context = {
+            'organization_members': members_list,
+            'total_members': len(members_list),
+            'sponsor_username': sponsor_info[0] if sponsor_info else '',
+            'sponsor_name': f"{sponsor_info[1]} {sponsor_info[2]}" if sponsor_info else '',
+            'sponsor_email': sponsor_info[3] if sponsor_info else '',
+            'current_organization': current_organization or 'Default Organization'
+        }
+        
+        return render(request, 'sponsor_create_user.html', context)
+        
+    except Exception as e:
+        messages.error(request, f"Error loading organization data: {str(e)}")
+        print(f"Sponsor create user page error: {e}")
+        return redirect('sponsor_home')
+    finally:
+        cursor.close()
+
+
+@db_login_required
+def sponsor_deactivate_organization_member(request, member_id):
+    """Deactivate an organization member created by this sponsor"""
+    
+    if request.method != 'POST':
+        messages.error(request, "Invalid request method.")
+        return redirect('sponsor_create_user')
+    
+    # Verify user is a sponsor
+    if request.session.get('account_type') != 'sponsor':
+        messages.error(request, "Access denied. Only sponsors can manage organization members.")
+        return redirect('homepage')
+    
+    sponsor_id = request.session.get('user_id')
+    cursor = connection.cursor()
+    
+    try:
+        # Verify this sponsor created this member
+        cursor.execute("""
+            SELECT u.username, u.first_name, u.last_name
+            FROM users u
+            JOIN sponsor_driver_relationships sdr ON u.userID = sdr.driver_user_id
+            WHERE sdr.sponsor_user_id = %s 
+                AND sdr.driver_user_id = %s
+                AND sdr.relationship_notes = 'Organization member relationship'
+                AND sdr.relationship_status = 'active'
+        """, [sponsor_id, member_id])
+        
+        member_info = cursor.fetchone()
+        
+        if not member_info:
+            messages.error(request, "You don't have permission to manage this user.")
+            return redirect('sponsor_create_user')
+        
+        # Deactivate the member
+        cursor.execute("""
+            UPDATE users
+            SET is_active = FALSE, updated_at = NOW()
+            WHERE userID = %s
+        """, [member_id])
+        
+        # Update relationship status using correct column names
+        cursor.execute("""
+            UPDATE sponsor_driver_relationships
+            SET relationship_status = 'terminated', 
+                relationship_end_date = NOW(),
+                updated_at = NOW(),
+                terminated_by_user_id = %s,
+                termination_reason = 'Deactivated by organization creator'
+            WHERE sponsor_user_id = %s AND driver_user_id = %s 
+                AND relationship_notes = 'Organization member relationship'
+        """, [sponsor_id, sponsor_id, member_id])
+        
+        full_name = f"{member_info[1]} {member_info[2]}"
+        username = member_info[0]
+        
+        messages.success(request, f"Successfully deactivated {full_name} (@{username}).")
+        
+    except Exception as e:
+        messages.error(request, f"Error deactivating member: {str(e)}")
+        print(f"Deactivate member error: {e}")
+    finally:
+        cursor.close()
+    
+    return redirect('sponsor_create_user')
