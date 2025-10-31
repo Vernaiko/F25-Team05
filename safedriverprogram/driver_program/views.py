@@ -1826,7 +1826,7 @@ def add_admin(request):
 
     return render(request, "add_admin.html")
 
-@user_passes_test(is_admin)
+@db_login_required
 def admin_list(request):
     """Show all admins with option to delete."""
     admins = User.objects.filter(is_staff=True)
@@ -2630,21 +2630,21 @@ def is_admin(user):
     return user.is_staff or user.is_superuser
 
 
-@user_passes_test(is_admin)
-def review_admin_status(request):
-    """View all admins and their account status."""
-    admins = User.objects.filter(is_staff=True)
+# @user_passes_test(is_admin)
+# def review_admin_status(request):
+#     """View all admins and their account status."""
+#     admins = User.objects.filter(is_staff=True)
 
-    if request.method == "POST":
-        admin_id = request.POST.get("admin_id")
-        new_status = request.POST.get("status") == "True"
-        admin_user = get_object_or_404(User, id=admin_id)
-        admin_user.is_active = new_status
-        admin_user.save()
-        messages.success(request, f"Admin '{admin_user.username}' status updated.")
-        return redirect("review_admin_status")
+#     if request.method == "POST":
+#         admin_id = request.POST.get("admin_id")
+#         new_status = request.POST.get("status") == "True"
+#         admin_user = get_object_or_404(User, id=admin_id)
+#         admin_user.is_active = new_status
+#         admin_user.save()
+#         messages.success(request, f"Admin '{admin_user.username}' status updated.")
+#         return redirect("review_admin_status")
 
-    return render(request, "admin_status.html", {"admins": admins})
+#     return render(request, "admin_status.html", {"admins": admins})
 
 
 @user_passes_test(is_admin)
@@ -3564,7 +3564,7 @@ def admin_required(view_func):
 
 
 # --- Review Admin Accounts ---
-@admin_required
+@db_login_required
 def review_admin_status(request):
     cursor = connection.cursor()
     try:

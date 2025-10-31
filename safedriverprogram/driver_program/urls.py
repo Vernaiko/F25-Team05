@@ -49,7 +49,7 @@ urlpatterns = [
     path('useradmin/sponsors/<int:sponsor_id>/delete/', views.admin_delete_sponsor, name='admin_delete_sponsor'),
     
     # Admin admin management
-    path('useradmin/admins/', views.admin_list, name='admin_manage_admins'),
+    path('useradmin/admins/', views.admin_manage_admins, name='admin_manage_admins'),
     path('useradmin/admins/<int:admin_id>/update-status/', views.admin_update_admin_status, name='admin_update_admin_status'),
     
     # Admin security log
