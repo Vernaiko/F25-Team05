@@ -3739,3 +3739,160 @@ def admin_failed_login_log(request):
         return redirect('account_page')
     finally:
         cursor.close()
+@admin_required
+def admin_change_user_type(request):
+    """Admin page to change any user's account type"""
+    
+    cursor = connection.cursor()
+    
+    # Get filter parameters
+    account_type_filter = request.GET.get('account_type', '')
+    search_query = request.GET.get('search', '').strip()
+    
+    # Handle POST request for changing account type
+    if request.method == 'POST':
+        user_id = request.POST.get('user_id')
+        new_account_type = request.POST.get('new_account_type')
+        
+        if user_id and new_account_type in ['admin', 'driver', 'sponsor']:
+            try:
+                # Get current user info
+                cursor.execute("""
+                    SELECT username, first_name, last_name, account_type
+                    FROM users
+                    WHERE userID = %s
+                """, [user_id])
+                
+                user_data = cursor.fetchone()
+                
+                if user_data:
+                    old_account_type = user_data[3]
+                    full_name = f"{user_data[1]} {user_data[2]}"
+                    username = user_data[0]
+                    
+                    # Prevent admin from changing their own account type away from admin
+                    current_admin_id = request.session.get('user_id')
+                    if int(user_id) == current_admin_id and new_account_type != 'admin':
+                        messages.error(request, "You cannot change your own account type away from admin.")
+                        return redirect('admin_change_user_type')
+                    
+                    # Update account type
+                    cursor.execute("""
+                        UPDATE users
+                        SET account_type = %s, updated_at = NOW()
+                        WHERE userID = %s
+                    """, [new_account_type, user_id])
+                    
+                    # Handle account type specific cleanup/setup
+                    if old_account_type != new_account_type:
+                        # If changing FROM sponsor, end all active relationships
+                        if old_account_type == 'sponsor':
+                            cursor.execute("""
+                                UPDATE sponsor_driver_relationships
+                                SET relationship_status = 'ended',
+                                    relationship_end_date = NOW(),
+                                    updated_at = NOW()
+                                WHERE sponsor_user_id = %s AND relationship_status = 'active'
+                            """, [user_id])
+                        
+                        # If changing FROM driver, end all active relationships
+                        if old_account_type == 'driver':
+                            cursor.execute("""
+                                UPDATE sponsor_driver_relationships
+                                SET relationship_status = 'ended',
+                                    relationship_end_date = NOW(),
+                                    updated_at = NOW()
+                                WHERE driver_user_id = %s AND relationship_status = 'active'
+                            """, [user_id])
+                        
+                        # If changing TO driver, create wallet if it doesn't exist
+                        if new_account_type == 'driver':
+                            cursor.execute("""
+                                INSERT IGNORE INTO driver_wallets (driver_id, points_balance, is_active)
+                                VALUES (%s, 0, TRUE)
+                            """, [user_id])
+                    
+                    messages.success(request, 
+                        f"Successfully changed {full_name} (@{username}) from {old_account_type} to {new_account_type}.")
+                else:
+                    messages.error(request, "User not found.")
+                    
+            except Exception as e:
+                messages.error(request, f"Error changing account type: {str(e)}")
+                print(f"Change account type error: {e}")
+        else:
+            messages.error(request, "Invalid user ID or account type.")
+    
+    try:
+        # Build query with filters
+        query = """
+            SELECT userID, username, first_name, last_name, email,
+                   phone_number, account_type, is_active, created_at,
+                   (SELECT COUNT(*) FROM sponsor_driver_relationships sdr 
+                    WHERE (sdr.sponsor_user_id = u.userID OR sdr.driver_user_id = u.userID) 
+                    AND sdr.relationship_status = 'active') as active_relationships
+            FROM users u
+            WHERE 1=1
+        """
+        
+        params = []
+        
+        if account_type_filter:
+            query += " AND u.account_type = %s"
+            params.append(account_type_filter)
+        
+        if search_query:
+            query += " AND (u.username LIKE %s OR u.first_name LIKE %s OR u.last_name LIKE %s OR u.email LIKE %s)"
+            search_param = f"%{search_query}%"
+            params.extend([search_param, search_param, search_param, search_param])
+        
+        query += " ORDER BY u.created_at DESC LIMIT 100"
+        
+        cursor.execute(query, params)
+        users_data = cursor.fetchall()
+        
+        users_list = []
+        for user in users_data:
+            users_list.append({
+                'userID': user[0],
+                'username': user[1],
+                'first_name': user[2],
+                'last_name': user[3],
+                'email': user[4],
+                'phone_number': user[5],
+                'account_type': user[6],
+                'is_active': user[7],
+                'created_at': user[8],
+                'active_relationships': user[9]
+            })
+        
+        # Get statistics
+        cursor.execute("""
+            SELECT 
+                account_type,
+                COUNT(*) as count
+            FROM users
+            GROUP BY account_type
+        """)
+        
+        account_stats = cursor.fetchall()
+        stats = {}
+        for stat in account_stats:
+            stats[stat[0]] = stat[1]
+        
+        context = {
+            'users': users_list,
+            'account_stats': stats,
+            'current_account_type_filter': account_type_filter,
+            'current_search': search_query,
+            'current_admin_id': request.session.get('user_id')
+        }
+        
+        return render(request, 'admin_change_user_type.html', context)
+        
+    except Exception as e:
+        messages.error(request, f"Error loading users: {str(e)}")
+        print(f"Admin change user type error: {e}")
+        return redirect('account_page')
+    finally:
+        cursor.close()

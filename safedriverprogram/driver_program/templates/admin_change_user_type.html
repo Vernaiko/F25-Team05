@@ -1,0 +1,298 @@
+{% extends 'base.html' %}
+
+{% block title %}Change User Account Types - Admin Dashboard{% endblock %}
+
+{% block content %}
+<div class="container">
+  <div class="box">
+    <h1 class="title has-text-centered">
+      <span class="icon is-large has-text-danger">
+        <i class="fas fa-exchange-alt fa-2x"></i>
+      </span>
+      <br>
+      Change User Account Types
+    </h1>
+    
+    <!-- Statistics -->
+    <div class="columns is-multiline" style="margin-bottom: 2rem;">
+      <div class="column is-3">
+        <div class="box has-background-danger-light">
+          <div class="heading">Admins</div>
+          <div class="title is-3 has-text-danger">{{ account_stats.admin|default:0 }}</div>
+        </div>
+      </div>
+      <div class="column is-3">
+        <div class="box has-background-primary-light">
+          <div class="heading">Sponsors</div>
+          <div class="title is-3 has-text-primary">{{ account_stats.sponsor|default:0 }}</div>
+        </div>
+      </div>
+      <div class="column is-3">
+        <div class="box has-background-success-light">
+          <div class="heading">Drivers</div>
+          <div class="title is-3 has-text-success">{{ account_stats.driver|default:0 }}</div>
+        </div>
+      </div>
+      <div class="column is-3">
+        <div class="box has-background-info-light">
+          <div class="heading">Total Users</div>
+          <div class="title is-3 has-text-info">{{ users|length }}</div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Filters -->
+    <div class="box has-background-light">
+      <h2 class="subtitle">
+        <span class="icon has-text-info">
+          <i class="fas fa-filter"></i>
+        </span>
+        Filters
+      </h2>
+      
+      <form method="get" action="{% url 'admin_change_user_type' %}">
+        <div class="columns">
+          <div class="column">
+            <div class="field">
+              <label class="label">Account Type</label>
+              <div class="control">
+                <div class="select is-fullwidth">
+                  <select name="account_type" onchange="this.form.submit()">
+                    <option value="">All Account Types</option>
+                    <option value="admin" {% if current_account_type_filter == 'admin' %}selected{% endif %}>Admin</option>
+                    <option value="sponsor" {% if current_account_type_filter == 'sponsor' %}selected{% endif %}>Sponsor</option>
+                    <option value="driver" {% if current_account_type_filter == 'driver' %}selected{% endif %}>Driver</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <div class="column">
+            <div class="field">
+              <label class="label">Search Users</label>
+              <div class="control has-icons-left">
+                <input class="input" type="text" name="search" placeholder="Username, name, or email..." 
+                       value="{{ current_search }}">
+                <span class="icon is-small is-left">
+                  <i class="fas fa-search"></i>
+                </span>
+              </div>
+            </div>
+          </div>
+          
+          <div class="column is-narrow">
+            <div class="field">
+              <label class="label">&nbsp;</label>
+              <div class="control">
+                <button type="submit" class="button is-primary">
+                  <span class="icon"><i class="fas fa-search"></i></span>
+                  <span>Search</span>
+                </button>
+              </div>
+            </div>
+          </div>
+          
+          <div class="column is-narrow">
+            <div class="field">
+              <label class="label">&nbsp;</label>
+              <div class="control">
+                <a href="{% url 'admin_change_user_type' %}" class="button is-light">
+                  <span class="icon"><i class="fas fa-times"></i></span>
+                  <span>Clear</span>
+                </a>
+              </div>
+            </div>
+          </div>
+        </div>
+      </form>
+    </div>
+    
+    <!-- Users List -->
+    <div class="box">
+      <h2 class="subtitle">
+        <span class="icon has-text-primary">
+          <i class="fas fa-users"></i>
+        </span>
+        All Users
+        {% if current_account_type_filter %}
+          <span class="tag is-primary">{{ current_account_type_filter|title }}</span>
+        {% endif %}
+        {% if current_search %}
+          <span class="tag is-info">Search: "{{ current_search }}"</span>
+        {% endif %}
+      </h2>
+      
+      {% if users %}
+      <div class="notification is-warning">
+        <strong>⚠️ Warning:</strong> Changing account types will:
+        <ul>
+          <li>End all active sponsor-driver relationships for sponsors and drivers</li>
+          <li>Create a wallet for new drivers</li>
+          <li>This action cannot be undone automatically</li>
+        </ul>
+      </div>
+      
+      <div class="table-container">
+        <table class="table is-fullwidth is-striped is-hoverable">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Username</th>
+              <th>Name</th>
+              <th>Email</th>
+              <th>Current Type</th>
+              <th>Status</th>
+              <th>Relationships</th>
+              <th>Change To</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for user in users %}
+            <tr>
+              <td>{{ user.userID }}</td>
+              <td>
+                <strong>@{{ user.username }}</strong>
+              </td>
+              <td>{{ user.first_name }} {{ user.last_name }}</td>
+              <td>{{ user.email }}</td>
+              <td>
+                {% if user.account_type == 'admin' %}
+                  <span class="tag is-danger">
+                    <span class="icon"><i class="fas fa-user-shield"></i></span>
+                    <span>Admin</span>
+                  </span>
+                {% elif user.account_type == 'sponsor' %}
+                  <span class="tag is-primary">
+                    <span class="icon"><i class="fas fa-user-tie"></i></span>
+                    <span>Sponsor</span>
+                  </span>
+                {% elif user.account_type == 'driver' %}
+                  <span class="tag is-success">
+                    <span class="icon"><i class="fas fa-car"></i></span>
+                    <span>Driver</span>
+                  </span>
+                {% endif %}
+              </td>
+              <td>
+                {% if user.is_active %}
+                  <span class="tag is-success">
+                    <span class="icon"><i class="fas fa-check"></i></span>
+                    <span>Active</span>
+                  </span>
+                {% else %}
+                  <span class="tag is-danger">
+                    <span class="icon"><i class="fas fa-ban"></i></span>
+                    <span>Inactive</span>
+                  </span>
+                {% endif %}
+              </td>
+              <td>
+                {% if user.active_relationships > 0 %}
+                  <span class="tag is-warning">
+                    <span class="icon"><i class="fas fa-link"></i></span>
+                    <span>{{ user.active_relationships }}</span>
+                  </span>
+                {% else %}
+                  <span class="tag is-light">None</span>
+                {% endif %}
+              </td>
+              <td>
+                {% if user.userID != current_admin_id %}
+                <form method="post" style="display: inline;">
+                  {% csrf_token %}
+                  <input type="hidden" name="user_id" value="{{ user.userID }}">
+                  <div class="select is-small">
+                    <select name="new_account_type" onchange="this.form.submit()" 
+                            {% if user.active_relationships > 0 %}title="Warning: User has active relationships"{% endif %}>
+                      <option value="">Select type...</option>
+                      <option value="admin" {% if user.account_type == 'admin' %}disabled{% endif %}>
+                        Admin
+                      </option>
+                      <option value="sponsor" {% if user.account_type == 'sponsor' %}disabled{% endif %}>
+                        Sponsor
+                      </option>
+                      <option value="driver" {% if user.account_type == 'driver' %}disabled{% endif %}>
+                        Driver
+                      </option>
+                    </select>
+                  </div>
+                </form>
+                {% else %}
+                <span class="tag is-static">
+                  <span class="icon"><i class="fas fa-lock"></i></span>
+                  <span>Your Account</span>
+                </span>
+                {% endif %}
+              </td>
+              <td>
+                {% if user.userID != current_admin_id %}
+                  {% if user.active_relationships > 0 %}
+                    <span class="icon has-text-warning" title="Has active relationships">
+                      <i class="fas fa-exclamation-triangle"></i>
+                    </span>
+                  {% endif %}
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="notification is-info">
+        <span class="icon">
+          <i class="fas fa-info-circle"></i>
+        </span>
+        No users found matching the current filters.
+      </div>
+      {% endif %}
+    </div>
+    
+    <!-- Back Button -->
+    <div class="has-text-centered" style="margin-top: 2rem;">
+      <a href="{% url 'account_page' %}" class="button is-light is-large">
+        <span class="icon">
+          <i class="fas fa-arrow-left"></i>
+        </span>
+        <span>Back to Dashboard</span>
+      </a>
+    </div>
+  </div>
+</div>
+
+<script>
+// Add confirmation for account type changes
+document.addEventListener('DOMContentLoaded', function() {
+    const forms = document.querySelectorAll('form[method="post"]');
+    
+    forms.forEach(form => {
+        const select = form.querySelector('select[name="new_account_type"]');
+        if (select) {
+            select.addEventListener('change', function(e) {
+                if (this.value) {
+                    const username = this.closest('tr').querySelector('strong').textContent;
+                    const currentType = this.closest('tr').querySelector('.tag').textContent.trim();
+                    const newType = this.options[this.selectedIndex].text;
+                    
+                    const confirmed = confirm(
+                        `Are you sure you want to change ${username} from ${currentType} to ${newType}?\n\n` +
+                        `This will:\n` +
+                        `• End any active sponsor-driver relationships\n` +
+                        `• Change their account permissions\n` +
+                        `• This cannot be undone automatically`
+                    );
+                    
+                    if (!confirmed) {
+                        this.value = '';
+                        e.preventDefault();
+                        return false;
+                    }
+                }
+            });
+        }
+    });
+});
+</script>
+{% endblock %}
