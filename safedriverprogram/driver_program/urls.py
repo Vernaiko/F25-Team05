@@ -55,6 +55,10 @@ urlpatterns = [
     # Admin security log
     path('useradmin/failed-login-log/', views.admin_failed_login_log, name='admin_failed_login_log'),
     
+    #Admin user management
+    path('useradmin/change-user-type/', views.admin_change_user_type, name='admin_change_user_type'),
+
+    # Sponsor-specific pages - FIXED: Remove duplicates
     # Sponsor-specific pages
     path('sponsor/home/', views.sponsor_home, name='sponsor_home'),
     path('sponsor/profile/', views.sponsor_profile, name='sponsor_profile'),
@@ -82,6 +86,12 @@ urlpatterns = [
     path('products/', views.view_products, name='view_products'),
     path('products/<int:product_id>/', views.view_product, name='view_product'),
     path('wishlist/', views.wishlist_page, name='wishlist'),
+    path('wishlist/add/<int:product_id>', views.add_to_wishlist, name='add_to_wishlist'),
+
+    # Sponsor user management
+    path('sponsor/create-user/', views.sponsor_create_user, name='sponsor_create_user'),
+    path('sponsor/deactivate-member/<int:member_id>/', views.sponsor_deactivate_organization_member, name='sponsor_deactivate_organization_member'),
+
     path('wishlist/add/<int:product_id>/', views.add_to_wishlist, name='add_to_wishlist'),
     path('wishlist/delete/<int:product_id>/', views.delete_from_wishlist, name='delete_from_wishlist'),
 

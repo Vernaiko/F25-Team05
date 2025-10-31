@@ -1,0 +1,222 @@
+{% extends 'base.html' %}
+
+{% block title %}Create Organization Users - Sponsor Dashboard{% endblock %}
+
+{% block content %}
+<div class="container">
+  <div class="box">
+    <h1 class="title has-text-centered">
+      <span class="icon is-large has-text-primary">
+        <i class="fas fa-user-plus fa-2x"></i>
+      </span>
+      <br>
+      Create Organization Users
+    </h1>
+    
+    <div class="subtitle has-text-centered">
+      <strong>{{ sponsor_name }}</strong> (@{{ sponsor_username }})
+      <br>
+      <span class="tag is-primary is-medium">{{ current_organization }}</span>
+    </div>
+    
+    <!-- Rest of your existing template content -->
+    <div class="columns">
+      <!-- Create New User Form -->
+      <div class="column is-half">
+        <div class="box has-background-primary-light">
+          <h2 class="subtitle">
+            <span class="icon has-text-primary">
+              <i class="fas fa-user-plus"></i>
+            </span>
+            Create New Sponsor User
+            <span class="tag is-info">{{ current_organization }}</span>
+          </h2>
+          
+          <!-- Your existing form code here -->
+        <form method="post">
+          {% csrf_token %}
+          
+          <div class="notification is-info">
+            <strong>Note:</strong> New user will be assigned to your organization: <strong>{{ current_organization }}</strong>
+          </div>
+          <!-- Username Field -->
+          <div class="field">
+            <label class="label">Username *</label>
+            <div class="control has-icons-left">
+              <input class="input" type="text" name="username" placeholder="Enter username" required maxlength="150">
+              <span class="icon is-small is-left">
+                <i class="fas fa-user"></i>
+              </span>
+            </div>
+          </div>
+          <!-- Email Field -->
+          <div class="field">
+            <label class="label">Email *</label>
+            <div class="control has-icons-left">
+              <input class="input" type="email" name="email" placeholder="user@example.com" required>
+              <span class="icon is-small is-left">
+                <i class="fas fa-envelope"></i>
+              </span>
+            </div>
+          </div>
+         <!-- First Name Field -->
+          <div class="field">
+            <label class="label">First Name *</label>
+            <div class="control has-icons-left">
+              <input class="input" type="text" name="first_name" placeholder="First name" required>
+              <span class="icon is-small is-left">
+                <i class="fas fa-user"></i>
+              </span>
+            </div>
+          </div>
+          <!-- Last Name Field -->
+          <div class="field">
+            <label class="label">Last Name *</label>
+            <div class="control has-icons-left">
+              <input class="input" type="text" name="last_name" placeholder="Last name" required>
+              <span class="icon is-small is-left">
+                <i class="fas fa-user"></i>
+              </span>
+            </div>
+          </div>
+        <!-- Phone Number -->
+        <div class="field">
+        <label class="label">Phone Number</label>
+        <div class="control has-icons-left">
+        <input class="input" type="tel" name="phone_number" placeholder="(555) 123-4567" maxlength="20">
+        <span class="icon is-small is-left">
+                <i class="fas fa-phone"></i>
+        </span>
+        </div>
+        <p class="help">Optional - Format: (555) 123-4567</p>
+        </div>
+                <!-- Password Fields -->
+        <div class="field">
+        <label class="label">Password *</label>
+        <div class="control has-icons-left">
+        <input class="input" type="password" name="password" placeholder="Enter password" required minlength="6" maxlength="128">
+        <span class="icon is-small is-left">
+                <i class="fas fa-lock"></i>
+        </span>
+        </div>
+        <p class="help">Minimum 6 characters</p>
+        </div>
+        
+        <div class="field">
+        <label class="label">Confirm Password *</label>
+        <div class="control has-icons-left">
+        <input class="input" type="password" name="confirm_password" placeholder="Confirm password" required minlength="6" maxlength="128">
+        <span class="icon is-small is-left">
+                <i class="fas fa-lock"></i>
+        </span>
+        </div>
+        </div>
+            <!-- ... rest of your existing form fields ... -->
+            
+            <div class="field">
+              <div class="control">
+                <button type="submit" class="button is-primary is-fullwidth is-medium">
+                  <span class="icon">
+                    <i class="fas fa-user-plus"></i>
+                  </span>
+                  <span>Create Sponsor User in {{ current_organization }}</span>
+                </button>
+              </div>
+            </div>
+          </form>
+        </div>
+      </div>
+      
+      <!-- Organization Members List -->
+      <div class="column is-half">
+        <div class="box has-background-info-light">
+          <h2 class="subtitle">
+            <span class="icon has-text-info">
+              <i class="fas fa-users"></i>
+            </span>
+            {{ current_organization }} Members ({{ total_members }})
+          </h2>
+          
+          {% if organization_members %}
+          <div class="table-container" style="max-height: 400px; overflow-y: auto;">
+            <table class="table is-fullwidth is-striped is-hoverable">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Username</th>
+                  <th>Status</th>
+                  <th>Organization</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for member in organization_members %}
+                <tr>
+                  <td>
+                    <strong>{{ member.first_name }} {{ member.last_name }}</strong>
+                    <br>
+                    <small class="has-text-grey">{{ member.email }}</small>
+                  </td>
+                  <td>@{{ member.username }}</td>
+                  <td>
+                    {% if member.is_active and member.relationship_status == 'active' %}
+                      <span class="tag is-success">
+                        <span class="icon"><i class="fas fa-check"></i></span>
+                        <span>Active</span>
+                      </span>
+                    {% else %}
+                      <span class="tag is-danger">
+                        <span class="icon"><i class="fas fa-ban"></i></span>
+                        <span>Inactive</span>
+                      </span>
+                    {% endif %}
+                  </td>
+                  <td>
+                    <span class="tag is-info">{{ member.sponsor_organization }}</span>
+                  </td>
+                  <td>
+                    {% if member.is_active and member.relationship_status == 'active' %}
+                    <form method="post" action="{% url 'sponsor_deactivate_organization_member' member.userID %}" style="display: inline;">
+                      {% csrf_token %}
+                      <button type="submit" 
+                              class="button is-small is-warning"
+                              title="Deactivate user"
+                              onclick="return confirm('Are you sure you want to deactivate {{ member.first_name }} {{ member.last_name }}?')">
+                        <span class="icon">
+                          <i class="fas fa-ban"></i>
+                        </span>
+                      </button>
+                    </form>
+                    {% else %}
+                    <span class="tag is-light">Deactivated</span>
+                    {% endif %}
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+          {% else %}
+          <div class="notification is-info">
+            <span class="icon">
+              <i class="fas fa-info-circle"></i>
+            </span>
+            No organization members in {{ current_organization }} yet.
+          </div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+    
+    <!-- Back Button -->
+    <div class="has-text-centered" style="margin-top: 2rem;">
+      <a href="{% url 'sponsor_home' %}" class="button is-light is-large">
+        <span class="icon">
+          <i class="fas fa-arrow-left"></i>
+        </span>
+        <span>Back to Sponsor Dashboard</span>
+      </a>
+    </div>
+  </div>
+</div>
+{% endblock %}
