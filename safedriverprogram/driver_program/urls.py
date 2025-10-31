@@ -19,11 +19,13 @@ urlpatterns = [
     path('useradmin/add/', views.add_admin, name='add_admin'),
     path('useradmin/list/', views.admin_list, name='admin_list'),
     path('useradmin/delete/<int:admin_id>/', views.delete_admin, name='delete_admin'),
+    path('useradmin/drivers/', views.admin_driver_dashboard, name='admin_driver_dashboard'),
+    path('useradmin/drivers/export-csv/', views.admin_drivers_csv_export, name='admin_drivers_csv_export'),
+    path('useradmin/drivers/delete/<int:user_id>/', views.admin_delete_driver, name='admin_delete_driver'),
     path('drivers/', views.driver_list, name='driver_list'),
     path('account/delete/', views.delete_account, name='delete_account'),
     path('organzation_page/', views.to_organization_page, name='organization_page'),
 
-    
     # Applications
     path('sponsor-application/', views.sponsor_application, name='sponsor_application'),
     path('application-success/', views.application_success, name='application_success'),
@@ -46,8 +48,8 @@ urlpatterns = [
     path('useradmin/sponsors/<int:sponsor_id>/update-status/', views.admin_update_sponsor_status, name='admin_update_sponsor_status'),
     path('useradmin/sponsors/<int:sponsor_id>/delete/', views.admin_delete_sponsor, name='admin_delete_sponsor'),
     
-    #admin admin management
-    path('useradmin/admins/', views.admin_manage_admins, name='admin_manage_admins'),
+    # Admin admin management
+    path('useradmin/admins/', views.admin_list, name='admin_manage_admins'),
     path('useradmin/admins/<int:admin_id>/update-status/', views.admin_update_admin_status, name='admin_update_admin_status'),
     
     # Admin security log
@@ -56,11 +58,13 @@ urlpatterns = [
     #Admin user management
     path('useradmin/change-user-type/', views.admin_change_user_type, name='admin_change_user_type'),
 
-    # Sponsor-specific pages - FIXED: Remove duplicates
+    # Sponsor-specific pages
     path('sponsor/home/', views.sponsor_home, name='sponsor_home'),
     path('sponsor/profile/', views.sponsor_profile, name='sponsor_profile'),
     path('sponsor/drivers/', views.sponsor_drivers, name='sponsor_drivers'),
     path('sponsor/adjust-points/', views.sponsor_adjust_points, name='sponsor_adjust_points'),
+    path('sponsor/adjust-point-exchange-rate/', views.sponsor_adjust_point_exchange_rate, name='sponsor_adjust_point_exchange_rate'),
+    path('sponsor/adjust-catalogue/', views.adjust_catalogue, name='sponsor_adjust_catalogue'),
     path('sponsor/applications/', views.sponsor_manage_applications, name='sponsor_manage_applications'),
     path('sponsor/application/<int:application_id>/', views.sponsor_view_application, name='sponsor_view_application'),
     path('sponsor-application-action/<int:application_id>/', views.sponsor_application_action, name='sponsor_application_action'),
@@ -73,16 +77,13 @@ urlpatterns = [
 
     # Admin review pages
     path('review/admins/', views.review_admin_status, name='review_admin_status'),
-    path('review/sponsors/', views.review_sponsor_status, name='review_sponsor_status'),
     path('review/drivers/', views.review_driver_status, name='review_driver_status'),
+    path('review/sponsors/', views.review_sponsor_status, name='review_sponsor_status'),
+    path('review/driver-points/', views.review_driver_points, name='review_driver_points'),
     
-    # Products
+    # Products and driver store pages
     path('products/', views.view_products, name='view_products'),
     path('products/<int:product_id>/', views.view_product, name='view_product'),
     path('wishlist/', views.wishlist_page, name='wishlist'),
     path('wishlist/add/<int:product_id>', views.add_to_wishlist, name='add_to_wishlist'),
-
-    # Sponsor user management
-    path('sponsor/create-user/', views.sponsor_create_user, name='sponsor_create_user'),
-    path('sponsor/deactivate-member/<int:member_id>/', views.sponsor_deactivate_organization_member, name='sponsor_deactivate_organization_member'),
 ]

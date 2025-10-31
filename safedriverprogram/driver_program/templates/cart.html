@@ -1,0 +1,48 @@
+{% extends 'base.html' %}
+{% block title %}My Cart - Safe Driver Program{% endblock %}
+
+{% block content %}
+<section class="section">
+  <div class="container">
+    <h1 class="title">🛒 My Cart</h1>
+
+    {% if cart_items %}
+    <table class="table is-fullwidth is-striped is-hoverable">
+      <thead>
+        <tr>
+          <th>Product</th>
+          <th>Price</th>
+          <th>Quantity</th>
+          <th>Subtotal</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in cart_items %}
+        <tr>
+          <td>
+            <a href="{% url 'view_product' item.id %}" class="has-text-dark">
+              <strong>{{ item.title }}</strong>
+            </a>
+          </td>
+          <td>${{ item.price }}</td>
+          <td>{{ item.quantity }}</td>
+          <td>${{ item.subtotal|floatformat:2 }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    <div class="has-text-right mt-5">
+      <h3 class="subtitle is-4">Total: <strong>${{ total|floatformat:2 }}</strong></h3>
+      <button class="button is-success">Proceed to Checkout</button>
+    </div>
+
+    {% else %}
+    <div class="notification is-info">
+      Your cart is currently empty.  
+      <a href="{% url 'view_products' %}" class="has-text-weight-semibold">Browse products</a> to add items!
+    </div>
+    {% endif %}
+  </div>
+</section>
+{% endblock %}

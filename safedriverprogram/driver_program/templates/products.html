@@ -5,7 +5,66 @@
 {% block content %}
 <section class="section">
     <div class="container">
-        <h1 class="title">Available Products</h1>
+        <div class="level">
+            <div class="level-left">
+                <div class="level-item">
+                    <h1 class="title">Available Products</h1>
+                </div>
+            </div>
+            <div class="level-right">
+                <div class="level-item">
+                    <div class="buttons has-addons">
+                        <a href="{% url 'view_products' %}?sort=price_asc" 
+                           class="button {% if current_sort == 'price_asc' %}is-primary{% endif %}">
+                            Price: Low to High
+                        </a>
+                        <a href="{% url 'view_products' %}?sort=price_desc" 
+                           class="button {% if current_sort == 'price_desc' %}is-primary{% endif %}">
+                            Price: High to Low
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Search Bar -->
+        <div class="box" style="margin-bottom: 2rem;">
+            <form method="GET" action="{% url 'view_products' %}">
+                <div class="field has-addons">
+                    <div class="control is-expanded">
+                        <input class="input is-medium" type="text" name="search" 
+                               placeholder="Search products by name, description, or category..." 
+                               value="{{ search_query|default:'' }}">
+                    </div>
+                    <div class="control">
+                        <button class="button is-primary is-medium" type="submit">
+                            <span class="icon">
+                                <i class="fas fa-search"></i>
+                            </span>
+                            <span>Search</span>
+                        </button>
+                    </div>
+                </div>
+            </form>
+            
+            <!-- Search Results Info -->
+            {% if search_query %}
+            <div class="content" style="margin-top: 1rem;">
+                <p class="has-text-grey">
+                    <span class="icon">
+                        <i class="fas fa-info-circle"></i>
+                    </span>
+                    Showing {{ total_products }} result{{ total_products|pluralize }} for "<strong>{{ search_query }}</strong>"
+                    <a href="{% url 'view_products' %}" class="button is-small is-light" style="margin-left: 1rem;">
+                        <span class="icon">
+                            <i class="fas fa-times"></i>
+                        </span>
+                        <span>Clear Search</span>
+                    </a>
+                </p>
+            </div>
+            {% endif %}
+        </div>
         
         {% if error_message %}
         <div class="notification is-danger">
@@ -13,33 +72,78 @@
         </div>
         {% endif %}
 
+        <!-- Products Grid -->
+        {% if products %}
         <div class="columns is-multiline">
             {% for product in products %}
             <div class="column is-one-quarter">
-                <a href="{% url 'view_product' product.id %}" style="color: inherit;">
                 <div class="card">
                     <div class="card-image">
                         <figure class="image is-4by3">
-                            <img src="{{ product.image }}" alt="{{ product.title }}" style="object-fit: contain; padding: 1rem;">
+                            <a href="{% url 'view_product' product.id %}">
+                                <img src="{{ product.image }}" alt="{{ product.title }}" style="object-fit: contain; padding: 1rem;">
+                            </a>
                         </figure>
                     </div>
+
                     <div class="card-content">
                         <div class="content">
-                            <h4 class="title is-5">{{ product.title }}</h4>
+                            <h4 class="title is-5">
+                                <a href="{% url 'view_product' product.id %}" class="has-text-dark">
+                                    {{ product.title }}
+                                </a>
+                            </h4>
                             <p class="subtitle is-6">${{ product.price }}</p>
-                            <div class="tags">
+
+                            <div class="tags mb-2">
                                 <span class="tag is-primary">{{ product.category }}</span>
                             </div>
-                            <div class="has-text-grey-light is-size-7">
+
+                            <div class="has-text-grey-light is-size-7 mb-3">
                                 Rating: {{ product.rating.rate }} ({{ product.rating.count }} reviews)
                             </div>
+
+                            {# ✅ ADD TO CART BUTTON (Visible only for Drivers) #}
+                            {% if request.session.account_type == 'driver' %}
+                            <div class="mt-3">
+                                <a href="{% url 'add_to_cart' product.id %}" class="button is-link is-small">
+                                    <span class="icon"><i class="fas fa-cart-plus"></i></span>
+                                    <span>Add to Cart</span>
+                                </a>
+                            </div>
+                            {% endif %}
                         </div>
                     </div>
                 </div>
-                </a>
             </div>
             {% endfor %}
         </div>
+        {% else %}
+        <!-- No Products Found -->
+        <div class="notification is-info">
+            <div class="has-text-centered">
+                <span class="icon is-large">
+                    <i class="fas fa-search fa-2x"></i>
+                </span>
+                <p class="title is-4" style="margin-top: 1rem;">
+                    {% if search_query %}
+                        No products found for "{{ search_query }}"
+                    {% else %}
+                        No products available
+                    {% endif %}
+                </p>
+                {% if search_query %}
+                <p class="subtitle">Try searching with different keywords or browse all products.</p>
+                <a href="{% url 'view_products' %}" class="button is-primary">
+                    <span class="icon">
+                        <i class="fas fa-list"></i>
+                    </span>
+                    <span>View All Products</span>
+                </a>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
     </div>
 </section>
 {% endblock %}
