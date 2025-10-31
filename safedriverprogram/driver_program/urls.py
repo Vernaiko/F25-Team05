@@ -55,10 +55,14 @@ urlpatterns = [
     # Admin security log
     path('useradmin/failed-login-log/', views.admin_failed_login_log, name='admin_failed_login_log'),
     
+<<<<<<<<< Temporary merge branch 1
+    # Sponsor-specific pages
+=========
     #Admin user management
     path('useradmin/change-user-type/', views.admin_change_user_type, name='admin_change_user_type'),
 
-    # Sponsor-specific pages
+    # Sponsor-specific pages - FIXED: Remove duplicates
+>>>>>>>>> Temporary merge branch 2
     path('sponsor/home/', views.sponsor_home, name='sponsor_home'),
     path('sponsor/profile/', views.sponsor_profile, name='sponsor_profile'),
     path('sponsor/drivers/', views.sponsor_drivers, name='sponsor_drivers'),
@@ -86,4 +90,20 @@ urlpatterns = [
     path('products/<int:product_id>/', views.view_product, name='view_product'),
     path('wishlist/', views.wishlist_page, name='wishlist'),
     path('wishlist/add/<int:product_id>', views.add_to_wishlist, name='add_to_wishlist'),
+
+    # Sponsor user management
+    path('sponsor/create-user/', views.sponsor_create_user, name='sponsor_create_user'),
+    path('sponsor/deactivate-member/<int:member_id>/', views.sponsor_deactivate_organization_member, name='sponsor_deactivate_organization_member'),
+
+    path('wishlist/add/<int:product_id>/', views.add_to_wishlist, name='add_to_wishlist'),
+    path('wishlist/delete/<int:product_id>/', views.delete_from_wishlist, name='delete_from_wishlist'),
+
+    # Shopping cart
+    path('cart/add/<int:product_id>/', views.add_to_cart, name='add_to_cart'),
+    path('cart/', views.view_cart, name='view_cart'),
+
+    # Reports and Account Review
+    path('sponsor/driver-point-report/', views.generate_driver_point_report, name='generate_driver_point_report'),
+    path('driver/order-history/', views.driver_order_history, name='driver_order_history'),
+    path('admin/review-all-accounts/', views.review_all_accounts, name='review_all_accounts'),
 ]

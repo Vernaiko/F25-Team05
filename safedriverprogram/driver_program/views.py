@@ -4239,5 +4239,4 @@ def sponsor_deactivate_organization_member(request, member_id):
         cursor.close()
     
     return redirect('sponsor_create_user')
-        except:
-            pass
+>>>>>>>>> Temporary merge branch 2
