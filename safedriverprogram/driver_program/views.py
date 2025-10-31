@@ -1,5 +1,5 @@
 import hashlib
-from django.shortcuts import render, redirect
+from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
 from django.db import connection
 from django.views.decorators.csrf import csrf_protect
@@ -8,11 +8,13 @@ from django.conf import settings
 import os
 import requests
 from django.core.files.storage import default_storage
-
 from django.contrib.auth.models import User
-from django.contrib.auth.decorators import user_passes_test
-from django.contrib import messages
-from django.shortcuts import render, redirect, get_object_or_404
+from django.contrib.auth.decorators import user_passes_test, login_required  # <-- added login_required
+from datetime import datetime
+from driver_program.decorators import admin_required
+from django.contrib.auth.decorators import login_required
+
+
 
 # Database authentication helper functions
 class DatabaseUser:
@@ -1519,6 +1521,18 @@ def sponsor_home(request):
     cursor = connection.cursor()
     
     try:
+        # Ensure sponsors_settings table exists so we can SELECT/INSERT safely
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS sponsors_settings (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                sponsor_user_id INT NOT NULL UNIQUE,
+                point_exchange_rate INT NOT NULL DEFAULT 100,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                INDEX idx_sponsor_user_id (sponsor_user_id)
+            )
+        """)
+
         # Get sponsor's basic information
         cursor.execute("""
             SELECT first_name, last_name, email, username
@@ -1770,11 +1784,15 @@ def sponsor_drivers(request):
                 'goals_description': app[9]
             })
         
+        # Calculate total outstanding points
+        total_outstanding_points = sum(d['points'] for d in drivers_list)
+        
         context = {
             'sponsored_drivers': drivers_list,
             'pending_applications': applications_list,
             'total_drivers': len(drivers_list),
-            'active_drivers': len([d for d in drivers_list if d['relationship_status'] == 'active'])
+            'active_drivers': len([d for d in drivers_list if d['relationship_status'] == 'active']),
+            'total_outstanding_points': total_outstanding_points
         }
         
         return render(request, 'sponsor_drivers.html', context)
@@ -1846,13 +1864,14 @@ def driver_list(request):
 
 @admin_required
 def admin_driver_dashboard(request):
-    """Admin dashboard: list all drivers from the custom `users` table (account_type='driver').
+    """Admin dashboard: list all drivers with their points from all sponsors.
 
     This uses the same session-based admin check (`admin_required`) used elsewhere in the app
     so it works with your database-backed login/session system.
     """
     cursor = connection.cursor()
     try:
+        # Get all drivers
         cursor.execute("""
             SELECT userID, username, first_name, last_name, email,
                    phone_number, account_type, is_active, created_at
@@ -1863,8 +1882,10 @@ def admin_driver_dashboard(request):
 
         rows = cursor.fetchall()
         drivers = []
+        total_points_across_all_drivers = 0
+        
         for r in rows:
-            drivers.append({
+            driver_data = {
                 'user_id': r[0],
                 'username': r[1],
                 'first_name': r[2],
@@ -1873,11 +1894,56 @@ def admin_driver_dashboard(request):
                 'phone_number': r[5],
                 'account_type': r[6],
                 'is_active': bool(r[7]),
-                'created_at': r[8]
-            })
+                'created_at': r[8],
+                'total_points': 0,
+                'sponsor_breakdown': []
+            }
+            
+            # Get points from all sponsors for this driver
+            try:
+                cursor.execute("""
+                    SELECT 
+                        dpt.sponsor_user_id,
+                        u.first_name AS sponsor_first_name,
+                        u.last_name AS sponsor_last_name,
+                        u.username AS sponsor_username,
+                        SUM(dpt.points) AS total_points_from_sponsor,
+                        COUNT(dpt.id) AS transaction_count
+                    FROM driver_points_transactions dpt
+                    JOIN users u ON dpt.sponsor_user_id = u.userID
+                    WHERE dpt.driver_user_id = %s
+                    GROUP BY dpt.sponsor_user_id, u.first_name, u.last_name, u.username
+                    ORDER BY total_points_from_sponsor DESC
+                """, [r[0]])
+                
+                sponsor_points = cursor.fetchall()
+                driver_total = 0
+                
+                for sp in sponsor_points:
+                    points_from_sponsor = sp[4] or 0
+                    driver_total += points_from_sponsor
+                    driver_data['sponsor_breakdown'].append({
+                        'sponsor_id': sp[0],
+                        'sponsor_name': f"{sp[1]} {sp[2]}",
+                        'sponsor_username': sp[3],
+                        'points': points_from_sponsor,
+                        'transaction_count': sp[5]
+                    })
+                
+                driver_data['total_points'] = driver_total
+                total_points_across_all_drivers += driver_total
+                
+            except Exception as e:
+                print(f"Error loading points for driver {r[0]}: {e}")
+                driver_data['total_points'] = 0
+                driver_data['sponsor_breakdown'] = []
+            
+            drivers.append(driver_data)
 
         return render(request, 'admin_driver_list.html', {
             'drivers': drivers,
+            'total_drivers': len(drivers),
+            'total_points_all_drivers': total_points_across_all_drivers
         })
 
     except Exception as e:
@@ -1940,6 +2006,137 @@ def admin_delete_driver(request, user_id):
             pass
 
 # Add these functions to your existing driver_program/views.py file
+
+
+@admin_required
+def admin_drivers_csv_export(request):
+    """Export all drivers and their point transactions to CSV format."""
+    import csv
+    from django.http import HttpResponse
+    from datetime import datetime
+    
+    cursor = connection.cursor()
+    
+    try:
+        # Create the HTTP response with CSV content type
+        response = HttpResponse(content_type='text/csv')
+        response['Content-Disposition'] = f'attachment; filename="drivers_export_{datetime.now().strftime("%Y%m%d_%H%M%S")}.csv"'
+        
+        writer = csv.writer(response)
+        
+        # Write the header row
+        writer.writerow([
+            'Driver ID',
+            'Username', 
+            'First Name',
+            'Last Name',
+            'Email',
+            'Phone',
+            'Status',
+            'Join Date',
+            'Total Points',
+            'Transaction Date',
+            'Transaction Points',
+            'Transaction Message',
+            'Sponsor Name',
+            'Sponsor Username'
+        ])
+        
+        # Get all drivers
+        cursor.execute("""
+            SELECT userID, username, first_name, last_name, email,
+                   phone_number, is_active, created_at
+            FROM users
+            WHERE account_type = %s
+            ORDER BY last_name, first_name
+        """, ['driver'])
+        
+        drivers = cursor.fetchall()
+        
+        for driver in drivers:
+            driver_id = driver[0]
+            username = driver[1]
+            first_name = driver[2]
+            last_name = driver[3]
+            email = driver[4]
+            phone = driver[5] or ''
+            is_active = 'Active' if driver[6] else 'Inactive'
+            join_date = driver[7].strftime('%Y-%m-%d') if driver[7] else ''
+            
+            # Get all transactions for this driver
+            cursor.execute("""
+                SELECT 
+                    dpt.points,
+                    dpt.message,
+                    dpt.created_at,
+                    u.first_name AS sponsor_first_name,
+                    u.last_name AS sponsor_last_name,
+                    u.username AS sponsor_username
+                FROM driver_points_transactions dpt
+                JOIN users u ON dpt.sponsor_user_id = u.userID
+                WHERE dpt.driver_user_id = %s
+                ORDER BY dpt.created_at DESC
+            """, [driver_id])
+            
+            transactions = cursor.fetchall()
+            
+            # Calculate total points
+            total_points = sum(t[0] for t in transactions) if transactions else 0
+            
+            if transactions:
+                # Write one row per transaction
+                for transaction in transactions:
+                    transaction_points = transaction[0]
+                    transaction_message = transaction[1] or ''
+                    transaction_date = transaction[2].strftime('%Y-%m-%d %H:%M:%S') if transaction[2] else ''
+                    sponsor_name = f"{transaction[3]} {transaction[4]}"
+                    sponsor_username = transaction[5]
+                    
+                    writer.writerow([
+                        driver_id,
+                        username,
+                        first_name,
+                        last_name,
+                        email,
+                        phone,
+                        is_active,
+                        join_date,
+                        total_points,
+                        transaction_date,
+                        transaction_points,
+                        transaction_message,
+                        sponsor_name,
+                        sponsor_username
+                    ])
+            else:
+                # Write one row for drivers with no transactions
+                writer.writerow([
+                    driver_id,
+                    username,
+                    first_name,
+                    last_name,
+                    email,
+                    phone,
+                    is_active,
+                    join_date,
+                    0,  # total_points
+                    '',  # transaction_date
+                    '',  # transaction_points
+                    '',  # transaction_message
+                    '',  # sponsor_name
+                    ''   # sponsor_username
+                ])
+        
+        return response
+        
+    except Exception as e:
+        messages.error(request, f"Error generating CSV export: {str(e)}")
+        return redirect('admin_driver_dashboard')
+    finally:
+        try:
+            cursor.close()
+        except:
+            pass
 
 @db_login_required
 def sponsor_manage_applications(request):
@@ -2297,6 +2494,136 @@ def sponsor_view_application(request, application_id):
         return redirect('sponsor_manage_applications')
     finally:
         cursor.close()
+        
+def adjust_catalogue(request):
+    """Allow a sponsor to select which catalogue categories should be displayed.
+
+    Stores selections in a simple DB table `sponsor_catalogue_preferences` as a
+    comma-separated list in `categories`.
+    """
+    # Auth checks
+    if not request.session.get('is_authenticated'):
+        messages.error(request, "Please log in to access this page.")
+        return redirect('login_page')
+
+    if request.session.get('account_type') != 'sponsor':
+        messages.error(request, "Access denied. Only sponsors can perform this action.")
+        return redirect('homepage')
+
+    sponsor_id = request.session.get('user_id') or request.session.get('id')
+    cursor = connection.cursor()
+
+    try:
+        # Create preferences table if it doesn't exist
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS sponsor_catalogue_preferences (
+                sponsor_user_id INT PRIMARY KEY,
+                categories TEXT,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+            )
+        """)
+
+        if request.method == 'POST':
+            # Expect multiple checkbox values under 'categories'
+            selected = request.POST.getlist('categories')
+            categories_str = ','.join([c.strip() for c in selected if c.strip()])
+
+            # Upsert preferences — REPLACE is portable for simple upsert here
+            cursor.execute(
+                "REPLACE INTO sponsor_catalogue_preferences (sponsor_user_id, categories) VALUES (%s, %s)",
+                [sponsor_id, categories_str]
+            )
+            connection.commit()
+            messages.success(request, "Catalogue preferences updated.")
+            return redirect('sponsor_adjust_catalogue')
+
+        # GET -> build form: preferred categories + available categories from API
+        try:
+            resp = requests.get('https://fakestoreapi.com/products/categories', timeout=5)
+            resp.raise_for_status()
+            all_categories = resp.json()
+        except Exception:
+            # Fallback: fetch products and derive categories
+            try:
+                resp = requests.get('https://fakestoreapi.com/products', timeout=5)
+                resp.raise_for_status()
+                products = resp.json()
+                all_categories = sorted(list({p.get('category') for p in products if p.get('category')}))
+            except Exception:
+                all_categories = []
+
+        # Load current selection
+        cursor.execute("SELECT categories FROM sponsor_catalogue_preferences WHERE sponsor_user_id = %s", [sponsor_id])
+        row = cursor.fetchone()
+        selected = [c for c in (row[0].split(',') if row and row[0] else []) if c]
+
+        return render(request, 'sponsor_adjust_catalogue.html', {
+            'categories': all_categories,
+            'selected': selected
+        })
+
+    except Exception as e:
+        messages.error(request, f"Error loading catalogue preferences: {str(e)}")
+        return redirect('sponsor_home')
+    finally:
+        cursor.close()
+        
+def sponsor_adjust_point_exchange_rate(request):
+    """Allow sponsors to adjust their point exchange rate."""
+    
+    # Check if user is logged in and is a sponsor
+    if not request.session.get('is_authenticated'):
+        messages.error(request, "Please log in to access this page.")
+        return redirect('login_page')
+    
+    if request.session.get('account_type') != 'sponsor':
+        messages.error(request, "Access denied. Only sponsors can perform this action.")
+        return redirect('homepage')
+    
+    sponsor_id = request.session.get('id')
+    cursor = connection.cursor()
+    
+    try:
+        if request.method == 'POST':
+            new_rate = request.POST.get('point_exchange_rate')
+            try:
+                new_rate = float(new_rate)
+                if new_rate <= 0:
+                    raise ValueError("Exchange rate must be positive.")
+                
+                # Update the sponsor's point exchange rate
+                cursor.execute("""
+                    UPDATE sponsors_settings
+                    SET point_exchange_rate = %s, updated_at = NOW()
+                    WHERE id = %s
+                """, [new_rate, sponsor_id])
+                
+                messages.success(request, "Point exchange rate updated successfully.")
+                return redirect('sponsor_home')
+                
+            except ValueError as ve:
+                messages.error(request, f"Invalid exchange rate: {str(ve)}")
+        
+        # Fetch current exchange rate for display
+        cursor.execute("""
+            SELECT point_exchange_rate
+            FROM sponsors_settings
+            WHERE id = %s
+        """, [sponsor_id])
+        
+        row = cursor.fetchone()
+        current_rate = row[0] if row else None
+        
+        return render(request, 'sponsor_adjust_point_exchange_rate.html', {
+            'current_rate': current_rate
+        })
+        
+    except Exception as e:
+        messages.error(request, f"Error updating exchange rate: {str(e)}")
+        return redirect('sponsor_home')
+    finally:
+        cursor.close()
+    
 
 # ADMIN DASHBOARD: REVIEW USER ACCOUNT STATUSES
 def is_admin(user):
@@ -2354,23 +2681,72 @@ def review_driver_status(request):
     return render(request, "driver_status.html", {"drivers": drivers})
 
 def view_products(request):
-    """Display products from Fake Store API"""
+    """Display products from Fake Store API with optional sorting and search"""
     import requests
+
+    sort_order = request.GET.get('sort', '')  # Get sort parameter from query string
+    search_query = request.GET.get('search', '').strip()
 
     try:
         # Fetch products from the Fake Store API
         response = requests.get('https://fakestoreapi.com/products')
-        response.raise_for_status()  # Raise an exception for error status codes
+        response.raise_for_status()
         products = response.json()
+        
+        # Sort products if requested
+        if sort_order == 'price_asc':
+            products.sort(key=lambda x: float(x['price']))
+        elif sort_order == 'price_desc':
+            products.sort(key=lambda x: float(x['price']), reverse=True)
+        
+        # Filter products based on search query
+        if search_query:
+            search_lower = search_query.lower()
+            products = [
+                product for product in products
+                if (search_lower in product.get('title', '').lower() or
+                    search_lower in product.get('description', '').lower() or
+                    search_lower in product.get('category', '').lower())
+            ]
 
+        # If the current user is a sponsor, apply their catalogue category preferences (if any)
+        try:
+            if request.session.get('is_authenticated') and request.session.get('account_type') == 'sponsor':
+                sponsor_id = request.session.get('user_id') or request.session.get('id')
+                if sponsor_id:
+                    cur = connection.cursor()
+                    try:
+                        cur.execute("SELECT categories FROM sponsor_catalogue_preferences WHERE sponsor_user_id = %s", [sponsor_id])
+                        r = cur.fetchone()
+                        if r and r[0]:
+                            prefs = [c.strip() for c in r[0].split(',') if c.strip()]
+                            if prefs:
+                                products = [p for p in products if p.get('category') in prefs]
+                    finally:
+                        try:
+                            cur.close()
+                        except Exception:
+                            pass
+        except Exception:
+            # Don't fail the whole page if preferences lookup or filtering fails
+            pass
+
+        # Render template with products
         return render(request, 'products.html', {
-            'products': products
+            'products': products,
+            'current_sort': sort_order,
+            'search_query': search_query,
+            'total_products': len(products)
         })
+
     except requests.RequestException as e:
         return render(request, 'products.html', {
             'error_message': f"Failed to fetch products: {str(e)}",
-            'products': []
+            'products': [],
+            'search_query': search_query,
+            'total_products': 0
         })
+
 
 @db_login_required
 def view_product(request, product_id):
@@ -3140,605 +3516,333 @@ def wishlist_page(request):
         return redirect('homepage')
     finally:
         cursor.close()
-
+        
 @db_login_required
-def admin_manage_admins(request):
-    """Admin page to view and manage all admin accounts"""
-    
-    # Check if user is logged in and is an admin
-    if not request.session.get('is_authenticated'):
-        messages.error(request, "Please log in to access this page.")
+def delete_from_wishlist(request, product_id):
+    """Remove a product from the logged-in user's wishlist.
+
+    Only accepts POST requests. Redirects back to the wishlist page after
+    attempting removal. Uses `user_wishlist` table which is created elsewhere
+    (and created on-demand in other code paths as well).
+    """
+    # Ensure this is a POST to avoid accidental deletions via GET
+    if request.method != 'POST':
+        return redirect('wishlist')
+
+    user_id = request.session.get('user_id') or request.session.get('userID') or request.session.get('id')
+    if not user_id:
+        messages.error(request, "Please log in to modify your wishlist.")
         return redirect('login_page')
-    
-    if request.session.get('account_type') != 'admin':
-        messages.error(request, "Access denied. Only administrators can view this page.")
-        return redirect('homepage')
-    
+
     cursor = connection.cursor()
-    
     try:
-        # Get all admin users from the users table
+        cursor.execute("DELETE FROM user_wishlist WHERE user_id = %s AND product_id = %s", [user_id, product_id])
+        try:
+            connection.commit()
+        except Exception:
+            # If commit fails (e.g., autocommit enabled), ignore
+            pass
+
+        messages.success(request, "Product removed from wishlist.")
+    except Exception as e:
+        messages.error(request, f"Error removing product from wishlist: {str(e)}")
+    finally:
+        try:
+            cursor.close()
+        except Exception:
+            pass
+
+    return redirect('wishlist')
+        
+# --- Helper and Decorator ---
+def is_admin(user):
+    return user.is_staff or user.is_superuser
+
+
+def admin_required(view_func):
+    return user_passes_test(is_admin, login_url='/login/')(view_func)
+
+
+# --- Review Admin Accounts ---
+@admin_required
+def review_admin_status(request):
+    cursor = connection.cursor()
+    try:
         cursor.execute("""
-            SELECT userID, username, first_name, last_name, email,
-                   phone_number, address, is_active, created_at
+            SELECT userID, first_name, last_name, username, email, is_active 
             FROM users
             WHERE account_type = 'admin'
-            ORDER BY created_at DESC
         """)
-        
-        admins_data = cursor.fetchall()
-        
-        admins_list = []
-        for admin in admins_data:
-            admins_list.append({
-                'userID': admin[0],
-                'username': admin[1],
-                'first_name': admin[2],
-                'last_name': admin[3],
-                'email': admin[4],
-                'phone_number': admin[5],
-                'address': admin[6],
-                'is_active': admin[7],
-                'created_at': admin[8]
-            })
-        
-        # Get statistics
-        total_admins = len(admins_list)
-        active_admins = len([a for a in admins_list if a['is_active']])
-        inactive_admins = total_admins - active_admins
-        
-        context = {
-            'admins': admins_list,
-            'total_admins': total_admins,
-            'active_admins': active_admins,
-            'inactive_admins': inactive_admins,
-            'current_user_id': request.session.get('user_id')
-        }
-        
-        return render(request, 'admin_manage_admins.html', context)
-        
-    except Exception as e:
-        messages.error(request, f"Error loading admins: {str(e)}")
-        print(f"Admin manage admins error: {e}")
-        return redirect('account_page')
+        admins = cursor.fetchall()
     finally:
         cursor.close()
 
+    context = {'users': admins, 'account_type': 'Admin'}
+    return render(request, 'review_status.html', context)
 
-@db_login_required
-def admin_update_admin_status(request, admin_id):
-    """Toggle admin active/inactive status"""
-    
-    if request.method != 'POST':
-        messages.error(request, "Invalid request method.")
-        return redirect('admin_manage_admins')
-    
-    # Check if user is logged in and is an admin
-    if not request.session.get('is_authenticated'):
-        messages.error(request, "Please log in to access this page.")
-        return redirect('login_page')
-    
-    if request.session.get('account_type') != 'admin':
-        messages.error(request, "Access denied. Only administrators can perform this action.")
-        return redirect('homepage')
-    
-    current_user_id = request.session.get('user_id')
-    
-    # Prevent admin from deactivating themselves
-    if int(admin_id) == current_user_id:
-        messages.error(request, "You cannot change your own account status.")
-        return redirect('admin_manage_admins')
-    
+
+# --- Review Driver Accounts ---
+@admin_required
+def review_driver_status(request):
     cursor = connection.cursor()
-    
     try:
-        # Get current admin status
         cursor.execute("""
-            SELECT username, first_name, last_name, is_active, account_type
+            SELECT userID, first_name, last_name, username, email, is_active 
             FROM users
-            WHERE userID = %s
-        """, [admin_id])
-        
-        admin_data = cursor.fetchone()
-        
-        if not admin_data:
-            messages.error(request, "Admin not found.")
-            return redirect('admin_manage_admins')
-        
-        if admin_data[4] != 'admin':
-            messages.error(request, "This user is not an admin.")
-            return redirect('admin_manage_admins')
-        
-        username = admin_data[0]
-        full_name = f"{admin_data[1]} {admin_data[2]}"
-        current_status = admin_data[3]
-        
-        # Toggle status
-        new_status = 0 if current_status else 1
-        
-        cursor.execute("""
-            UPDATE users
-            SET is_active = %s
-            WHERE userID = %s
-        """, [new_status, admin_id])
-        
-        status_text = "activated" if new_status else "deactivated"
-        messages.success(request, f"Admin {full_name} (@{username}) has been {status_text}.")
-        
-    except Exception as e:
-        messages.error(request, f"Error updating admin status: {str(e)}")
-        print(f"Update admin status error: {e}")
+            WHERE account_type = 'driver'
+        """)
+        drivers = cursor.fetchall()
     finally:
         cursor.close()
-    
-    return redirect('admin_manage_admins')
+
+    context = {'users': drivers, 'account_type': 'Driver'}
+    return render(request, 'review_status.html', context)
 
 
-# ============================================================================
-# WALLET HISTORY VIEWS
-# ============================================================================
+# --- Review Sponsor Accounts ---
+@admin_required
+def review_sponsor_status(request):
+    cursor = connection.cursor()
+    try:
+        cursor.execute("""
+            SELECT userID, first_name, last_name, username, email, is_active 
+            FROM users
+            WHERE account_type = 'sponsor'
+        """)
+        sponsors = cursor.fetchall()
+    finally:
+        cursor.close()
 
-def sponsor_wallet_history(request, driver_id=None):
-    """
-    View wallet transaction history for drivers sponsored by this sponsor.
-    If driver_id is provided, show history for that specific driver.
-    Otherwise, show aggregated view for all drivers.
-    """
-    # Only sponsors can access this page
-    if request.session.get('account_type') != 'sponsor':
-        messages.error(request, "Access denied. Only sponsors can view this page.")
-        return redirect('homepage')
-    
+    context = {'users': sponsors, 'account_type': 'Sponsor'}
+    return render(request, 'review_status.html', context)
+
+@login_required
+def generate_driver_point_report(request):
     sponsor_id = request.session.get('user_id')
+    start_date = request.GET.get('start_date')
+    end_date = request.GET.get('end_date')
+    report_data = []
+
+    if start_date and end_date:
+        try:
+            start = datetime.strptime(start_date, "%Y-%m-%d")
+            end = datetime.strptime(end_date, "%Y-%m-%d")
+
+            with connection.cursor() as cursor:
+                cursor.execute("""
+                    SELECT d.first_name, d.last_name, p.points, p.date_awarded
+                    FROM driver_points p
+                    JOIN users d ON p.driver_id = d.userID
+                    WHERE p.sponsor_id = %s AND p.date_awarded BETWEEN %s AND %s
+                    ORDER BY p.date_awarded DESC
+                """, [sponsor_id, start, end])
+                report_data = cursor.fetchall()
+
+        except Exception as e:
+            print("Error generating report:", e)
+
+    context = {
+        'report_data': report_data,
+        'start_date': start_date,
+        'end_date': end_date,
+    }
+    return render(request, 'generate_driver_point_report.html', context)
+
+
+@login_required
+def driver_order_history(request):
+    user_id = request.user.id  # Get logged-in driver's ID
     cursor = connection.cursor()
-    
     try:
-        # Get all drivers sponsored by this sponsor
         cursor.execute("""
-            SELECT 
-                u.userID, u.username, u.first_name, u.last_name,
-                dw.wallet_id, dw.points_balance, dw.last_transaction_date
-            FROM sponsor_driver_relationships sdr
-            JOIN users u ON sdr.driver_user_id = u.userID
-            LEFT JOIN driver_wallets dw ON dw.driver_id = u.userID
-            WHERE sdr.sponsor_user_id = %s AND sdr.relationship_status = 'active'
-            ORDER BY u.last_name, u.first_name
-        """, [sponsor_id])
-        
-        sponsored_drivers = cursor.fetchall()
-        drivers_list = []
-        
-        for driver in sponsored_drivers:
-            drivers_list.append({
-                'user_id': driver[0],
-                'username': driver[1],
-                'first_name': driver[2],
-                'last_name': driver[3],
-                'wallet_id': driver[4],
-                'points_balance': driver[5] or 0,
-                'last_transaction_date': driver[6]
-            })
-        
-        transactions = []
-        selected_driver = None
-        
-        if driver_id:
-            # Verify this sponsor has access to this driver
-            driver_found = next((d for d in drivers_list if d['user_id'] == driver_id), None)
-            
-            if not driver_found:
-                messages.error(request, "You don't have access to this driver's wallet history.")
-                return redirect('sponsor_wallet_history')
-            
-            selected_driver = driver_found
-            
-            # Get transaction history for specific driver
-            cursor.execute("""
-                SELECT 
-                    wth.transaction_id, wth.transaction_type, wth.points_amount,
-                    wth.points_before, wth.points_after, wth.description,
-                    wth.reference_type, wth.status, wth.transaction_date,
-                    wth.processed_by, wth.notes,
-                    sponsor.username as sponsor_username,
-                    admin.username as admin_username
-                FROM wallet_transaction_history wth
-                LEFT JOIN users sponsor ON wth.sponsor_id = sponsor.userID
-                LEFT JOIN users admin ON wth.admin_id = admin.userID
-                WHERE wth.driver_id = %s
-                ORDER BY wth.transaction_date DESC
-                LIMIT 100
-            """, [driver_id])
-            
-            transaction_rows = cursor.fetchall()
-            
-            for tx in transaction_rows:
-                transactions.append({
-                    'transaction_id': tx[0],
-                    'transaction_type': tx[1],
-                    'points_amount': tx[2],
-                    'points_before': tx[3],
-                    'points_after': tx[4],
-                    'description': tx[5],
-                    'reference_type': tx[6],
-                    'status': tx[7],
-                    'transaction_date': tx[8],
-                    'processed_by': tx[9],
-                    'notes': tx[10],
-                    'sponsor_username': tx[11],
-                    'admin_username': tx[12]
-                })
-        
-        context = {
-            'drivers': drivers_list,
-            'selected_driver': selected_driver,
-            'transactions': transactions,
-            'total_drivers': len(drivers_list)
-        }
-        
-        return render(request, 'sponsor_wallet_history.html', context)
-        
-    except Exception as e:
-        messages.error(request, f"Error loading wallet history: {str(e)}")
-        print(f"Sponsor wallet history error: {e}")
-        return redirect('sponsor_home')
+            SELECT order_id, product_name, order_date, points_used, status
+            FROM orders
+            WHERE driver_id = %s
+            ORDER BY order_date DESC
+        """, [user_id])
+        orders = cursor.fetchall()
+
+        order_list = [
+            {
+                'order_id': row[0],
+                'product_name': row[1],
+                'order_date': row[2],
+                'points_used': row[3],
+                'status': row[4],
+            }
+            for row in orders
+        ]
+
+        return render(request, 'driver_order_history.html', {'orders': order_list})
     finally:
         cursor.close()
-
-
-def admin_wallet_history(request, driver_id=None):
-    """
-    Admin view for wallet transaction history.
-    Can view all drivers or filter by specific driver.
-    """
-    # Only admins can access this page
-    if request.session.get('account_type') != 'admin':
-        messages.error(request, "Access denied. Only admins can view this page.")
-        return redirect('homepage')
-    
-    cursor = connection.cursor()
-    
-    try:
-        # Get all drivers with wallets
-        cursor.execute("""
-            SELECT 
-                u.userID, u.username, u.first_name, u.last_name, u.email,
-                dw.wallet_id, dw.points_balance, dw.last_transaction_date, dw.is_active,
-                sp.organization_name
-            FROM users u
-            LEFT JOIN driver_wallets dw ON dw.driver_id = u.userID
-            LEFT JOIN driver_program_profile p ON p.user_id = u.userID
-            LEFT JOIN driver_program_sponsorprofile sp ON p.sponsor_id = sp.id
-            WHERE u.account_type = 'driver'
-            ORDER BY u.last_name, u.first_name
-        """)
-        
-        all_drivers = cursor.fetchall()
-        drivers_list = []
-        
-        for driver in all_drivers:
-            drivers_list.append({
-                'user_id': driver[0],
-                'username': driver[1],
-                'first_name': driver[2],
-                'last_name': driver[3],
-                'email': driver[4],
-                'wallet_id': driver[5],
-                'points_balance': driver[6] or 0,
-                'last_transaction_date': driver[7],
-                'wallet_active': driver[8] if driver[8] is not None else False,
-                'sponsor_organization': driver[9]
-            })
-        
-        transactions = []
-        selected_driver = None
-        transaction_stats = {}
-        
-        if driver_id:
-            # Get specific driver info
-            selected_driver = next((d for d in drivers_list if d['user_id'] == driver_id), None)
-            
-            if not selected_driver:
-                messages.error(request, "Driver not found.")
-                return redirect('admin_wallet_history')
-            
-            # Get transaction history for specific driver
-            cursor.execute("""
-                SELECT 
-                    wth.transaction_id, wth.transaction_type, wth.points_amount,
-                    wth.points_before, wth.points_after, wth.description,
-                    wth.reference_id, wth.reference_type, wth.status, 
-                    wth.transaction_date, wth.processed_by, wth.notes,
-                    sponsor.username as sponsor_username, sponsor.first_name as sponsor_first_name,
-                    sponsor.last_name as sponsor_last_name,
-                    admin.username as admin_username, admin.first_name as admin_first_name,
-                    admin.last_name as admin_last_name
-                FROM wallet_transaction_history wth
-                LEFT JOIN users sponsor ON wth.sponsor_id = sponsor.userID
-                LEFT JOIN users admin ON wth.admin_id = admin.userID
-                WHERE wth.driver_id = %s
-                ORDER BY wth.transaction_date DESC
-            """, [driver_id])
-            
-            transaction_rows = cursor.fetchall()
-            
-            for tx in transaction_rows:
-                transactions.append({
-                    'transaction_id': tx[0],
-                    'transaction_type': tx[1],
-                    'points_amount': tx[2],
-                    'points_before': tx[3],
-                    'points_after': tx[4],
-                    'description': tx[5],
-                    'reference_id': tx[6],
-                    'reference_type': tx[7],
-                    'status': tx[8],
-                    'transaction_date': tx[9],
-                    'processed_by': tx[10],
-                    'notes': tx[11],
-                    'sponsor_username': tx[12],
-                    'sponsor_full_name': f"{tx[13]} {tx[14]}" if tx[13] else None,
-                    'admin_username': tx[15],
-                    'admin_full_name': f"{tx[16]} {tx[17]}" if tx[16] else None
-                })
-            
-            # Calculate transaction statistics
-            cursor.execute("""
-                SELECT 
-                    transaction_type,
-                    COUNT(*) as count,
-                    SUM(points_amount) as total_points,
-                    AVG(points_amount) as avg_points
-                FROM wallet_transaction_history
-                WHERE driver_id = %s
-                GROUP BY transaction_type
-            """, [driver_id])
-            
-            stats_rows = cursor.fetchall()
-            transaction_stats = {}
-            for stat in stats_rows:
-                transaction_stats[stat[0]] = {
-                    'count': stat[1],
-                    'total_points': stat[2],
-                    'avg_points': round(stat[3], 2) if stat[3] else 0
-                }
-        
-        # Get overall statistics
-        cursor.execute("""
-            SELECT 
-                COUNT(DISTINCT driver_id) as total_drivers_with_wallets,
-                COUNT(*) as total_transactions,
-                SUM(CASE WHEN points_amount > 0 THEN points_amount ELSE 0 END) as total_points_added,
-                SUM(CASE WHEN points_amount < 0 THEN points_amount ELSE 0 END) as total_points_deducted
-            FROM wallet_transaction_history
-        """)
-        
-        overall_stats = cursor.fetchone()
-        
-        context = {
-            'drivers': drivers_list,
-            'selected_driver': selected_driver,
-            'transactions': transactions,
-            'transaction_stats': transaction_stats,
-            'total_drivers': len(drivers_list),
-            'overall_stats': {
-                'total_drivers_with_wallets': overall_stats[0] if overall_stats else 0,
-                'total_transactions': overall_stats[1] if overall_stats else 0,
-                'total_points_added': overall_stats[2] if overall_stats else 0,
-                'total_points_deducted': overall_stats[3] if overall_stats else 0
-            } if overall_stats else {}
-        }
-        
-        return render(request, 'admin_wallet_history.html', context)
-        
-    except Exception as e:
-        messages.error(request, f"Error loading wallet history: {str(e)}")
-        print(f"Admin wallet history error: {e}")
-        import traceback
-        traceback.print_exc()
-        return redirect('homepage')
-    finally:
-        cursor.close()
-
-
-# ============================================================================
-# FAILED LOGIN ATTEMPTS - ADMIN SECURITY LOG
-# ============================================================================
 
 @admin_required
-def admin_failed_login_log(request):
-    """
-    Admin view to monitor failed login attempts across all users.
-    Provides security insights and potential threat detection.
-    """
+def review_all_accounts(request):
     cursor = connection.cursor()
-    
     try:
-        # Get filter parameters
-        username_filter = request.GET.get('username', '').strip()
-        account_type_filter = request.GET.get('account_type', '')
-        time_range = request.GET.get('time_range', '24h')  # 1h, 24h, 7d, 30d, all
-        
-        # Ensure table exists
         cursor.execute("""
-            CREATE TABLE IF NOT EXISTS failed_login_attempts (
-                attempt_id INT AUTO_INCREMENT PRIMARY KEY,
-                username VARCHAR(150) NOT NULL,
-                attempted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                ip_address VARCHAR(45),
-                user_agent TEXT,
-                failure_reason VARCHAR(255),
-                account_type VARCHAR(50),
-                INDEX idx_username (username),
-                INDEX idx_attempted_at (attempted_at),
-                INDEX idx_ip_address (ip_address)
-            )
+            SELECT userID, first_name, last_name, username, email, account_type, is_active
+            FROM users
         """)
-        
-        # Build WHERE clause based on filters
-        where_conditions = []
-        query_params = []
-        
-        if username_filter:
-            where_conditions.append("username LIKE %s")
-            query_params.append(f"%{username_filter}%")
-        
-        if account_type_filter:
-            where_conditions.append("account_type = %s")
-            query_params.append(account_type_filter)
-        
-        # Time range filter
-        if time_range == '1h':
-            where_conditions.append("attempted_at >= DATE_SUB(NOW(), INTERVAL 1 HOUR)")
-        elif time_range == '24h':
-            where_conditions.append("attempted_at >= DATE_SUB(NOW(), INTERVAL 24 HOUR)")
-        elif time_range == '7d':
-            where_conditions.append("attempted_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)")
-        elif time_range == '30d':
-            where_conditions.append("attempted_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)")
-        # 'all' - no time filter
-        
-        where_clause = "WHERE " + " AND ".join(where_conditions) if where_conditions else ""
-        
-        # Get failed login attempts
-        query = f"""
-            SELECT 
-                attempt_id, username, attempted_at, ip_address,
-                user_agent, failure_reason, account_type
-            FROM failed_login_attempts
-            {where_clause}
-            ORDER BY attempted_at DESC
-            LIMIT 500
-        """
-        
-        cursor.execute(query, query_params)
-        attempts_rows = cursor.fetchall()
-        
-        attempts_list = []
-        for row in attempts_rows:
-            attempts_list.append({
-                'attempt_id': row[0],
-                'username': row[1],
-                'attempted_at': row[2],
-                'ip_address': row[3],
-                'user_agent': row[4][:100] if row[4] else '',  # Truncate for display
-                'failure_reason': row[5],
-                'account_type': row[6]
-            })
-        
-        # Get statistics - Top 10 usernames with most failures
-        stats_query = f"""
-            SELECT 
-                username,
-                account_type,
-                COUNT(*) as attempt_count,
-                MAX(attempted_at) as last_attempt,
-                COUNT(DISTINCT ip_address) as unique_ips
-            FROM failed_login_attempts
-            {where_clause}
-            GROUP BY username, account_type
-            ORDER BY attempt_count DESC
-            LIMIT 10
-        """
-        
-        cursor.execute(stats_query, query_params)
-        top_failures_rows = cursor.fetchall()
-        
-        top_failures = []
-        for row in top_failures_rows:
-            top_failures.append({
-                'username': row[0],
-                'account_type': row[1],
-                'attempt_count': row[2],
-                'last_attempt': row[3],
-                'unique_ips': row[4]
-            })
-        
-        # Get IP address statistics
-        ip_stats_query = f"""
-            SELECT 
-                ip_address,
-                COUNT(*) as attempt_count,
-                COUNT(DISTINCT username) as unique_usernames,
-                MAX(attempted_at) as last_attempt
-            FROM failed_login_attempts
-            {where_clause}
-            GROUP BY ip_address
-            ORDER BY attempt_count DESC
-            LIMIT 10
-        """
-        
-        cursor.execute(ip_stats_query, query_params)
-        ip_stats_rows = cursor.fetchall()
-        
-        ip_stats = []
-        for row in ip_stats_rows:
-            ip_stats.append({
-                'ip_address': row[0],
-                'attempt_count': row[1],
-                'unique_usernames': row[2],
-                'last_attempt': row[3]
-            })
-        
-        # Overall statistics
-        overall_query = f"""
-            SELECT 
-                COUNT(*) as total_attempts,
-                COUNT(DISTINCT username) as unique_usernames,
-                COUNT(DISTINCT ip_address) as unique_ips,
-                COUNT(DISTINCT DATE(attempted_at)) as days_with_attempts
-            FROM failed_login_attempts
-            {where_clause}
-        """
-        
-        cursor.execute(overall_query, query_params)
-        overall_stats = cursor.fetchone()
-        
-        # Get account type breakdown
-        account_type_query = f"""
-            SELECT 
-                account_type,
-                COUNT(*) as count
-            FROM failed_login_attempts
-            {where_clause}
-            GROUP BY account_type
-            ORDER BY count DESC
-        """
-        
-        cursor.execute(account_type_query, query_params)
-        account_type_stats = cursor.fetchall()
-        
-        account_type_breakdown = {}
-        for row in account_type_stats:
-            account_type_breakdown[row[0]] = row[1]
-        
-        context = {
-            'attempts': attempts_list,
-            'top_failures': top_failures,
-            'ip_stats': ip_stats,
-            'overall_stats': {
-                'total_attempts': overall_stats[0] if overall_stats else 0,
-                'unique_usernames': overall_stats[1] if overall_stats else 0,
-                'unique_ips': overall_stats[2] if overall_stats else 0,
-                'days_with_attempts': overall_stats[3] if overall_stats else 0
-            } if overall_stats else {},
-            'account_type_breakdown': account_type_breakdown,
-            'filters': {
-                'username': username_filter,
-                'account_type': account_type_filter,
-                'time_range': time_range
+        users = cursor.fetchall()
+        user_list = [
+            {
+                'userID': row[0],
+                'first_name': row[1],
+                'last_name': row[2],
+                'username': row[3],
+                'email': row[4],
+                'account_type': row[5],
+                'is_active': row[6],
             }
-        }
-        
-        return render(request, 'admin_failed_login_log.html', context)
-        
-    except Exception as e:
-        messages.error(request, f"Error loading failed login log: {str(e)}")
-        print(f"Failed login log error: {e}")
-        import traceback
-        traceback.print_exc()
-        return redirect('account_page')
+            for row in users
+        ]
+        return render(request, 'review_all_accounts.html', {'users': user_list})
     finally:
         cursor.close()
+
+
+# Placeholder functions for missing views
+@login_required
+def sponsor_wallet_history(request, driver_id=None):
+    """Placeholder for sponsor wallet history view."""
+    from django.http import HttpResponse
+    return HttpResponse("Sponsor wallet history feature is not yet implemented.")
+
+@login_required  
+def admin_wallet_history(request, driver_id=None):
+    """Placeholder for admin wallet history view."""
+    from django.http import HttpResponse
+    return HttpResponse("Admin wallet history feature is not yet implemented.")
+
+@login_required
+def admin_failed_login_log(request):
+    """Placeholder for admin failed login log view."""
+    from django.http import HttpResponse
+    return HttpResponse("Admin failed login log feature is not yet implemented.")
+
+@login_required
+def admin_update_admin_status(request, admin_id):
+    """Placeholder for admin update admin status view."""
+    from django.http import HttpResponse
+    return HttpResponse("Admin update admin status feature is not yet implemented.")
+
+@login_required
+def review_driver_points(request):
+    """Placeholder for review driver points view."""
+    from django.http import HttpResponse
+    return HttpResponse("Review driver points feature is not yet implemented.")
+@db_login_required
+def view_cart(request):
+    """Display the logged-in driver's shopping cart."""
+    # Check login and driver role
+    if not request.session.get('is_authenticated'):
+        messages.error(request, "Please log in to view your cart.")
+        return redirect('login_page')
+    if request.session.get('account_type') != 'driver':
+        messages.error(request, "Only drivers can access the cart.")
+        return redirect('homepage')
+
+    user_id = request.session.get('user_id')
+    cursor = connection.cursor()
+
+    try:
+        # Create table if it doesn't exist
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS user_cart (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                user_id INT NOT NULL,
+                product_id INT NOT NULL,
+                quantity INT DEFAULT 1,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE KEY uniq_user_product (user_id, product_id),
+                INDEX idx_user_id (user_id)
+            )
+        """)
+
+        # Fetch all cart items
+        cursor.execute("""
+            SELECT product_id, quantity FROM user_cart WHERE user_id = %s
+        """, [user_id])
+        rows = cursor.fetchall()
+
+        cart_items = []
+        total = 0
+
+        # Fetch live product info from API for each item
+        import requests
+        for product_id, qty in rows:
+            try:
+                response = requests.get(f"https://fakestoreapi.com/products/{product_id}", timeout=5)
+                if response.status_code == 200:
+                    product = response.json()
+                    product['quantity'] = qty
+                    product['subtotal'] = product['price'] * qty
+                    total += product['subtotal']
+                    cart_items.append(product)
+            except Exception as e:
+                print(f"Error fetching product {product_id}: {e}")
+
+        if not cart_items:
+            messages.info(request, "Your cart is empty.")
+
+        context = {
+            'cart_items': cart_items,
+            'total': round(total, 2),
+        }
+        return render(request, 'cart.html', context)
+
+    except Exception as e:
+        messages.error(request, f"Error loading your cart: {str(e)}")
+        return redirect('homepage')
+    finally:
+        try:
+            cursor.close()
+        except:
+            pass
+
+@db_login_required
+def add_to_cart(request, product_id):
+    """Add a product to the logged-in driver’s cart."""
+    if not request.session.get('is_authenticated'):
+        messages.error(request, "Please log in to add items to your cart.")
+        return redirect('login_page')
+    if request.session.get('account_type') != 'driver':
+        messages.error(request, "Only drivers can add products to the cart.")
+        return redirect('homepage')
+
+    user_id = request.session.get('user_id')
+    cursor = connection.cursor()
+
+    try:
+        # Make sure table exists
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS user_cart (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                user_id INT NOT NULL,
+                product_id INT NOT NULL,
+                quantity INT DEFAULT 1,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE KEY uniq_user_product (user_id, product_id)
+            )
+        """)
+
+        # Try inserting; if already there, increment quantity
+        cursor.execute("""
+            INSERT INTO user_cart (user_id, product_id, quantity)
+            VALUES (%s, %s, 1)
+            ON DUPLICATE KEY UPDATE quantity = quantity + 1
+        """, [user_id, product_id])
+
+        messages.success(request, "Product added to your cart!")
+        return redirect('view_cart')
+
+    except Exception as e:
+        messages.error(request, f"Error adding to cart: {e}")
+        return redirect('view_products')
+    finally:
+              cursor.close()
 @admin_required
 def admin_change_user_type(request):
     """Admin page to change any user's account type"""
@@ -4132,3 +4236,7 @@ def sponsor_deactivate_organization_member(request, member_id):
         cursor.close()
     
     return redirect('sponsor_create_user')
+        try:
+            cursor.close()
+        except:
+            pass

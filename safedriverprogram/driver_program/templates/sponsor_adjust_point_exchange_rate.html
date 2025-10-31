@@ -1,0 +1,41 @@
+{% extends 'base.html' %}
+
+{% block title %}Edit Points → Dollars Exchange Rate{% endblock %}
+
+{% block content %}
+<div class="container">
+  <div class="box">
+    <h1 class="title">Edit Points → Dollars Exchange Rate</h1>
+
+    <p class="content">Set how many points equal $1 for your sponsor organization. For example, <code>100</code> means 100 points = $1 (so 1 point = $0.01).</p>
+
+    {% if messages %}
+      {% for message in messages %}
+        <div class="notification {% if message.tags %}is-{{ message.tags }}{% endif %}">
+          {{ message }}
+        </div>
+      {% endfor %}
+    {% endif %}
+
+    <form method="post">
+      {% csrf_token %}
+      <div class="field">
+        <label class="label">Points per $1</label>
+        <div class="control">
+          <input class="input" type="number" name="point_exchange_rate" min="1" value="{{ current_rate }}" required>
+        </div>
+        <p class="help">Enter a positive integer. Example: 100 means 100 points = $1.</p>
+      </div>
+
+      <div class="field is-grouped">
+        <div class="control">
+          <button class="button is-primary" type="submit">Save</button>
+        </div>
+        <div class="control">
+          <a href="{% url 'sponsor_home' %}" class="button is-light">Cancel</a>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
