@@ -90,6 +90,20 @@
                 </a>
               </div>
               <div class="control">
+                <a href="{% url 'admin_wallet_history' %}" class="button is-info">
+                  <span class="icon"><i class="fas fa-wallet"></i></span>
+                  <span>Wallet History</span>
+                </a>
+              </div>
+
+              <div class="control">
+                <a href="{% url 'admin_failed_login_log' %}" class="button is-dark">
+                  <span class="icon"><i class="fas fa-shield-alt"></i></span>
+                  <span>Security Log</span>
+                </a>
+              </div>
+            </div>
+              <div class="control">
                 <a href="{% url 'view_sponsor_requests' %}" class="button is-warning">
                   <span class="icon"><i class="fas fa-clipboard-check"></i></span>
                   <span>Review Applications</span>
@@ -196,7 +210,12 @@
                   <span>Sponsor Home</span>
                 </a>
               </div>
-              
+                            <div class="control">
+                <a href="{% url 'sponsor_create_user' %}" class="button is-primary">
+                  <span class="icon"><i class="fas fa-user-plus"></i></span>
+                  <span>Create Organization Users</span>
+                </a>
+              </div>
               <div class="control">
                 <a href="{% url 'sponsor_manage_applications' %}" class="button is-info">
                   <span class="icon">
@@ -215,14 +234,14 @@
                 </a>
               </div>
               
-              <div class="control">
+              <!-- <div class="control">
                 <a href="{% url 'sponsor_wallet_history' %}" class="button is-warning">
                   <span class="icon">
                     <i class="fas fa-wallet"></i>
                   </span>
                   <span>Driver Wallet History</span>
                 </a>
-              </div>
+              </div> -->
               
               <div class="control">
                 <a href="{% url 'sponsor_profile' %}" class="button is-light">

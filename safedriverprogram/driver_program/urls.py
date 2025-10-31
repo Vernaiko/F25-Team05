@@ -55,14 +55,10 @@ urlpatterns = [
     # Admin security log
     path('useradmin/failed-login-log/', views.admin_failed_login_log, name='admin_failed_login_log'),
     
-<<<<<<<<< Temporary merge branch 1
-    # Sponsor-specific pages
-=========
     #Admin user management
     path('useradmin/change-user-type/', views.admin_change_user_type, name='admin_change_user_type'),
 
     # Sponsor-specific pages - FIXED: Remove duplicates
->>>>>>>>> Temporary merge branch 2
     path('sponsor/home/', views.sponsor_home, name='sponsor_home'),
     path('sponsor/profile/', views.sponsor_profile, name='sponsor_profile'),
     path('sponsor/drivers/', views.sponsor_drivers, name='sponsor_drivers'),
