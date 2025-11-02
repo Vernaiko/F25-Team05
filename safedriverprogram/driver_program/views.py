@@ -4234,9 +4234,9 @@ def sponsor_deactivate_organization_member(request, member_id):
         print(f"Deactivate member error: {e}")
     finally:
         cursor.close()
-    
+        
     return redirect('sponsor_create_user')
-        try:
-            cursor.close()
-        except:
-            pass
+    try:
+        cursor.close()
+    except:
+        pass
