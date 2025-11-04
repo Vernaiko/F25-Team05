@@ -1,0 +1,151 @@
+{% extends 'base.html' %}
+
+{% block title %}Organization Management - Safe Driver Program{% endblock %}
+
+{% block content %}
+<div class="container">
+  <div class="box">
+    <h1 class="title has-text-centered">
+      <span class="icon is-large has-text-primary">
+        <i class="fas fa-building fa-2x"></i>
+      </span>
+      <br>
+      Organization Management
+    </h1>
+
+    <!-- Organization Info -->
+    <div class="level">
+      <div class="level-item has-text-centered">
+        <div>
+          <p class="heading">Organization</p>
+          <p class="title">{{ current_organization }}</p>
+        </div>
+      </div>
+      <div class="level-item has-text-centered">
+        <div>
+          <p class="heading">Total Members</p>
+          <p class="title">{{ total_members }}</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Quick Action Buttons -->
+    <div class="buttons is-centered mb-4">
+      <a href="{% url 'account_page' %}" class="button is-light">
+        <span class="icon"><i class="fas fa-arrow-left"></i></span>
+        <span>Back to Account</span>
+      </a>
+      <a href="{% url 'sponsor_home' %}" class="button is-primary">
+        <span class="icon"><i class="fas fa-home"></i></span>
+        <span>Sponsor Home</span>
+      </a>
+    </div>
+
+    {% if organization_members %}
+    <div class="notification is-info">
+      <span class="icon">
+        <i class="fas fa-info-circle"></i>
+      </span>
+      <strong>Note:</strong> You can remove other sponsors from your organization, but you cannot remove yourself.
+    </div>
+
+    <div class="table-container">
+      <table class="table is-fullwidth is-striped is-hoverable">
+        <thead>
+          <tr>
+            <th>Member</th>
+            <th>Contact</th>
+            <th>Status</th>
+            <th>Joined</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for member in organization_members %}
+          <tr>
+            <td>
+              <strong>{{ member.first_name }} {{ member.last_name }}</strong>
+              {% if member.is_current_user %}
+                <span class="tag is-success is-small">You</span>
+              {% endif %}
+              <br>
+              <small>@{{ member.username }}</small>
+            </td>
+            <td>
+              {{ member.email }}
+              {% if member.phone_number %}
+                <br><small>{{ member.phone_number }}</small>
+              {% endif %}
+            </td>
+            <td>
+              {% if member.is_active %}
+                <span class="tag is-success">Active</span>
+              {% else %}
+                <span class="tag is-danger">Inactive</span>
+              {% endif %}
+            </td>
+            <td>{{ member.created_at|date:"M d, Y" }}</td>
+            <td>
+              {% if not member.is_current_user %}
+                <form method="post" onsubmit="return confirm('Are you sure you want to remove {{ member.first_name }} {{ member.last_name }} from the organization? This action cannot be undone.');">
+                  {% csrf_token %}
+                  <input type="hidden" name="member_id" value="{{ member.user_id }}">
+                  <input type="hidden" name="action" value="remove_member">
+                  <button type="submit" class="button is-danger is-small">
+                    <span class="icon"><i class="fas fa-user-minus"></i></span>
+                    <span>Remove</span>
+                  </button>
+                </form>
+              {% else %}
+                <span class="tag is-light">Cannot remove yourself</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="notification is-info">
+      <span class="icon">
+        <i class="fas fa-info-circle"></i>
+      </span>
+      No other members found in your organization.
+    </div>
+    {% endif %}
+
+    <!-- Organization Summary -->
+    {% if organization_members %}
+    <div class="box has-background-light" style="margin-top: 2rem; padding: 1.5rem;">
+      <div class="has-text-centered">
+        <h3 class="title is-5" style="margin-bottom: 1rem;">
+          <span class="icon has-text-primary">
+            <i class="fas fa-building"></i>
+          </span>
+          Organization Summary
+        </h3>
+        <div class="content">
+          <p class="heading" style="margin-bottom: 0.5rem;">{{ current_organization }}</p>
+          <p class="title is-3 has-text-primary" style="margin-bottom: 0.5rem;">{{ total_members }}</p>
+          <p class="subtitle is-6 has-text-grey">Total member{{ total_members|pluralize }} in your organization</p>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+
+    <!-- Navigation buttons at bottom -->
+    <div class="has-text-centered" style="margin-top: 2rem;">
+      <div class="buttons is-centered">
+        <a href="{% url 'sponsor_home' %}" class="button is-primary">
+          <span class="icon"><i class="fas fa-home"></i></span>
+          <span>Sponsor Home</span>
+        </a>
+        <a href="{% url 'account_page' %}" class="button is-light">
+          <span class="icon"><i class="fas fa-arrow-left"></i></span>
+          <span>Back to Account</span>
+        </a>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

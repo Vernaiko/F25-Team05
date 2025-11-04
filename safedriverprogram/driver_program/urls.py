@@ -73,6 +73,7 @@ urlpatterns = [
     path('sponsor/application/<int:application_id>/', views.sponsor_view_application, name='sponsor_view_application'),
     path('sponsor-application-action/<int:application_id>/', views.sponsor_application_action, name='sponsor_application_action'),
     path('sponsor/drivers/<int:driver_id>/delete/', views.sponsor_delete_driver, name='sponsor_delete_driver'),
+   path('sponsor/organization/', views.sponsor_organization_management, name='sponsor_organization_management'),
    path('sponsor/drivers/<int:driver_id>/notes/add/', views.sponsor_add_driver_note, name='sponsor_add_driver_note'), #Testing
 
 

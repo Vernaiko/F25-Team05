@@ -4178,6 +4178,116 @@ def sponsor_delete_driver(request, driver_id):
 
     return redirect('sponsor_drivers')
 
+
+@db_login_required
+def sponsor_organization_management(request):
+    """View for sponsors to manage other sponsors in their organization."""
+    
+    # Only sponsors can access this page
+    if request.session.get('account_type') != 'sponsor':
+        messages.error(request, "Access denied. Only sponsors can view this page.")
+        return redirect('homepage')
+    
+    sponsor_id = request.session.get('user_id')
+    cursor = connection.cursor()
+    
+    try:
+        # Get current sponsor's organization
+        cursor.execute("""
+            SELECT organization, first_name, last_name
+            FROM users 
+            WHERE userID = %s AND account_type = 'sponsor'
+        """, [sponsor_id])
+        
+        sponsor_info = cursor.fetchone()
+        if not sponsor_info or not sponsor_info[0]:
+            messages.error(request, "You must be part of an organization to manage members.")
+            return redirect('account_page')
+        
+        current_organization = sponsor_info[0]
+        sponsor_name = f"{sponsor_info[1]} {sponsor_info[2]}"
+        
+        # Handle member removal
+        if request.method == 'POST':
+            member_id = request.POST.get('member_id')
+            action = request.POST.get('action')
+            
+            if action == 'remove_member' and member_id:
+                try:
+                    # Don't allow sponsors to remove themselves
+                    if int(member_id) == sponsor_id:
+                        messages.error(request, "You cannot remove yourself from the organization.")
+                    else:
+                        # Remove the member by setting their organization to NULL
+                        cursor.execute("""
+                            UPDATE users 
+                            SET organization = NULL 
+                            WHERE userID = %s AND account_type = 'sponsor' AND organization = %s
+                        """, [member_id, current_organization])
+                        
+                        if cursor.rowcount > 0:
+                            # Get the removed member's name for the message
+                            cursor.execute("""
+                                SELECT first_name, last_name 
+                                FROM users 
+                                WHERE userID = %s
+                            """, [member_id])
+                            removed_member = cursor.fetchone()
+                            member_name = f"{removed_member[0]} {removed_member[1]}" if removed_member else "Member"
+                            
+                            connection.commit()
+                            messages.success(request, f"Successfully removed {member_name} from the organization.")
+                        else:
+                            messages.error(request, "Member not found or could not be removed.")
+                            
+                except Exception as e:
+                    messages.error(request, f"Error removing member: {str(e)}")
+                    
+                return redirect('sponsor_organization_management')
+        
+        # Get all sponsors in the same organization
+        cursor.execute("""
+            SELECT userID, username, first_name, last_name, email, phone_number, is_active, created_at
+            FROM users 
+            WHERE account_type = 'sponsor' AND organization = %s
+            ORDER BY first_name, last_name
+        """, [current_organization])
+        
+        organization_members = cursor.fetchall()
+        
+        # Format the data
+        members_list = []
+        for member in organization_members:
+            members_list.append({
+                'user_id': member[0],
+                'username': member[1],
+                'first_name': member[2],
+                'last_name': member[3],
+                'email': member[4],
+                'phone_number': member[5],
+                'is_active': bool(member[6]),
+                'created_at': member[7],
+                'is_current_user': member[0] == sponsor_id
+            })
+        
+        context = {
+            'organization_members': members_list,
+            'current_organization': current_organization,
+            'sponsor_name': sponsor_name,
+            'total_members': len(members_list)
+        }
+        
+        return render(request, 'sponsor_organization_management.html', context)
+        
+    except Exception as e:
+        messages.error(request, f"Error loading organization members: {str(e)}")
+        return redirect('account_page')
+    finally:
+        try:
+            cursor.close()
+        except:
+            pass
+
 #Admin Reset Driver Password ... Testing
 @admin_required
 def admin_reset_driver_password(request, user_id):
