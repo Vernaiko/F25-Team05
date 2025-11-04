@@ -14,6 +14,7 @@
           <th>Price</th>
           <th>Quantity</th>
           <th>Subtotal</th>
+          <th></th>
         </tr>
       </thead>
       <tbody>
@@ -27,6 +28,14 @@
           <td>${{ item.price }}</td>
           <td>{{ item.quantity }}</td>
           <td>${{ item.subtotal|floatformat:2 }}</td>
+          <td class="has-text-centered">
+            <form action="{% url 'remove_from_cart' item.id %}" method="post" style="display:inline;">
+              {% csrf_token %}
+              <button type="submit" class="button is-danger is-small" title="Remove item">
+                <span class="icon"><i class="fas fa-times"></i></span>
+              </button>
+            </form>
+          </td>
         </tr>
         {% endfor %}
       </tbody>
