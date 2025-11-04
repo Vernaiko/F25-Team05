@@ -15,6 +15,8 @@ from driver_program.decorators import admin_required
 from django.contrib.auth.decorators import login_required
 import textwrap
 from django.db import connection
+from .forms import AddressForm
+
 
 
 
@@ -741,51 +743,99 @@ def add_to_wishlist(request, product_id=None):
 
 @login_required
 def manage_addresses(request):
-    """Display and manage delivery addresses for the logged-in driver."""
-    user = request.user
-    addresses = DeliveryAddress.objects.filter(user=user)
+    """
+    Show all addresses for the logged-in user, allow adding a new one.
+    New address can optionally be set as default (and will unset others).
+    """
+    addresses = Address.objects.filter(user=request.user).order_by('-is_default', '-created_at')
 
     if request.method == 'POST':
-        form = DeliveryAddressForm(request.POST)
+        form = AddressForm(request.POST)
         if form.is_valid():
-            new_address = form.save(commit=False)
-            new_address.user = user
-            new_address.save()
-            messages.success(request, "New address added successfully!")
+            addr = form.save(commit=False)
+            addr.user = request.user
+            addr.save()
+
+            # If this was marked default, unset all others
+            if addr.is_default:
+                Address.objects.filter(user=request.user).exclude(id=addr.id).update(is_default=False)
+
+            messages.success(request, "Address saved successfully.")
             return redirect('manage_addresses')
         else:
             messages.error(request, "Please correct the errors below.")
     else:
-        form = DeliveryAddressForm()
+        form = AddressForm()
 
     return render(request, 'manage_addresses.html', {
         'addresses': addresses,
-        'add_form': form
+        'add_form': form,
     })
 
 
 @login_required
 def delete_address(request, address_id):
-    """Delete a specific address."""
-    address = get_object_or_404(DeliveryAddress, id=address_id, user=request.user)
-    address.delete()
-    messages.success(request, "Address deleted successfully.")
+    """
+    Delete an address; if it was default and another exists, leave none default
+    (user can set a new default explicitly).
+    """
+    address = get_object_or_404(Address, id=address_id, user=request.user)
+
+    if request.method == 'POST':
+        was_default = address.is_default
+        address.delete()
+
+        # Optionally: auto-pick a new default if any remain
+        # (Uncomment if you want this behavior)
+        # if was_default:
+        #     first = Address.objects.filter(user=request.user).order_by('-created_at').first()
+        #     if first:
+        #         first.is_default = True
+        #         first.save()
+
+        messages.success(request, "Address deleted successfully.")
+        return redirect('manage_addresses')
+
+    # If someone GETs this URL, just redirect back
     return redirect('manage_addresses')
 
+@login_required
+def set_default_address(request, address_id):
+    """
+    Explicitly set an address as default for the logged-in user.
+    """
+    if request.method != 'POST':
+        return redirect('manage_addresses')
+
+    address = get_object_or_404(Address, id=address_id, user=request.user)
+    Address.objects.filter(user=request.user, is_default=True).update(is_default=False)
+    address.is_default = True
+    address.save()
+    messages.success(request, "Default address updated.")
+    return redirect('manage_addresses')
 
 @login_required
 def edit_address(request, address_id):
-    """Edit a specific address."""
-    address = get_object_or_404(DeliveryAddress, id=address_id, user=request.user)
+    """
+    Edit an existing address belonging to the logged-in user.
+    """
+    address = get_object_or_404(Address, id=address_id, user=request.user)
 
     if request.method == 'POST':
-        form = DeliveryAddressForm(request.POST, instance=address)
+        form = AddressForm(request.POST, instance=address)
         if form.is_valid():
-            form.save()
+            addr = form.save()
+
+            # If marked default, unset others
+            if addr.is_default:
+                Address.objects.filter(user=request.user).exclude(id=addr.id).update(is_default=False)
+
             messages.success(request, "Address updated successfully.")
             return redirect('manage_addresses')
+        else:
+            messages.error(request, "Please correct the errors below.")
     else:
-        form = DeliveryAddressForm(instance=address)
+        form = AddressForm(instance=address)
 
     return render(request, 'edit_address.html', {'form': form})
 

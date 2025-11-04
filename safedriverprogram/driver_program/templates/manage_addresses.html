@@ -1,40 +1,115 @@
-{% extends "base.html" %}
-{% load static %}
+{% extends 'base.html' %}
+{% block title %}Manage Addresses{% endblock %}
 
 {% block content %}
-<h2>My Delivery Addresses</h2>
+<div class="container">
+  <div class="box">
+    <h1 class="title has-text-centered">
+      <span class="icon is-large has-text-primary">
+        <i class="fas fa-map-marker-alt fa-2x"></i>
+      </span>
+      <br>
+      Manage Delivery Addresses
+    </h1>
 
-<ul>
-    {% for address in addresses %}
-    <li>
-        {{ address.address }}
-        <a href="{% url 'edit_address' address.id %}">Edit</a> |
-        <form method="post" action="{% url 'delete_address' address.id %}" style="display:inline;">
-            {% csrf_token %}
-            <button type="submit">Delete</button>
-        </form>
-    </li>
-    {% empty %}
-    <li>No addresses saved yet.</li>
-    {% endfor %}
-</ul>
+    <!-- Flash messages -->
+    {% if messages %}
+      <div>
+        {% for message in messages %}
+          <div class="notification {% if message.tags %}is-{{ message.tags }}{% endif %}">{{ message }}</div>
+        {% endfor %}
+      </div>
+    {% endif %}
 
-<button id="showAddFormBtn">Add New Address</button>
+    <!-- Existing addresses -->
+    {% if addresses %}
+    <div class="table-container">
+      <table class="table is-fullwidth is-striped is-hoverable">
+        <thead>
+          <tr>
+            <th>Street</th>
+            <th>City</th>
+            <th>State</th>
+            <th>ZIP</th>
+            <th>Default</th>
+            <th style="white-space:nowrap;">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for a in addresses %}
+          <tr>
+            <td>{{ a.street }}</td>
+            <td>{{ a.city }}</td>
+            <td>{{ a.state }}</td>
+            <td>{{ a.zip_code }}</td>
+            <td>
+              {% if a.is_default %}
+                <span class="tag is-success">Default</span>
+              {% else %}
+                <form method="post" action="{% url 'set_default_address' a.id %}">
+                  {% csrf_token %}
+                  <button class="button is-small is-light" type="submit">Set Default</button>
+                </form>
+              {% endif %}
+            </td>
+            <td style="white-space:nowrap;">
+              <a class="button is-small is-info" href="{% url 'edit_address' a.id %}">
+                <span class="icon"><i class="fas fa-edit"></i></span>
+                <span>Edit</span>
+              </a>
+              <form method="post" action="{% url 'delete_address' a.id %}" style="display:inline;" onsubmit="return confirm('Delete this address?');">
+                {% csrf_token %}
+                <button class="button is-small is-danger" type="submit">
+                  <span class="icon"><i class="fas fa-trash"></i></span>
+                  <span>Delete</span>
+                </button>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+      <div class="notification is-info">
+        You have no saved addresses yet. Add one below.
+      </div>
+    {% endif %}
 
-<div id="addFormContainer" style="display:none; margin-top:10px;">
-    <form method="post" action="">
-        {% csrf_token %}
-        {{ add_form.as_p }}
-        <button type="submit" name="add_address">Save</button>
+    <hr>
+
+    <!-- Add new address -->
+    <h2 class="title is-5">Add Delivery Address</h2>
+    <form method="post">
+      {% csrf_token %}
+      <div class="columns is-multiline">
+        <div class="column is-12">
+          <label class="label">Street</label>
+          {{ add_form.street }}
+        </div>
+        <div class="column is-4">
+          <label class="label">City</label>
+          {{ add_form.city }}
+        </div>
+        <div class="column is-4">
+          <label class="label">State</label>
+          {{ add_form.state }}
+        </div>
+        <div class="column is-4">
+          <label class="label">ZIP</label>
+          {{ add_form.zip_code }}
+        </div>
+        <div class="column is-12">
+          <label class="checkbox">
+            {{ add_form.is_default }} Use as default delivery address
+          </label>
+        </div>
+      </div>
+      <button class="button is-primary" type="submit">
+        <span class="icon"><i class="fas fa-save"></i></span>
+        <span>Save Address</span>
+      </button>
     </form>
+  </div>
 </div>
-
-<script>
-    const btn = document.getElementById('showAddFormBtn');
-    const formDiv = document.getElementById('addFormContainer');
-
-    btn.addEventListener('click', () => {
-        formDiv.style.display = formDiv.style.display === 'none' ? 'block' : 'none';
-    });
-</script>
 {% endblock %}

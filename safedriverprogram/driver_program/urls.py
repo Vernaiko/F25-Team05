@@ -41,6 +41,8 @@ urlpatterns = [
     path('addresses/', views.manage_addresses, name='manage_addresses'),
     path('addresses/delete/<int:address_id>/', views.delete_address, name='delete_address'),
     path('addresses/edit/<int:address_id>/', views.edit_address, name='edit_address'),
+    path('addresses/set-default/<int:address_id>/', views.set_default_address, name='set_default_address'),
+
 
     # Admin sponsor management
     path('useradmin/sponsors/', views.admin_sponsor_list, name='admin_sponsor_list'),
