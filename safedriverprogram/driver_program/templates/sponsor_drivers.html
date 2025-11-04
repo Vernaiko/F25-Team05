@@ -101,6 +101,7 @@
             <th>Trips</th>
             <th>Points</th>
             <th>Recent Transactions</th>
+            <th style="width: 1%; white-space: nowrap;">Actions</th>
           </tr>
         </thead>
         <tbody>
@@ -140,6 +141,15 @@
               {% else %}
                 <small class="has-text-grey">No recent transactions</small>
               {% endif %}
+            </td>
+            <td>
+              <form method="post" action="{% url 'sponsor_delete_driver' driver.user_id %}" onsubmit="return confirm('Remove this driver from your organization?');">
+                {% csrf_token %}
+                <button class="button is-danger is-light is-small" type="submit" title="Remove driver">
+                  <span class="icon"><i class="fas fa-trash"></i></span>
+                  <span>Delete</span>
+                </button>
+              </form>
             </td>
           </tr>
           {% endfor %}

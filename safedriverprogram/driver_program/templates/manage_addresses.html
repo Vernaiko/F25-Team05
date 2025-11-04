@@ -4,7 +4,6 @@
 {% block content %}
 <h2>My Delivery Addresses</h2>
 
-<!-- List existing addresses -->
 <ul>
     {% for address in addresses %}
     <li>
@@ -20,10 +19,8 @@
     {% endfor %}
 </ul>
 
-<!-- Button to show the add address form -->
 <button id="showAddFormBtn">Add New Address</button>
 
-<!-- Hidden form initially -->
 <div id="addFormContainer" style="display:none; margin-top:10px;">
     <form method="post" action="">
         {% csrf_token %}
@@ -40,6 +37,4 @@
         formDiv.style.display = formDiv.style.display === 'none' ? 'block' : 'none';
     });
 </script>
-
 {% endblock %}
-

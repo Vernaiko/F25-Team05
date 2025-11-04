@@ -39,8 +39,8 @@ urlpatterns = [
     
     # Address management
     path('addresses/', views.manage_addresses, name='manage_addresses'),
-    path('addresses/edit/<int:address_id>/', views.edit_address, name='edit_address'),
     path('addresses/delete/<int:address_id>/', views.delete_address, name='delete_address'),
+    path('addresses/edit/<int:address_id>/', views.edit_address, name='edit_address'),
 
     # Admin sponsor management
     path('useradmin/sponsors/', views.admin_sponsor_list, name='admin_sponsor_list'),
@@ -69,7 +69,8 @@ urlpatterns = [
     path('sponsor/applications/', views.sponsor_manage_applications, name='sponsor_manage_applications'),
     path('sponsor/application/<int:application_id>/', views.sponsor_view_application, name='sponsor_view_application'),
     path('sponsor-application-action/<int:application_id>/', views.sponsor_application_action, name='sponsor_application_action'),
-    
+    path('sponsor/drivers/<int:driver_id>/delete/', views.sponsor_delete_driver, name='sponsor_delete_driver'),
+
     # Wallet history pages
     path('sponsor/wallet-history/', views.sponsor_wallet_history, name='sponsor_wallet_history'),
     path('sponsor/wallet-history/<int:driver_id>/', views.sponsor_wallet_history, name='sponsor_wallet_history_driver'),

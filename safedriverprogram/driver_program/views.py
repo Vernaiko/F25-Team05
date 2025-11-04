@@ -737,173 +737,55 @@ def add_to_wishlist(request, product_id=None):
         return redirect(ref)
     return redirect('view_products')
 
-# Address Management Views
-@db_login_required
+@login_required
 def manage_addresses(request):
-    """Manage delivery addresses using database authentication"""
-    user_id = request.session.get('user_id')
-    
-    # Create delivery address table if it doesn't exist
-    cursor = connection.cursor()
-    try:
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS delivery_addresses (
-                id INT AUTO_INCREMENT PRIMARY KEY,
-                user_id INT NOT NULL,
-                address TEXT NOT NULL,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                INDEX idx_user_id (user_id)
-            )
-        """)
-    except Exception as e:
-        print(f"Error creating table: {e}")
-    
-    addresses = []
-    
-    try:
-        # Get existing addresses for this user
-        cursor.execute("""
-            SELECT id, address, created_at 
-            FROM delivery_addresses 
-            WHERE user_id = %s 
-            ORDER BY created_at DESC
-        """, [user_id])
-        
-        addresses_raw = cursor.fetchall()
-        
-        # Convert to list of dictionaries for template
-        for addr in addresses_raw:
-            addresses.append({
-                'id': addr[0],
-                'address': addr[1],
-                'created_at': addr[2]
-            })
-        
-    except Exception as e:
-        print(f"Error fetching addresses: {e}")
-        addresses = []
-    
-    if request.method == 'POST' and 'add_address' in request.POST:
-        new_address = request.POST.get('address', '').strip()
-        if new_address:
-            try:
-                cursor.execute("""
-                    INSERT INTO delivery_addresses (user_id, address, created_at)
-                    VALUES (%s, %s, NOW())
-                """, [user_id, new_address])
-                
-                messages.success(request, "New delivery address added!")
-                cursor.close()
-                return redirect('manage_addresses')
-                
-            except Exception as e:
-                messages.error(request, f"Failed to add address: {str(e)}")
-    
-    cursor.close()
-    
+    """Display and manage delivery addresses for the logged-in driver."""
+    user = request.user
+    addresses = DeliveryAddress.objects.filter(user=user)
+
+    if request.method == 'POST':
+        form = DeliveryAddressForm(request.POST)
+        if form.is_valid():
+            new_address = form.save(commit=False)
+            new_address.user = user
+            new_address.save()
+            messages.success(request, "New address added successfully!")
+            return redirect('manage_addresses')
+        else:
+            messages.error(request, "Please correct the errors below.")
+    else:
+        form = DeliveryAddressForm()
+
     return render(request, 'manage_addresses.html', {
         'addresses': addresses,
+        'add_form': form
     })
 
-@db_login_required
-def edit_address(request, address_id):
-    """Edit delivery address using database"""
-    user_id = request.session.get('user_id')
-    cursor = connection.cursor()
-    
-    # Get the address
-    try:
-        cursor.execute("""
-            SELECT id, address 
-            FROM delivery_addresses 
-            WHERE id = %s AND user_id = %s
-        """, [address_id, user_id])
-        
-        address_data = cursor.fetchone()
-        if not address_data:
-            messages.error(request, "Address not found.")
-            cursor.close()
-            return redirect('manage_addresses')
-            
-    except Exception as e:
-        messages.error(request, f"Error fetching address: {str(e)}")
-        cursor.close()
-        return redirect('manage_addresses')
-    
-    if request.method == 'POST':
-        new_address = request.POST.get('address', '').strip()
-        if new_address:
-            try:
-                cursor.execute("""
-                    UPDATE delivery_addresses 
-                    SET address = %s 
-                    WHERE id = %s AND user_id = %s
-                """, [new_address, address_id, user_id])
-                
-                messages.success(request, "Address updated successfully!")
-                cursor.close()
-                return redirect('manage_addresses')
-                
-            except Exception as e:
-                messages.error(request, f"Failed to update address: {str(e)}")
-    
-    cursor.close()
-    
-    return render(request, 'edit_address.html', {
-        'address': {
-            'id': address_data[0],
-            'address': address_data[1]
-        }
-    })
 
-@db_login_required
+@login_required
 def delete_address(request, address_id):
-    """Delete delivery address using database"""
-    user_id = request.session.get('user_id')
-    cursor = connection.cursor()
-    
-    # Get the address first
-    try:
-        cursor.execute("""
-            SELECT id, address 
-            FROM delivery_addresses 
-            WHERE id = %s AND user_id = %s
-        """, [address_id, user_id])
-        
-        address_data = cursor.fetchone()
-        if not address_data:
-            messages.error(request, "Address not found.")
-            cursor.close()
-            return redirect('manage_addresses')
-            
-    except Exception as e:
-        messages.error(request, f"Error fetching address: {str(e)}")
-        cursor.close()
-        return redirect('manage_addresses')
-    
+    """Delete a specific address."""
+    address = get_object_or_404(DeliveryAddress, id=address_id, user=request.user)
+    address.delete()
+    messages.success(request, "Address deleted successfully.")
+    return redirect('manage_addresses')
+
+
+@login_required
+def edit_address(request, address_id):
+    """Edit a specific address."""
+    address = get_object_or_404(DeliveryAddress, id=address_id, user=request.user)
+
     if request.method == 'POST':
-        try:
-            cursor.execute("""
-                DELETE FROM delivery_addresses 
-                WHERE id = %s AND user_id = %s
-            """, [address_id, user_id])
-            
-            messages.success(request, "Address deleted successfully!")
-            cursor.close()
+        form = DeliveryAddressForm(request.POST, instance=address)
+        if form.is_valid():
+            form.save()
+            messages.success(request, "Address updated successfully.")
             return redirect('manage_addresses')
-            
-        except Exception as e:
-            messages.error(request, f"Failed to delete address: {str(e)}")
-    
-    cursor.close()
-    
-    return render(request, 'delete_address.html', {
-        'address': {
-            'id': address_data[0],
-            'address': address_data[1]
-        }
-    })
-# ...existing code...
+    else:
+        form = DeliveryAddressForm(instance=address)
+
+    return render(request, 'edit_address.html', {'form': form})
 
 # Application Views
 def sponsor_application(request):
@@ -4234,9 +4116,62 @@ def sponsor_deactivate_organization_member(request, member_id):
         print(f"Deactivate member error: {e}")
     finally:
         cursor.close()
-        
+
     return redirect('sponsor_create_user')
     try:
         cursor.close()
     except:
         pass
+
+
+# Delete Sponsor Drivers
+@db_login_required 
+def sponsor_delete_driver(request, driver_id):
+    """Remove a driver from the currently logged-in sponsor's organization.
+
+    Deletes the sponsor<->driver relationship (and, optionally, that pair's
+    point transactions). It does NOT delete the user's global account.
+    """
+    # Only sponsors can do this
+    if request.session.get('account_type') != 'sponsor':
+        messages.error(request, "Access denied. Only sponsors can perform this action.")
+        return redirect('homepage')
+
+    if request.method != 'POST':
+        messages.error(request, "Invalid request method.")
+        return redirect('sponsor_drivers')
+
+    sponsor_id = request.session.get('user_id')
+    cursor = connection.cursor()
+    try:
+        # Remove the relationship for this sponsor and driver
+        cursor.execute("""
+            DELETE FROM sponsor_driver_relationships
+            WHERE sponsor_user_id = %s AND driver_user_id = %s
+        """, [sponsor_id, driver_id])
+
+        # (Optional) also remove point transactions between this sponsor & driver
+        try:
+            cursor.execute("""
+                DELETE FROM driver_points_transactions
+                WHERE sponsor_user_id = %s AND driver_user_id = %s
+            """, [sponsor_id, driver_id])
+        except Exception:
+            # safe to ignore if table doesn't exist yet
+            pass
+
+        try:
+            connection.commit()
+        except Exception:
+            pass
+
+        messages.success(request, "Driver removed from your organization.")
+    except Exception as e:
+        messages.error(request, f"Could not remove driver: {e}")
+    finally:
+        try:
+            cursor.close()
+        except Exception:
+            pass
+
+    return redirect('sponsor_drivers')
