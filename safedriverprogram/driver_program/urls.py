@@ -51,7 +51,10 @@ urlpatterns = [
     # Admin admin management
     path('useradmin/admins/', views.admin_list, name='admin_manage_admins'),
     path('useradmin/admins/<int:admin_id>/update-status/', views.admin_update_admin_status, name='admin_update_admin_status'),
-    
+    path(
+    'useradmin/drivers/reset-password/<int:user_id>/', views.admin_reset_driver_password, name='admin_reset_driver_password'), #Testing
+
+
     # Admin security log
     path('useradmin/failed-login-log/', views.admin_failed_login_log, name='admin_failed_login_log'),
     

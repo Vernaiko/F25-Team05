@@ -4175,3 +4175,67 @@ def sponsor_delete_driver(request, driver_id):
             pass
 
     return redirect('sponsor_drivers')
+
+#Admin Reset Driver Password ... Testing
+@admin_required
+def admin_reset_driver_password(request, user_id):
+    """
+    Admin action: reset a driver's password to a temporary value.
+
+    - Only accepts POST
+    - Uses same SHA-256 hashing convention as change_password
+    - Puts the temp password in a flash message so the admin can share it
+    """
+    if request.method != 'POST':
+        messages.error(request, "Invalid request.")
+        return redirect('admin_driver_dashboard')
+
+    cursor = connection.cursor()
+    try:
+        # Ensure this is a driver account and exists
+        cursor.execute("""
+            SELECT userID, username, account_type, email
+            FROM users WHERE userID = %s
+        """, [user_id])
+        row = cursor.fetchone()
+        if not row:
+            messages.error(request, "Driver not found.")
+            return redirect('admin_driver_dashboard')
+        if row[2] != 'driver':
+            messages.error(request, "Password reset is only allowed for driver accounts.")
+            return redirect('admin_driver_dashboard')
+
+        username = row[1]
+
+        # Generate a temp password (12 chars: URL-safe, no punctuation confusion)
+        alphabet = string.ascii_letters + string.digits
+        temp_password = ''.join(secrets.choice(alphabet) for _ in range(12))
+
+        # Hash exactly like your change_password view (SHA-256 hex)
+        temp_hash = hashlib.sha256(temp_password.encode()).hexdigest()
+
+        # Update DB
+        cursor.execute("""
+            UPDATE users
+            SET password_hash = %s, updated_at = NOW()
+            WHERE userID = %s
+        """, [temp_hash, user_id])
+
+        try:
+            connection.commit()
+        except Exception:
+            pass
+
+        messages.success(
+            request,
+            f"Password for @{username} has been reset. Temporary password: {temp_password}"
+        )
+    except Exception as e:
+        messages.error(request, f"Error resetting password: {e}")
+    finally:
+        try:
+            cursor.close()
+        except Exception:
+            pass
+
+    return redirect('admin_driver_dashboard')
