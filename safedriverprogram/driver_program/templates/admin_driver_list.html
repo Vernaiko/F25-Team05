@@ -98,7 +98,20 @@
               {% endif %}
             </td>
             <td>
-              <form method="post" action="{% url 'admin_delete_driver' d.user_id %}" onsubmit="return confirm('Delete driver {{ d.username }}? This will remove related data.');">
+              <form method="post"
+                    action="{% url 'admin_reset_driver_password' d.user_id %}"
+                    onsubmit="return confirm('Reset password for {{ d.username }}? A temporary password will be generated.');"
+                    style="margin-bottom: 0.4rem;">
+                {% csrf_token %}
+                <button type="submit" class="button is-warning is-small">
+                  <span class="icon"><i class="fas fa-key"></i></span>
+                  <span>Reset Password</span>
+                </button>
+              </form>
+
+              <form method="post"
+                    action="{% url 'admin_delete_driver' d.user_id %}"
+                    onsubmit="return confirm('Delete driver {{ d.username }}? This will remove related data.');">
                 {% csrf_token %}
                 <button type="submit" class="button is-danger is-small">
                   <span class="icon"><i class="fas fa-trash"></i></span>
