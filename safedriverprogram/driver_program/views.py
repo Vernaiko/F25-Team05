@@ -3727,6 +3727,33 @@ def add_to_cart(request, product_id):
         return redirect('view_products')
     finally:
               cursor.close()
+
+@db_login_required
+def remove_from_cart(request, product_id):
+    """Remove a product from the logged-in driver's cart."""
+    user_id = request.session.get('user_id')
+    if not user_id:
+        messages.error(request, "Please log in to modify your cart.")
+        return redirect('login_page')
+
+    cursor = connection.cursor()
+    try:
+        cursor.execute("DELETE FROM user_cart WHERE user_id = %s AND product_id = %s", [user_id, product_id])
+        try:
+            connection.commit()
+        except Exception:
+            pass
+        messages.success(request, "Item removed from your cart.")
+    except Exception as e:
+        messages.error(request, f"Error removing product: {e}")
+    finally:
+        try:
+            cursor.close()
+        except:
+            pass
+
+    return redirect('view_cart')
+
 @admin_required
 def admin_change_user_type(request):
     """Admin page to change any user's account type"""
