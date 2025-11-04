@@ -70,6 +70,7 @@ urlpatterns = [
     path('sponsor/application/<int:application_id>/', views.sponsor_view_application, name='sponsor_view_application'),
     path('sponsor-application-action/<int:application_id>/', views.sponsor_application_action, name='sponsor_application_action'),
     path('sponsor/drivers/<int:driver_id>/delete/', views.sponsor_delete_driver, name='sponsor_delete_driver'),
+    path('sponsor/organization/', views.sponsor_organization_management, name='sponsor_organization_management'),
 
     # Wallet history pages
     path('sponsor/wallet-history/', views.sponsor_wallet_history, name='sponsor_wallet_history'),
