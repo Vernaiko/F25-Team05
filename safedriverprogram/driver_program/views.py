@@ -13,6 +13,8 @@ from django.contrib.auth.decorators import user_passes_test, login_required  # <
 from datetime import datetime
 from driver_program.decorators import admin_required
 from django.contrib.auth.decorators import login_required
+import textwrap
+from django.db import connection
 
 
 
@@ -4239,3 +4241,127 @@ def admin_reset_driver_password(request, user_id):
             pass
 
     return redirect('admin_driver_dashboard')
+
+# Sponsor Add Driver Notes
+@db_login_required
+def sponsor_add_driver_note(request, driver_id):
+    """
+    Sponsors can add private notes about individual drivers.
+    In addition to saving in sponsor_driver_notes, we also write a 0-point
+    transaction row so the note is visible immediately in the 'Recent Transactions'
+    column without changing the sponsor_drivers view.
+    """
+    # Access control
+    acct = (request.session.get('account_type') or '').lower()
+    if acct != 'sponsor':
+        messages.error(request, "Access denied. Only sponsors can perform this action.")
+        return redirect('homepage')
+
+    if request.method != 'POST':
+        messages.error(request, "Invalid request.")
+        return redirect('sponsor_drivers')
+
+    # Robust sponsor_id retrieval
+    sponsor_id = (
+        request.session.get('user_id')
+        or request.session.get('id')
+        or request.session.get('userID')
+    )
+    if not sponsor_id:
+        messages.error(request, "Session error: could not identify sponsor user.")
+        return redirect('sponsor_drivers')
+
+    note_text = (request.POST.get('note_text') or '').strip()
+    if not note_text:
+        messages.error(request, "Please enter a note before saving.")
+        return redirect('sponsor_drivers')
+    if len(note_text) > 4000:
+        messages.error(request, "Note is too long (max 4000 characters).")
+        return redirect('sponsor_drivers')
+
+    cursor = connection.cursor()
+    try:
+        engine = settings.DATABASES['default']['ENGINE']
+
+        # Create notes table if needed (engine-aware)
+        if 'sqlite' in engine:
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS sponsor_driver_notes (
+                    note_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    sponsor_user_id INTEGER NOT NULL,
+                    driver_user_id INTEGER NOT NULL,
+                    note_text TEXT NOT NULL,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+        elif 'postgresql' in engine:
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS sponsor_driver_notes (
+                    note_id SERIAL PRIMARY KEY,
+                    sponsor_user_id INT NOT NULL,
+                    driver_user_id INT NOT NULL,
+                    note_text TEXT NOT NULL,
+                    created_at TIMESTAMP NOT NULL DEFAULT NOW()
+                )
+            """)
+        else:
+            # MySQL / MariaDB
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS sponsor_driver_notes (
+                    note_id INT AUTO_INCREMENT PRIMARY KEY,
+                    sponsor_user_id INT NOT NULL,
+                    driver_user_id INT NOT NULL,
+                    note_text TEXT NOT NULL,
+                    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    INDEX (sponsor_user_id),
+                    INDEX (driver_user_id)
+                )
+            """)
+
+        # Validate sponsor<->driver relationship
+        cursor.execute("""
+            SELECT 1
+            FROM sponsor_driver_relationships
+            WHERE sponsor_user_id = %s AND driver_user_id = %s
+            LIMIT 1
+        """, [sponsor_id, driver_id])
+        if not cursor.fetchone():
+            messages.error(request, "You can only add notes for your own drivers.")
+            return redirect('sponsor_drivers')
+
+        # 1) Save the note to the notes table
+        cursor.execute("""
+            INSERT INTO sponsor_driver_notes (sponsor_user_id, driver_user_id, note_text)
+            VALUES (%s, %s, %s)
+        """, [sponsor_id, driver_id, note_text])
+
+        # 2) ALSO write a zero-point "NOTE" transaction so it shows up under Recent Transactions
+        #    Your sponsor_drivers page already queries driver_points_transactions and renders message/created_at.
+        #    If your table has additional required columns, adjust this insert accordingly.
+        try:
+            cursor.execute("""
+                INSERT INTO driver_points_transactions (sponsor_user_id, driver_user_id, points, message)
+                VALUES (%s, %s, %s, %s)
+            """, [sponsor_id, driver_id, 0, f"NOTE: {note_text}"])
+        except Exception as tx_e:
+            # If schema differs (extra columns), don't block note saving—just log it.
+            print("Warning: could not insert 0-point NOTE transaction:", tx_e)
+            traceback.print_exc()
+
+        try:
+            connection.commit()
+        except Exception:
+            pass
+
+        messages.success(request, "Note saved successfully.")
+    except Exception as e:
+        print("sponsor_add_driver_note error:", e)
+        traceback.print_exc()
+        messages.error(request, "Could not save note due to an internal error.")
+    finally:
+        try:
+            cursor.close()
+        except Exception:
+            pass
+
+    return redirect('sponsor_drivers')

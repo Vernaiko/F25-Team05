@@ -143,6 +143,49 @@
               {% endif %}
             </td>
             <td>
+              <!-- Add Note (inline, collapsible) -->
+              <details style="margin-bottom: 0.4rem;">
+                <summary class="button is-warning is-light is-small">
+                  <span class="icon"><i class="fas fa-sticky-note"></i></span>
+                  <span>Add Note</span>
+                </summary>
+                <div class="box" style="margin-top:0.5rem; padding:0.75rem;">
+                  <form method="post" action="{% url 'sponsor_add_driver_note' driver.user_id %}">
+                    {% csrf_token %}
+                    <div class="field">
+                      <div class="control">
+                        <textarea class="textarea" name="note_text" rows="3" maxlength="4000" placeholder="Write a private note about this driver..." required></textarea>
+                      </div>
+                    </div>
+                    <div class="field is-grouped is-justify-content-flex-end">
+                      <div class="control">
+                        <button type="submit" class="button is-warning is-small">
+                          <span class="icon"><i class="fas fa-save"></i></span>
+                          <span>Save</span>
+                        </button>
+                      </div>
+                    </div>
+                  </form>
+                </div>
+              </details>
+
+              <!-- ✅ Show recent notes right here -->
+              {% if driver.notes %}
+                <div class="content" style="margin-top:0.5rem;">
+                  <p class="has-text-weight-semibold" style="margin-bottom:0.25rem;">Recent Notes</p>
+                  <ul style="margin:0; padding-left:1rem;">
+                    {% for n in driver.notes %}
+                      <li style="margin-bottom:0.25rem;">
+                        {{ n.note_text }}
+                        <br>
+                        <small class="has-text-grey">{{ n.created_at|date:"M d, Y H:i" }}</small>
+                      </li>
+                    {% endfor %}
+                  </ul>
+                </div>
+              {% endif %}
+
+              <!-- Existing delete button -->
               <form method="post" action="{% url 'sponsor_delete_driver' driver.user_id %}" onsubmit="return confirm('Remove this driver from your organization?');">
                 {% csrf_token %}
                 <button class="button is-danger is-light is-small" type="submit" title="Remove driver">
