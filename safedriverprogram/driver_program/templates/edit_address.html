@@ -1,13 +1,61 @@
 {% extends "base.html" %}
+{% block title %}Edit Address{% endblock %}
 
 {% block content %}
-<h2>Edit Delivery Address</h2>
+<div class="container">
+  <div class="box">
+    <h1 class="title has-text-centered">
+      <span class="icon is-large has-text-primary">
+        <i class="fas fa-edit fa-2x"></i>
+      </span>
+      <br>
+      Edit Address
+    </h1>
 
-<form method="POST">
-    {% csrf_token %}
-    {{ form.as_p }}
-    <button type="submit">Save Changes</button>
-    <a href="{% url 'manage_addresses' %}">Cancel</a>
-</form>
+    <!-- Flash messages -->
+    {% if messages %}
+      <div>
+        {% for message in messages %}
+          <div class="notification {% if message.tags %}is-{{ message.tags }}{% endif %}">
+            {{ message }}
+          </div>
+        {% endfor %}
+      </div>
+    {% endif %}
 
+    <form method="post">
+      {% csrf_token %}
+      <div class="columns is-multiline">
+        <div class="column is-12">
+          <label class="label">Street</label>
+          {{ form.street }}
+        </div>
+        <div class="column is-4">
+          <label class="label">City</label>
+          {{ form.city }}
+        </div>
+        <div class="column is-4">
+          <label class="label">State</label>
+          {{ form.state }}
+        </div>
+        <div class="column is-4">
+          <label class="label">ZIP</label>
+          {{ form.zip_code }}
+        </div>
+        <div class="column is-12">
+          <label class="checkbox">
+            {{ form.is_default }} Use as default delivery address
+          </label>
+        </div>
+      </div>
+      <div class="buttons">
+        <button class="button is-primary" type="submit">
+          <span class="icon"><i class="fas fa-save"></i></span>
+          <span>Save Changes</span>
+        </button>
+        <a href="{% url 'manage_addresses' %}" class="button is-light">Cancel</a>
+      </div>
+    </form>
+  </div>
+</div>
 {% endblock %}

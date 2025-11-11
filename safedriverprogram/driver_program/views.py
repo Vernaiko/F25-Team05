@@ -13,6 +13,10 @@ from django.contrib.auth.decorators import user_passes_test, login_required  # <
 from datetime import datetime
 from driver_program.decorators import admin_required
 from django.contrib.auth.decorators import login_required
+import textwrap
+from django.db import connection
+from .forms import AddressForm
+
 
 
 
@@ -737,173 +741,103 @@ def add_to_wishlist(request, product_id=None):
         return redirect(ref)
     return redirect('view_products')
 
-# Address Management Views
-@db_login_required
+@login_required
 def manage_addresses(request):
-    """Manage delivery addresses using database authentication"""
-    user_id = request.session.get('user_id')
-    
-    # Create delivery address table if it doesn't exist
-    cursor = connection.cursor()
-    try:
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS delivery_addresses (
-                id INT AUTO_INCREMENT PRIMARY KEY,
-                user_id INT NOT NULL,
-                address TEXT NOT NULL,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                INDEX idx_user_id (user_id)
-            )
-        """)
-    except Exception as e:
-        print(f"Error creating table: {e}")
-    
-    addresses = []
-    
-    try:
-        # Get existing addresses for this user
-        cursor.execute("""
-            SELECT id, address, created_at 
-            FROM delivery_addresses 
-            WHERE user_id = %s 
-            ORDER BY created_at DESC
-        """, [user_id])
-        
-        addresses_raw = cursor.fetchall()
-        
-        # Convert to list of dictionaries for template
-        for addr in addresses_raw:
-            addresses.append({
-                'id': addr[0],
-                'address': addr[1],
-                'created_at': addr[2]
-            })
-        
-    except Exception as e:
-        print(f"Error fetching addresses: {e}")
-        addresses = []
-    
-    if request.method == 'POST' and 'add_address' in request.POST:
-        new_address = request.POST.get('address', '').strip()
-        if new_address:
-            try:
-                cursor.execute("""
-                    INSERT INTO delivery_addresses (user_id, address, created_at)
-                    VALUES (%s, %s, NOW())
-                """, [user_id, new_address])
-                
-                messages.success(request, "New delivery address added!")
-                cursor.close()
-                return redirect('manage_addresses')
-                
-            except Exception as e:
-                messages.error(request, f"Failed to add address: {str(e)}")
-    
-    cursor.close()
-    
+    """
+    Show all addresses for the logged-in user, allow adding a new one.
+    New address can optionally be set as default (and will unset others).
+    """
+    addresses = Address.objects.filter(user=request.user).order_by('-is_default', '-created_at')
+
+    if request.method == 'POST':
+        form = AddressForm(request.POST)
+        if form.is_valid():
+            addr = form.save(commit=False)
+            addr.user = request.user
+            addr.save()
+
+            # If this was marked default, unset all others
+            if addr.is_default:
+                Address.objects.filter(user=request.user).exclude(id=addr.id).update(is_default=False)
+
+            messages.success(request, "Address saved successfully.")
+            return redirect('manage_addresses')
+        else:
+            messages.error(request, "Please correct the errors below.")
+    else:
+        form = AddressForm()
+
     return render(request, 'manage_addresses.html', {
         'addresses': addresses,
+        'add_form': form,
     })
 
-@db_login_required
-def edit_address(request, address_id):
-    """Edit delivery address using database"""
-    user_id = request.session.get('user_id')
-    cursor = connection.cursor()
-    
-    # Get the address
-    try:
-        cursor.execute("""
-            SELECT id, address 
-            FROM delivery_addresses 
-            WHERE id = %s AND user_id = %s
-        """, [address_id, user_id])
-        
-        address_data = cursor.fetchone()
-        if not address_data:
-            messages.error(request, "Address not found.")
-            cursor.close()
-            return redirect('manage_addresses')
-            
-    except Exception as e:
-        messages.error(request, f"Error fetching address: {str(e)}")
-        cursor.close()
-        return redirect('manage_addresses')
-    
-    if request.method == 'POST':
-        new_address = request.POST.get('address', '').strip()
-        if new_address:
-            try:
-                cursor.execute("""
-                    UPDATE delivery_addresses 
-                    SET address = %s 
-                    WHERE id = %s AND user_id = %s
-                """, [new_address, address_id, user_id])
-                
-                messages.success(request, "Address updated successfully!")
-                cursor.close()
-                return redirect('manage_addresses')
-                
-            except Exception as e:
-                messages.error(request, f"Failed to update address: {str(e)}")
-    
-    cursor.close()
-    
-    return render(request, 'edit_address.html', {
-        'address': {
-            'id': address_data[0],
-            'address': address_data[1]
-        }
-    })
 
-@db_login_required
+@login_required
 def delete_address(request, address_id):
-    """Delete delivery address using database"""
-    user_id = request.session.get('user_id')
-    cursor = connection.cursor()
-    
-    # Get the address first
-    try:
-        cursor.execute("""
-            SELECT id, address 
-            FROM delivery_addresses 
-            WHERE id = %s AND user_id = %s
-        """, [address_id, user_id])
-        
-        address_data = cursor.fetchone()
-        if not address_data:
-            messages.error(request, "Address not found.")
-            cursor.close()
-            return redirect('manage_addresses')
-            
-    except Exception as e:
-        messages.error(request, f"Error fetching address: {str(e)}")
-        cursor.close()
-        return redirect('manage_addresses')
-    
+    """
+    Delete an address; if it was default and another exists, leave none default
+    (user can set a new default explicitly).
+    """
+    address = get_object_or_404(Address, id=address_id, user=request.user)
+
     if request.method == 'POST':
-        try:
-            cursor.execute("""
-                DELETE FROM delivery_addresses 
-                WHERE id = %s AND user_id = %s
-            """, [address_id, user_id])
-            
-            messages.success(request, "Address deleted successfully!")
-            cursor.close()
+        was_default = address.is_default
+        address.delete()
+
+        # Optionally: auto-pick a new default if any remain
+        # (Uncomment if you want this behavior)
+        # if was_default:
+        #     first = Address.objects.filter(user=request.user).order_by('-created_at').first()
+        #     if first:
+        #         first.is_default = True
+        #         first.save()
+
+        messages.success(request, "Address deleted successfully.")
+        return redirect('manage_addresses')
+
+    # If someone GETs this URL, just redirect back
+    return redirect('manage_addresses')
+
+@login_required
+def set_default_address(request, address_id):
+    """
+    Explicitly set an address as default for the logged-in user.
+    """
+    if request.method != 'POST':
+        return redirect('manage_addresses')
+
+    address = get_object_or_404(Address, id=address_id, user=request.user)
+    Address.objects.filter(user=request.user, is_default=True).update(is_default=False)
+    address.is_default = True
+    address.save()
+    messages.success(request, "Default address updated.")
+    return redirect('manage_addresses')
+
+@login_required
+def edit_address(request, address_id):
+    """
+    Edit an existing address belonging to the logged-in user.
+    """
+    address = get_object_or_404(Address, id=address_id, user=request.user)
+
+    if request.method == 'POST':
+        form = AddressForm(request.POST, instance=address)
+        if form.is_valid():
+            addr = form.save()
+
+            # If marked default, unset others
+            if addr.is_default:
+                Address.objects.filter(user=request.user).exclude(id=addr.id).update(is_default=False)
+
+            messages.success(request, "Address updated successfully.")
             return redirect('manage_addresses')
-            
-        except Exception as e:
-            messages.error(request, f"Failed to delete address: {str(e)}")
-    
-    cursor.close()
-    
-    return render(request, 'delete_address.html', {
-        'address': {
-            'id': address_data[0],
-            'address': address_data[1]
-        }
-    })
-# ...existing code...
+        else:
+            messages.error(request, "Please correct the errors below.")
+    else:
+        form = AddressForm(instance=address)
+
+    return render(request, 'edit_address.html', {'form': form})
 
 # Application Views
 def sponsor_application(request):
@@ -3842,209 +3776,779 @@ def add_to_cart(request, product_id):
         messages.error(request, f"Error adding to cart: {e}")
         return redirect('view_products')
     finally:
+              cursor.close()
+
+@db_login_required
+def remove_from_cart(request, product_id):
+    """Remove a product from the logged-in driver's cart."""
+    user_id = request.session.get('user_id')
+    if not user_id:
+        messages.error(request, "Please log in to modify your cart.")
+        return redirect('login_page')
+
+    cursor = connection.cursor()
+    try:
+        cursor.execute("DELETE FROM user_cart WHERE user_id = %s AND product_id = %s", [user_id, product_id])
+        try:
+            connection.commit()
+        except Exception:
+            pass
+        messages.success(request, "Item removed from your cart.")
+    except Exception as e:
+        messages.error(request, f"Error removing product: {e}")
+    finally:
         try:
             cursor.close()
         except:
             pass
 
+    return redirect('view_cart')
+
+@admin_required
+def admin_change_user_type(request):
+    """Admin page to change any user's account type"""
+    
+    cursor = connection.cursor()
+    
+    # Get filter parameters
+    account_type_filter = request.GET.get('account_type', '')
+    search_query = request.GET.get('search', '').strip()
+    
+    # Handle POST request for changing account type
+    if request.method == 'POST':
+        user_id = request.POST.get('user_id')
+        new_account_type = request.POST.get('new_account_type')
+        
+        if user_id and new_account_type in ['admin', 'driver', 'sponsor']:
+            try:
+                # Get current user info
+                cursor.execute("""
+                    SELECT username, first_name, last_name, account_type
+                    FROM users
+                    WHERE userID = %s
+                """, [user_id])
+                
+                user_data = cursor.fetchone()
+                
+                if user_data:
+                    old_account_type = user_data[3]
+                    full_name = f"{user_data[1]} {user_data[2]}"
+                    username = user_data[0]
+                    
+                    # Prevent admin from changing their own account type away from admin
+                    current_admin_id = request.session.get('user_id')
+                    if int(user_id) == current_admin_id and new_account_type != 'admin':
+                        messages.error(request, "You cannot change your own account type away from admin.")
+                        return redirect('admin_change_user_type')
+                    
+                    # Update account type
+                    cursor.execute("""
+                        UPDATE users
+                        SET account_type = %s, updated_at = NOW()
+                        WHERE userID = %s
+                    """, [new_account_type, user_id])
+                    
+                    # Handle account type specific cleanup/setup
+                    if old_account_type != new_account_type:
+                        # If changing FROM sponsor, end all active relationships
+                        if old_account_type == 'sponsor':
+                            cursor.execute("""
+                                UPDATE sponsor_driver_relationships
+                                SET relationship_status = 'ended',
+                                    relationship_end_date = NOW(),
+                                    updated_at = NOW()
+                                WHERE sponsor_user_id = %s AND relationship_status = 'active'
+                            """, [user_id])
+                        
+                        # If changing FROM driver, end all active relationships
+                        if old_account_type == 'driver':
+                            cursor.execute("""
+                                UPDATE sponsor_driver_relationships
+                                SET relationship_status = 'ended',
+                                    relationship_end_date = NOW(),
+                                    updated_at = NOW()
+                                WHERE driver_user_id = %s AND relationship_status = 'active'
+                            """, [user_id])
+                        
+                        # If changing TO driver, create wallet if it doesn't exist
+                        if new_account_type == 'driver':
+                            cursor.execute("""
+                                INSERT IGNORE INTO driver_wallets (driver_id, points_balance, is_active)
+                                VALUES (%s, 0, TRUE)
+                            """, [user_id])
+                    
+                    messages.success(request, 
+                        f"Successfully changed {full_name} (@{username}) from {old_account_type} to {new_account_type}.")
+                else:
+                    messages.error(request, "User not found.")
+                    
+            except Exception as e:
+                messages.error(request, f"Error changing account type: {str(e)}")
+                print(f"Change account type error: {e}")
+        else:
+            messages.error(request, "Invalid user ID or account type.")
+    
+    try:
+        # Build query with filters
+        query = """
+            SELECT userID, username, first_name, last_name, email,
+                   phone_number, account_type, is_active, created_at,
+                   (SELECT COUNT(*) FROM sponsor_driver_relationships sdr 
+                    WHERE (sdr.sponsor_user_id = u.userID OR sdr.driver_user_id = u.userID) 
+                    AND sdr.relationship_status = 'active') as active_relationships
+            FROM users u
+            WHERE 1=1
+        """
+        
+        params = []
+        
+        if account_type_filter:
+            query += " AND u.account_type = %s"
+            params.append(account_type_filter)
+        
+        if search_query:
+            query += " AND (u.username LIKE %s OR u.first_name LIKE %s OR u.last_name LIKE %s OR u.email LIKE %s)"
+            search_param = f"%{search_query}%"
+            params.extend([search_param, search_param, search_param, search_param])
+        
+        query += " ORDER BY u.created_at DESC LIMIT 100"
+        
+        cursor.execute(query, params)
+        users_data = cursor.fetchall()
+        
+        users_list = []
+        for user in users_data:
+            users_list.append({
+                'userID': user[0],
+                'username': user[1],
+                'first_name': user[2],
+                'last_name': user[3],
+                'email': user[4],
+                'phone_number': user[5],
+                'account_type': user[6],
+                'is_active': user[7],
+                'created_at': user[8],
+                'active_relationships': user[9]
+            })
+        
+        # Get statistics
+        cursor.execute("""
+            SELECT 
+                account_type,
+                COUNT(*) as count
+            FROM users
+            GROUP BY account_type
+        """)
+        
+        account_stats = cursor.fetchall()
+        stats = {}
+        for stat in account_stats:
+            stats[stat[0]] = stat[1]
+        
+        context = {
+            'users': users_list,
+            'account_stats': stats,
+            'current_account_type_filter': account_type_filter,
+            'current_search': search_query,
+            'current_admin_id': request.session.get('user_id')
+        }
+        
+        return render(request, 'admin_change_user_type.html', context)
+        
+    except Exception as e:
+        messages.error(request, f"Error loading users: {str(e)}")
+        print(f"Admin change user type error: {e}")
+        return redirect('account_page')
+    finally:
+        cursor.close()
+
 @db_login_required
-def bulk_sponsor_upload(request):
-    """Bulk upload Drivers and Sponsors from a pipe-delimited file.
-
-    Expected line format (whitespace tolerant):
-      <user type> || First Name | Last Name | email
-
-    Where <user type> is 'D' (driver) or 'S' (sponsor).
-    The uploading user must be a sponsor; created drivers are linked to the
-    uploading sponsor via sponsor_driver_relationships.
-    """
-    # Auth: sponsors only
-    if not request.session.get('is_authenticated'):
-        messages.error(request, "Please log in to access this feature.")
-        return redirect('login_page')
-
+def sponsor_create_user(request):
+    """Sponsor page to create new sponsor users for their organization"""
+    
+    # Verify user is a sponsor
     if request.session.get('account_type') != 'sponsor':
-        messages.error(request, "Only sponsors can bulk upload users.")
+        messages.error(request, "Access denied. Only sponsors can create organization users.")
+        return redirect('homepage')
+    
+    sponsor_id = request.session.get('user_id')
+    cursor = connection.cursor()
+    
+    # Handle POST request for creating new sponsor user
+    if request.method == 'POST':
+        username = request.POST.get('username', '').strip()
+        email = request.POST.get('email', '').strip()
+        first_name = request.POST.get('first_name', '').strip()
+        last_name = request.POST.get('last_name', '').strip()
+        phone_number = request.POST.get('phone_number', '').strip()
+        password = request.POST.get('password', '')
+        confirm_password = request.POST.get('confirm_password', '')
+        
+        # Validation
+        if not all([username, email, first_name, last_name, password, confirm_password]):
+            messages.error(request, "All fields are required.")
+            return render(request, 'sponsor_create_user.html')
+        
+        if password != confirm_password:
+            messages.error(request, "Passwords do not match.")
+            return render(request, 'sponsor_create_user.html')
+        
+        if len(password) < 6:
+            messages.error(request, "Password must be at least 6 characters long.")
+            return render(request, 'sponsor_create_user.html')
+        
+        try:
+            # Check if username or email already exists
+            cursor.execute("""
+                SELECT username, email FROM users 
+                WHERE username = %s OR email = %s
+            """, [username, email])
+            
+            existing_user = cursor.fetchone()
+            if existing_user:
+                if existing_user[0] == username:
+                    messages.error(request, f"Username '{username}' is already taken.")
+                else:
+                    messages.error(request, f"Email '{email}' is already registered.")
+                return render(request, 'sponsor_create_user.html')
+            
+            # Get the creating sponsor's organization info
+            cursor.execute("""
+                SELECT organization, first_name, last_name
+                FROM users 
+                WHERE userID = %s
+            """, [sponsor_id])
+            
+            sponsor_info = cursor.fetchone()
+            sponsor_organization = sponsor_info[0] if sponsor_info else None
+            
+            # Hash password
+            import hashlib
+            hashed_password = hashlib.sha256(password.encode()).hexdigest()
+            
+            # Create new sponsor user with SAME organization as creator
+            cursor.execute("""
+                INSERT INTO users 
+                (username, email, password_hash, first_name, last_name, phone_number, 
+                 account_type, organization, is_active, created_at, updated_at)
+                VALUES (%s, %s, %s, %s, %s, %s, 'sponsor', %s, TRUE, NOW(), NOW())
+            """, [username, email, hashed_password, first_name, last_name, phone_number, sponsor_organization])
+            
+            new_user_id = cursor.lastrowid
+            
+            # Create a dummy driver application for the relationship tracking
+            cursor.execute("""
+                INSERT INTO driver_applications 
+                (driver_user_id, sponsor_user_id, application_status, application_date, 
+                  approval_date, driver_license_number, license_state, years_of_experience,
+                 motivation_essay, created_at, updated_at)
+                VALUES (%s, %s, 'approved', NOW(), NOW(), 'ORG_MEMBER', 'N/A', 0,
+                        'Organization member created by sponsor', NOW(), NOW())
+            """, [new_user_id, sponsor_id])
+            
+            application_id = cursor.lastrowid
+            
+            # Create organization relationship in sponsor_driver_relationships
+            cursor.execute("""
+                INSERT INTO sponsor_driver_relationships 
+                (sponsor_user_id, driver_user_id, application_id, relationship_status, 
+                 relationship_start_date, relationship_notes, created_at, updated_at)
+                VALUES (%s, %s, %s, 'active', NOW(), 
+                        'Organization member relationship', NOW(), NOW())
+            """, [sponsor_id, new_user_id, application_id])
+            
+            messages.success(request, 
+                f"Successfully created sponsor account for {first_name} {last_name} (@{username}) in organization: {sponsor_organization or 'Default'}.")
+            
+            return redirect('sponsor_create_user')
+            
+        except Exception as e:
+            messages.error(request, f"Error creating user: {str(e)}")
+            print(f"Sponsor create user error: {e}")
+    
+    try:
+        # Get current sponsor's info and organization
+        cursor.execute("""
+            SELECT username, first_name, last_name, email, organization
+            FROM users
+            WHERE userID = %s
+        """, [sponsor_id])
+        
+        sponsor_info = cursor.fetchone()
+        current_organization = sponsor_info[4] if sponsor_info else None
+        
+        # Get organization members (sponsors in the same organization)
+        cursor.execute("""
+            SELECT u.userID, u.username, u.first_name, u.last_name, u.email,
+                   u.phone_number, u.is_active, u.created_at, u.organization,
+                   sdr.relationship_start_date,
+                   sdr.relationship_status
+            FROM users u
+            LEFT JOIN sponsor_driver_relationships sdr ON (
+                u.userID = sdr.driver_user_id 
+                AND sdr.sponsor_user_id = %s 
+                AND sdr.relationship_notes = 'Organization member relationship'
+            )
+            WHERE u.account_type = 'sponsor'
+                AND u.organization = %s
+                AND u.userID != %s
+            ORDER BY u.created_at DESC
+        """, [sponsor_id, current_organization, sponsor_id])
+        
+        organization_members = cursor.fetchall()
+        
+        members_list = []
+        for member in organization_members:
+            members_list.append({
+                'userID': member[0],
+                'username': member[1],
+                'first_name': member[2],
+                'last_name': member[3],
+                'email': member[4],
+                'phone_number': member[5],
+                'is_active': member[6],
+                'created_at': member[7],
+                'organization': member[8],
+                'joined_organization': member[9] or member[7],  # Use relationship start or created date
+                'relationship_status': member[10] or ('active' if member[6] else 'inactive')
+            })
+        
+        context = {
+            'organization_members': members_list,
+            'total_members': len(members_list),
+            'sponsor_username': sponsor_info[0] if sponsor_info else '',
+            'sponsor_name': f"{sponsor_info[1]} {sponsor_info[2]}" if sponsor_info else '',
+            'sponsor_email': sponsor_info[3] if sponsor_info else '',
+            'current_organization': current_organization or 'Default Organization'
+        }
+        
+        return render(request, 'sponsor_create_user.html', context)
+        
+    except Exception as e:
+        messages.error(request, f"Error loading organization data: {str(e)}")
+        print(f"Sponsor create user page error: {e}")
+        return redirect('sponsor_home')
+    finally:
+        cursor.close()
+
+
+@db_login_required
+def sponsor_deactivate_organization_member(request, member_id):
+    """Deactivate an organization member created by this sponsor"""
+    
+    if request.method != 'POST':
+        messages.error(request, "Invalid request method.")
+        return redirect('sponsor_create_user')
+    
+    # Verify user is a sponsor
+    if request.session.get('account_type') != 'sponsor':
+        messages.error(request, "Access denied. Only sponsors can manage organization members.")
+        return redirect('homepage')
+    
+    sponsor_id = request.session.get('user_id')
+    cursor = connection.cursor()
+    
+    try:
+        # Verify this sponsor created this member
+        cursor.execute("""
+            SELECT u.username, u.first_name, u.last_name
+            FROM users u
+            JOIN sponsor_driver_relationships sdr ON u.userID = sdr.driver_user_id
+            WHERE sdr.sponsor_user_id = %s 
+                AND sdr.driver_user_id = %s
+                AND sdr.relationship_notes = 'Organization member relationship'
+                AND sdr.relationship_status = 'active'
+        """, [sponsor_id, member_id])
+        
+        member_info = cursor.fetchone()
+        
+        if not member_info:
+            messages.error(request, "You don't have permission to manage this user.")
+            return redirect('sponsor_create_user')
+        
+        # Deactivate the member
+        cursor.execute("""
+            UPDATE users
+            SET is_active = FALSE, updated_at = NOW()
+            WHERE userID = %s
+        """, [member_id])
+        
+        # Update relationship status using correct column names
+        cursor.execute("""
+            UPDATE sponsor_driver_relationships
+            SET relationship_status = 'terminated', 
+                relationship_end_date = NOW(),
+                updated_at = NOW(),
+                terminated_by_user_id = %s,
+                termination_reason = 'Deactivated by organization creator'
+            WHERE sponsor_user_id = %s AND driver_user_id = %s 
+                AND relationship_notes = 'Organization member relationship'
+        """, [sponsor_id, sponsor_id, member_id])
+        
+        full_name = f"{member_info[1]} {member_info[2]}"
+        username = member_info[0]
+        
+        messages.success(request, f"Successfully deactivated {full_name} (@{username}).")
+        
+    except Exception as e:
+        messages.error(request, f"Error deactivating member: {str(e)}")
+        print(f"Deactivate member error: {e}")
+    finally:
+        cursor.close()
+
+    return redirect('sponsor_create_user')
+    try:
+        cursor.close()
+    except:
+        pass
+
+
+# Delete Sponsor Drivers
+@db_login_required 
+def sponsor_delete_driver(request, driver_id):
+    """Remove a driver from the currently logged-in sponsor's organization.
+
+    Deletes the sponsor<->driver relationship (and, optionally, that pair's
+    point transactions). It does NOT delete the user's global account.
+    """
+    # Only sponsors can do this
+    if request.session.get('account_type') != 'sponsor':
+        messages.error(request, "Access denied. Only sponsors can perform this action.")
         return redirect('homepage')
 
-    sponsor_id = request.session.get('user_id') or request.session.get('id')
-    if not sponsor_id:
-        messages.error(request, "Unable to determine your sponsor account. Please log in again.")
-        return redirect('login_page')
-
-    # Accept only POST uploads; GET just redirects back to dashboard
     if request.method != 'POST':
-        return redirect('sponsor_home')
+        messages.error(request, "Invalid request method.")
+        return redirect('sponsor_drivers')
 
-    upload = request.FILES.get('upload_file')
-    if not upload:
-        messages.error(request, "Please choose a file to upload.")
-        return redirect('sponsor_home')
-
-    # Read file lines safely
-    try:
-        content = upload.read()
-        try:
-            text = content.decode('utf-8')
-        except Exception:
-            text = content.decode('latin-1', errors='ignore')
-        lines = text.splitlines()
-    except Exception as e:
-        messages.error(request, f"Could not read uploaded file: {e}")
-        return redirect('sponsor_home')
-
-    # Prepare results
-    created_drivers = 0
-    created_sponsors = 0
-    skipped = 0
-    errors = 0
-
+    sponsor_id = request.session.get('user_id')
     cursor = connection.cursor()
     try:
-        # Create a simple log table for imports (optional, idempotent)
-        cursor.execute(
-            """
-            CREATE TABLE IF NOT EXISTS sponsor_bulk_uploads (
-                id INT AUTO_INCREMENT PRIMARY KEY,
-                sponsor_user_id INT NOT NULL,
-                row_text TEXT,
-                status VARCHAR(20),
-                message TEXT,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-            )
-            """
-        )
+        # Remove the relationship for this sponsor and driver
+        cursor.execute("""
+            DELETE FROM sponsor_driver_relationships
+            WHERE sponsor_user_id = %s AND driver_user_id = %s
+        """, [sponsor_id, driver_id])
 
-        # Helper: check if user email already exists
-        def email_exists(email):
-            cursor.execute("SELECT userID FROM users WHERE email = %s", [email])
-            return cursor.fetchone() is not None
+        # (Optional) also remove point transactions between this sponsor & driver
+        try:
+            cursor.execute("""
+                DELETE FROM driver_points_transactions
+                WHERE sponsor_user_id = %s AND driver_user_id = %s
+            """, [sponsor_id, driver_id])
+        except Exception:
+            # safe to ignore if table doesn't exist yet
+            pass
 
-        # Helper: insert user and return userID
-        def create_user(account_type, first, last, email):
-            username = email  # simplest unique username
-            cursor.execute(
-                """
-                INSERT INTO users (username, first_name, last_name, email, phone_number, address, is_active, account_type, created_at)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, NOW())
-                """,
-                [username, first, last, email, '', '', 1, account_type]
-            )
-            cursor.execute("SELECT LAST_INSERT_ID()")
-            row = cursor.fetchone()
-            return row[0] if row else None
+        try:
+            connection.commit()
+        except Exception:
+            pass
 
-        # Helper: link driver to sponsor
-        def link_driver_to_sponsor(driver_id):
-            try:
-                cursor.execute(
-                    """
-                    CREATE TABLE IF NOT EXISTS sponsor_driver_relationships (
-                        relationship_id INT AUTO_INCREMENT PRIMARY KEY,
-                        sponsor_user_id INT NOT NULL,
-                        driver_user_id INT NOT NULL,
-                        relationship_status VARCHAR(50) DEFAULT 'active',
-                        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                        UNIQUE KEY uniq_sponsor_driver (sponsor_user_id, driver_user_id)
-                    )
-                    """
-                )
-                cursor.execute(
-                    """
-                    INSERT INTO sponsor_driver_relationships (sponsor_user_id, driver_user_id, relationship_status)
-                    VALUES (%s, %s, 'active')
-                    ON DUPLICATE KEY UPDATE relationship_status = VALUES(relationship_status)
-                    """,
-                    [sponsor_id, driver_id]
-                )
-            except Exception:
-                # Don't fail import if relationship table/insert has trouble
-                pass
-
-        # Parse and process each line
-        for raw in lines:
-            line = (raw or '').strip()
-            if not line or line.startswith('#'):
-                continue
-            # normalize delimiters, tolerate spaces
-            normalized = line.replace('||', '|')
-            parts = [p.strip() for p in normalized.split('|')]
-            parts = [p for p in parts if p != '']  # remove empty elements from extra pipes/spaces
-
-            # Expect at least 4 fields
-            if len(parts) < 4:
-                cursor.execute(
-                    "INSERT INTO sponsor_bulk_uploads (sponsor_user_id, row_text, status, message) VALUES (%s, %s, %s, %s)",
-                    [sponsor_id, line, 'failed', 'Invalid format: need 4 fields (type, first, last, email)']
-                )
-                errors += 1
-                continue
-
-            user_type_raw, first, last, email = parts[0], parts[1], parts[2], parts[3]
-            user_type = user_type_raw.upper()[:1]
-            if user_type not in ('D', 'S'):
-                cursor.execute(
-                    "INSERT INTO sponsor_bulk_uploads (sponsor_user_id, row_text, status, message) VALUES (%s, %s, %s, %s)",
-                    [sponsor_id, line, 'failed', "Invalid user type (must be 'D' or 'S')"]
-                )
-                errors += 1
-                continue
-
-            if not first or not last or not email or '@' not in email:
-                cursor.execute(
-                    "INSERT INTO sponsor_bulk_uploads (sponsor_user_id, row_text, status, message) VALUES (%s, %s, %s, %s)",
-                    [sponsor_id, line, 'failed', 'Missing or invalid name/email']
-                )
-                errors += 1
-                continue
-
-            account_type = 'driver' if user_type == 'D' else 'sponsor'
-
-            # Skip if email already exists
-            if email_exists(email):
-                cursor.execute(
-                    "INSERT INTO sponsor_bulk_uploads (sponsor_user_id, row_text, status, message) VALUES (%s, %s, %s, %s)",
-                    [sponsor_id, line, 'skipped', 'Email already exists']
-                )
-                skipped += 1
-                continue
-
-            # Create user
-            try:
-                new_user_id = create_user(account_type, first, last, email)
-                if not new_user_id:
-                    raise Exception('Could not retrieve new user id')
-
-                if account_type == 'driver':
-                    link_driver_to_sponsor(new_user_id)
-                    created_drivers += 1
-                else:
-                    created_sponsors += 1
-
-                cursor.execute(
-                    "INSERT INTO sponsor_bulk_uploads (sponsor_user_id, row_text, status, message) VALUES (%s, %s, %s, %s)",
-                    [sponsor_id, line, 'processed', f'Created {account_type} userID={new_user_id}']
-                )
-            except Exception as e:
-                cursor.execute(
-                    "INSERT INTO sponsor_bulk_uploads (sponsor_user_id, row_text, status, message) VALUES (%s, %s, %s, %s)",
-                    [sponsor_id, line, 'failed', str(e)]
-                )
-                errors += 1
-
-        # Finish
-        connection.commit()
-        summary = f"Drivers created: {created_drivers}, Sponsors created: {created_sponsors}, Skipped: {skipped}, Errors: {errors}"
-        if errors:
-            messages.warning(request, f"Bulk upload completed with issues. {summary}")
-        else:
-            messages.success(request, f"Bulk upload successful. {summary}")
+        messages.success(request, "Driver removed from your organization.")
     except Exception as e:
-        messages.error(request, f"Bulk upload failed: {e}")
+        messages.error(request, f"Could not remove driver: {e}")
     finally:
         try:
             cursor.close()
         except Exception:
             pass
 
-    return redirect('sponsor_home')
+    return redirect('sponsor_drivers')
+
+
+@db_login_required
+def sponsor_organization_management(request):
+    """View for sponsors to manage other sponsors in their organization."""
+    
+    # Only sponsors can access this page
+    if request.session.get('account_type') != 'sponsor':
+        messages.error(request, "Access denied. Only sponsors can view this page.")
+        return redirect('homepage')
+    
+    sponsor_id = request.session.get('user_id')
+    cursor = connection.cursor()
+    
+    try:
+        # Get current sponsor's organization
+        cursor.execute("""
+            SELECT organization, first_name, last_name
+            FROM users 
+            WHERE userID = %s AND account_type = 'sponsor'
+        """, [sponsor_id])
+        
+        sponsor_info = cursor.fetchone()
+        if not sponsor_info or not sponsor_info[0]:
+            messages.error(request, "You must be part of an organization to manage members.")
+            return redirect('account_page')
+        
+        current_organization = sponsor_info[0]
+        sponsor_name = f"{sponsor_info[1]} {sponsor_info[2]}"
+        
+        # Handle member removal
+        if request.method == 'POST':
+            member_id = request.POST.get('member_id')
+            action = request.POST.get('action')
+            
+            if action == 'remove_member' and member_id:
+                try:
+                    # Don't allow sponsors to remove themselves
+                    if int(member_id) == sponsor_id:
+                        messages.error(request, "You cannot remove yourself from the organization.")
+                    else:
+                        # Remove the member by setting their organization to NULL
+                        cursor.execute("""
+                            UPDATE users 
+                            SET organization = NULL 
+                            WHERE userID = %s AND account_type = 'sponsor' AND organization = %s
+                        """, [member_id, current_organization])
+                        
+                        if cursor.rowcount > 0:
+                            # Get the removed member's name for the message
+                            cursor.execute("""
+                                SELECT first_name, last_name 
+                                FROM users 
+                                WHERE userID = %s
+                            """, [member_id])
+                            removed_member = cursor.fetchone()
+                            member_name = f"{removed_member[0]} {removed_member[1]}" if removed_member else "Member"
+                            
+                            connection.commit()
+                            messages.success(request, f"Successfully removed {member_name} from the organization.")
+                        else:
+                            messages.error(request, "Member not found or could not be removed.")
+                            
+                except Exception as e:
+                    messages.error(request, f"Error removing member: {str(e)}")
+                    
+                return redirect('sponsor_organization_management')
+        
+        # Get all sponsors in the same organization
+        cursor.execute("""
+            SELECT userID, username, first_name, last_name, email, phone_number, is_active, created_at
+            FROM users 
+            WHERE account_type = 'sponsor' AND organization = %s
+            ORDER BY first_name, last_name
+        """, [current_organization])
+        
+        organization_members = cursor.fetchall()
+        
+        # Format the data
+        members_list = []
+        for member in organization_members:
+            members_list.append({
+                'user_id': member[0],
+                'username': member[1],
+                'first_name': member[2],
+                'last_name': member[3],
+                'email': member[4],
+                'phone_number': member[5],
+                'is_active': bool(member[6]),
+                'created_at': member[7],
+                'is_current_user': member[0] == sponsor_id
+            })
+        
+        context = {
+            'organization_members': members_list,
+            'current_organization': current_organization,
+            'sponsor_name': sponsor_name,
+            'total_members': len(members_list)
+        }
+        
+        return render(request, 'sponsor_organization_management.html', context)
+        
+    except Exception as e:
+        messages.error(request, f"Error loading organization members: {str(e)}")
+        return redirect('account_page')
+    finally:
+        try:
+            cursor.close()
+        except:
+            pass
+
+#Admin Reset Driver Password ... Testing
+@admin_required
+def admin_reset_driver_password(request, user_id):
+    """
+    Admin action: reset a driver's password to a temporary value.
+
+    - Only accepts POST
+    - Uses same SHA-256 hashing convention as change_password
+    - Puts the temp password in a flash message so the admin can share it
+    """
+    if request.method != 'POST':
+        messages.error(request, "Invalid request.")
+        return redirect('admin_driver_dashboard')
+
+    cursor = connection.cursor()
+    try:
+        # Ensure this is a driver account and exists
+        cursor.execute("""
+            SELECT userID, username, account_type, email
+            FROM users WHERE userID = %s
+        """, [user_id])
+        row = cursor.fetchone()
+        if not row:
+            messages.error(request, "Driver not found.")
+            return redirect('admin_driver_dashboard')
+        if row[2] != 'driver':
+            messages.error(request, "Password reset is only allowed for driver accounts.")
+            return redirect('admin_driver_dashboard')
+
+        username = row[1]
+
+        # Generate a temp password (12 chars: URL-safe, no punctuation confusion)
+        alphabet = string.ascii_letters + string.digits
+        temp_password = ''.join(secrets.choice(alphabet) for _ in range(12))
+
+        # Hash exactly like your change_password view (SHA-256 hex)
+        temp_hash = hashlib.sha256(temp_password.encode()).hexdigest()
+
+        # Update DB
+        cursor.execute("""
+            UPDATE users
+            SET password_hash = %s, updated_at = NOW()
+            WHERE userID = %s
+        """, [temp_hash, user_id])
+
+        try:
+            connection.commit()
+        except Exception:
+            pass
+
+        messages.success(
+            request,
+            f"Password for @{username} has been reset. Temporary password: {temp_password}"
+        )
+    except Exception as e:
+        messages.error(request, f"Error resetting password: {e}")
+    finally:
+        try:
+            cursor.close()
+        except Exception:
+            pass
+
+    return redirect('admin_driver_dashboard')
+
+# Sponsor Add Driver Notes
+@db_login_required
+def sponsor_add_driver_note(request, driver_id):
+    """
+    Sponsors can add private notes about individual drivers.
+    In addition to saving in sponsor_driver_notes, we also write a 0-point
+    transaction row so the note is visible immediately in the 'Recent Transactions'
+    column without changing the sponsor_drivers view.
+    """
+    # Access control
+    acct = (request.session.get('account_type') or '').lower()
+    if acct != 'sponsor':
+        messages.error(request, "Access denied. Only sponsors can perform this action.")
+        return redirect('homepage')
+
+    if request.method != 'POST':
+        messages.error(request, "Invalid request.")
+        return redirect('sponsor_drivers')
+
+    # Robust sponsor_id retrieval
+    sponsor_id = (
+        request.session.get('user_id')
+        or request.session.get('id')
+        or request.session.get('userID')
+    )
+    if not sponsor_id:
+        messages.error(request, "Session error: could not identify sponsor user.")
+        return redirect('sponsor_drivers')
+
+    note_text = (request.POST.get('note_text') or '').strip()
+    if not note_text:
+        messages.error(request, "Please enter a note before saving.")
+        return redirect('sponsor_drivers')
+    if len(note_text) > 4000:
+        messages.error(request, "Note is too long (max 4000 characters).")
+        return redirect('sponsor_drivers')
+
+    cursor = connection.cursor()
+    try:
+        engine = settings.DATABASES['default']['ENGINE']
+
+        # Create notes table if needed (engine-aware)
+        if 'sqlite' in engine:
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS sponsor_driver_notes (
+                    note_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    sponsor_user_id INTEGER NOT NULL,
+                    driver_user_id INTEGER NOT NULL,
+                    note_text TEXT NOT NULL,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+        elif 'postgresql' in engine:
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS sponsor_driver_notes (
+                    note_id SERIAL PRIMARY KEY,
+                    sponsor_user_id INT NOT NULL,
+                    driver_user_id INT NOT NULL,
+                    note_text TEXT NOT NULL,
+                    created_at TIMESTAMP NOT NULL DEFAULT NOW()
+                )
+            """)
+        else:
+            # MySQL / MariaDB
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS sponsor_driver_notes (
+                    note_id INT AUTO_INCREMENT PRIMARY KEY,
+                    sponsor_user_id INT NOT NULL,
+                    driver_user_id INT NOT NULL,
+                    note_text TEXT NOT NULL,
+                    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    INDEX (sponsor_user_id),
+                    INDEX (driver_user_id)
+                )
+            """)
+
+        # Validate sponsor<->driver relationship
+        cursor.execute("""
+            SELECT 1
+            FROM sponsor_driver_relationships
+            WHERE sponsor_user_id = %s AND driver_user_id = %s
+            LIMIT 1
+        """, [sponsor_id, driver_id])
+        if not cursor.fetchone():
+            messages.error(request, "You can only add notes for your own drivers.")
+            return redirect('sponsor_drivers')
+
+        # 1) Save the note to the notes table
+        cursor.execute("""
+            INSERT INTO sponsor_driver_notes (sponsor_user_id, driver_user_id, note_text)
+            VALUES (%s, %s, %s)
+        """, [sponsor_id, driver_id, note_text])
+
+        # 2) ALSO write a zero-point "NOTE" transaction so it shows up under Recent Transactions
+        #    Your sponsor_drivers page already queries driver_points_transactions and renders message/created_at.
+        #    If your table has additional required columns, adjust this insert accordingly.
+        try:
+            cursor.execute("""
+                INSERT INTO driver_points_transactions (sponsor_user_id, driver_user_id, points, message)
+                VALUES (%s, %s, %s, %s)
+            """, [sponsor_id, driver_id, 0, f"NOTE: {note_text}"])
+        except Exception as tx_e:
+            # If schema differs (extra columns), don't block note saving—just log it.
+            print("Warning: could not insert 0-point NOTE transaction:", tx_e)
+            traceback.print_exc()
+
+        try:
+            connection.commit()
+        except Exception:
+            pass
+
+        messages.success(request, "Note saved successfully.")
+    except Exception as e:
+        print("sponsor_add_driver_note error:", e)
+        traceback.print_exc()
+        messages.error(request, "Could not save note due to an internal error.")
+    finally:
+        try:
+            cursor.close()
+        except Exception:
+            pass
+
+    return redirect('sponsor_drivers')

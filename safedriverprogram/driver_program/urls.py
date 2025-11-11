@@ -39,8 +39,10 @@ urlpatterns = [
     
     # Address management
     path('addresses/', views.manage_addresses, name='manage_addresses'),
-    path('addresses/edit/<int:address_id>/', views.edit_address, name='edit_address'),
     path('addresses/delete/<int:address_id>/', views.delete_address, name='delete_address'),
+    path('addresses/edit/<int:address_id>/', views.edit_address, name='edit_address'),
+    path('addresses/set-default/<int:address_id>/', views.set_default_address, name='set_default_address'),
+
 
     # Admin sponsor management
     path('useradmin/sponsors/', views.admin_sponsor_list, name='admin_sponsor_list'),
@@ -51,10 +53,17 @@ urlpatterns = [
     # Admin admin management
     path('useradmin/admins/', views.admin_list, name='admin_manage_admins'),
     path('useradmin/admins/<int:admin_id>/update-status/', views.admin_update_admin_status, name='admin_update_admin_status'),
-    
+    path(
+    'useradmin/drivers/reset-password/<int:user_id>/', views.admin_reset_driver_password, name='admin_reset_driver_password'), #Testing
+
+
     # Admin security log
     path('useradmin/failed-login-log/', views.admin_failed_login_log, name='admin_failed_login_log'),
     
+    #Admin user management
+    path('useradmin/change-user-type/', views.admin_change_user_type, name='admin_change_user_type'),
+
+    # Sponsor-specific pages - FIXED: Remove duplicates
     # Sponsor-specific pages
     path('sponsor/home/', views.sponsor_home, name='sponsor_home'),
     path('sponsor/profile/', views.sponsor_profile, name='sponsor_profile'),
@@ -66,7 +75,11 @@ urlpatterns = [
     path('sponsor/applications/', views.sponsor_manage_applications, name='sponsor_manage_applications'),
     path('sponsor/application/<int:application_id>/', views.sponsor_view_application, name='sponsor_view_application'),
     path('sponsor-application-action/<int:application_id>/', views.sponsor_application_action, name='sponsor_application_action'),
-    
+    path('sponsor/drivers/<int:driver_id>/delete/', views.sponsor_delete_driver, name='sponsor_delete_driver'),
+   path('sponsor/organization/', views.sponsor_organization_management, name='sponsor_organization_management'),
+   path('sponsor/drivers/<int:driver_id>/notes/add/', views.sponsor_add_driver_note, name='sponsor_add_driver_note'), #Testing
+
+
     # Wallet history pages
     path('sponsor/wallet-history/', views.sponsor_wallet_history, name='sponsor_wallet_history'),
     path('sponsor/wallet-history/<int:driver_id>/', views.sponsor_wallet_history, name='sponsor_wallet_history_driver'),
@@ -83,12 +96,19 @@ urlpatterns = [
     path('products/', views.view_products, name='view_products'),
     path('products/<int:product_id>/', views.view_product, name='view_product'),
     path('wishlist/', views.wishlist_page, name='wishlist'),
+    path('wishlist/add/<int:product_id>', views.add_to_wishlist, name='add_to_wishlist'),
+
+    # Sponsor user management
+    path('sponsor/create-user/', views.sponsor_create_user, name='sponsor_create_user'),
+    path('sponsor/deactivate-member/<int:member_id>/', views.sponsor_deactivate_organization_member, name='sponsor_deactivate_organization_member'),
+
     path('wishlist/add/<int:product_id>/', views.add_to_wishlist, name='add_to_wishlist'),
     path('wishlist/delete/<int:product_id>/', views.delete_from_wishlist, name='delete_from_wishlist'),
 
     # Shopping cart
     path('cart/add/<int:product_id>/', views.add_to_cart, name='add_to_cart'),
-    path('cart/', views.view_cart, name='view_cart'),
+    path('cart/remove/<int:product_id>/', views.remove_from_cart, name='remove_from_cart'),
+    path('cart/', views.view_cart, name='view_cart'),  
 
     # Reports and Account Review
     path('sponsor/driver-point-report/', views.generate_driver_point_report, name='generate_driver_point_report'),
