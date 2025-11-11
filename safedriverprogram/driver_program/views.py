@@ -3650,11 +3650,144 @@ def admin_wallet_history(request, driver_id=None):
     from django.http import HttpResponse
     return HttpResponse("Admin wallet history feature is not yet implemented.")
 
-@login_required
+@db_login_required
 def admin_failed_login_log(request):
-    """Placeholder for admin failed login log view."""
-    from django.http import HttpResponse
-    return HttpResponse("Admin failed login log feature is not yet implemented.")
+    # Ensure user is an admin according to session (db login system)
+    if request.session.get('account_type') != 'admin':
+        messages.error(request, "Access denied. Administrator privileges required.")
+        return redirect('account_page')
+    """Admin view to show failed login attempts with filters and statistics.
+
+    Supports GET filters: username (partial), account_type, time_range (1h,24h,7d,30d,all)
+    Renders `admin_failed_login_log.html` which expects: attempts, overall_stats,
+    account_type_breakdown, top_failures, ip_stats, filters
+    """
+    from datetime import datetime, timedelta
+
+    # Read filters from query string
+    username_filter = request.GET.get('username', '').strip()
+    account_type = request.GET.get('account_type', '').strip()
+    time_range = request.GET.get('time_range', '7d').strip() or '7d'
+
+    # Build WHERE clauses and params
+    where_clauses = []
+    params = []
+
+    if username_filter:
+        where_clauses.append("username LIKE %s")
+        params.append(f"%{username_filter}%")
+
+    if account_type:
+        where_clauses.append("account_type = %s")
+        params.append(account_type)
+
+    # time range mapping
+    now = datetime.now()
+    if time_range == '1h':
+        cutoff = now - timedelta(hours=1)
+    elif time_range == '24h':
+        cutoff = now - timedelta(hours=24)
+    elif time_range == '7d':
+        cutoff = now - timedelta(days=7)
+    elif time_range == '30d':
+        cutoff = now - timedelta(days=30)
+    else:
+        cutoff = None
+
+    if cutoff:
+        where_clauses.append("attempted_at >= %s")
+        params.append(cutoff)
+
+    where_sql = ''
+    if where_clauses:
+        where_sql = 'WHERE ' + ' AND '.join(where_clauses)
+
+    cursor = connection.cursor()
+    try:
+        # Overall stats
+        stats_sql = f"SELECT COUNT(*) as total_attempts, " \
+                    f"COUNT(DISTINCT username) as unique_usernames, " \
+                    f"COUNT(DISTINCT ip_address) as unique_ips, " \
+                    f"COUNT(DISTINCT DATE(attempted_at)) as days_with_attempts " \
+                    f"FROM failed_login_attempts {where_sql}"
+        cursor.execute(stats_sql, params)
+        stats_row = cursor.fetchone() or (0, 0, 0, 0)
+        overall_stats = {
+            'total_attempts': stats_row[0],
+            'unique_usernames': stats_row[1],
+            'unique_ips': stats_row[2],
+            'days_with_attempts': stats_row[3],
+        }
+
+        # Account type breakdown
+        acct_sql = f"SELECT account_type, COUNT(*) FROM failed_login_attempts {where_sql} GROUP BY account_type"
+        cursor.execute(acct_sql, params)
+        account_type_breakdown = {row[0] or 'unknown': row[1] for row in cursor.fetchall()}
+
+        # Top failures by username (limit 10)
+        top_sql = f"SELECT username, account_type, COUNT(*) as attempt_count, COUNT(DISTINCT ip_address) as unique_ips, MAX(attempted_at) as last_attempt " \
+                  f"FROM failed_login_attempts {where_sql} GROUP BY username, account_type ORDER BY attempt_count DESC, last_attempt DESC LIMIT 10"
+        cursor.execute(top_sql, params)
+        top_failures = [
+            {
+                'username': row[0],
+                'account_type': row[1] or 'unknown',
+                'attempt_count': row[2],
+                'unique_ips': row[3],
+                'last_attempt': row[4],
+            }
+            for row in cursor.fetchall()
+        ]
+
+        # Top IP addresses
+        ip_sql = f"SELECT ip_address, COUNT(*) as attempt_count, COUNT(DISTINCT username) as unique_usernames, MAX(attempted_at) as last_attempt " \
+                 f"FROM failed_login_attempts {where_sql} GROUP BY ip_address ORDER BY attempt_count DESC LIMIT 10"
+        cursor.execute(ip_sql, params)
+        ip_stats = [
+            {
+                'ip_address': row[0],
+                'attempt_count': row[1],
+                'unique_usernames': row[2],
+                'last_attempt': row[3],
+            }
+            for row in cursor.fetchall()
+        ]
+
+        # Fetch recent attempts (limit 500)
+        attempts_sql = f"SELECT attempt_id, username, account_type, attempted_at, ip_address, failure_reason, user_agent " \
+                       f"FROM failed_login_attempts {where_sql} ORDER BY attempted_at DESC LIMIT 500"
+        cursor.execute(attempts_sql, params)
+        attempts = [
+            {
+                'attempt_id': row[0],
+                'username': row[1],
+                'account_type': row[2] or 'unknown',
+                'attempted_at': row[3],
+                'ip_address': row[4],
+                'failure_reason': row[5],
+                'user_agent': row[6],
+            }
+            for row in cursor.fetchall()
+        ]
+
+        filters = {
+            'username': username_filter,
+            'account_type': account_type,
+            'time_range': time_range,
+        }
+
+        context = {
+            'attempts': attempts,
+            'overall_stats': overall_stats,
+            'account_type_breakdown': account_type_breakdown,
+            'top_failures': top_failures,
+            'ip_stats': ip_stats,
+            'filters': filters,
+        }
+
+        return render(request, 'admin_failed_login_log.html', context)
+    finally:
+        cursor.close()
 
 @login_required
 def admin_update_admin_status(request, admin_id):
