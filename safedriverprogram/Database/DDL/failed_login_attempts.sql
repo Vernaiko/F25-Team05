@@ -18,6 +18,9 @@ CREATE TABLE IF NOT EXISTS failed_login_attempts (
     INDEX idx_username (username),
     INDEX idx_attempted_at (attempted_at),
     INDEX idx_ip_address (ip_address)
+    success BOOLEAN DEFAULT 0,
+    notes TEXT,
+    INDEX idx_success (success);
 );
 
 -- Optional: Create a view for recent failed attempts
