@@ -26,6 +26,48 @@
               <div>
                 <p class="heading">Active Drivers</p>
                 <p class="title">{{ active_drivers_count }}</p>
+            <!-- Bulk Upload Section -->
+            <div class="container" style="margin-top: 1.5rem;">
+              <div class="box">
+                <h2 class="title is-4">Bulk Upload Users</h2>
+                <p class="content">Upload a pipe-delimited file to add Drivers (D) and Sponsors (S) to your organization.</p>
+
+                <div class="notification is-light">
+                  <p class="mb-2"><strong>Format:</strong> &lt;user type&gt; || First Name | Last Name | email</p>
+                  <pre class="has-background-light p-3" style="white-space: pre-wrap;">
+            D || Joe | Driver | joe@example.com
+            S || Jill | Sponsor | jill@example.com
+                  </pre>
+                </div>
+
+                <form method="post" action="{% url 'bulk_sponsor_upload' %}" enctype="multipart/form-data">
+                  {% csrf_token %}
+                  <div class="field is-grouped is-align-items-center">
+                    <div class="control">
+                      <div class="file has-name is-small">
+                        <label class="file-label">
+                          <input class="file-input" type="file" name="upload_file" accept=".txt,.csv,.dat">
+                          <span class="file-cta">
+                            <span class="file-icon">
+                              <i class="fas fa-upload"></i>
+                            </span>
+                            <span class="file-label">
+                              Choose a file…
+                            </span>
+                          </span>
+                        </label>
+                      </div>
+                    </div>
+                    <div class="control">
+                      <button type="submit" class="button is-primary is-small">
+                        Upload
+                      </button>
+                    </div>
+                  </div>
+                </form>
+              </div>
+            </div>
+
               </div>
             </div>
           </div>

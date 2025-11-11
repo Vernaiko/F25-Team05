@@ -71,6 +71,7 @@ urlpatterns = [
     path('sponsor/adjust-points/', views.sponsor_adjust_points, name='sponsor_adjust_points'),
     path('sponsor/adjust-point-exchange-rate/', views.sponsor_adjust_point_exchange_rate, name='sponsor_adjust_point_exchange_rate'),
     path('sponsor/adjust-catalogue/', views.adjust_catalogue, name='sponsor_adjust_catalogue'),
+    path('sponsor/bulk-upload/', views.bulk_sponsor_upload, name='bulk_sponsor_upload'),
     path('sponsor/applications/', views.sponsor_manage_applications, name='sponsor_manage_applications'),
     path('sponsor/application/<int:application_id>/', views.sponsor_view_application, name='sponsor_view_application'),
     path('sponsor-application-action/<int:application_id>/', views.sponsor_application_action, name='sponsor_application_action'),
