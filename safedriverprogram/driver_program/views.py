@@ -2615,10 +2615,8 @@ def review_driver_status(request):
     return render(request, "driver_status.html", {"drivers": drivers})
 
 def view_products(request):
-    """Display products from Fake Store API with optional sorting and search"""
-    import requests
-
-    sort_order = request.GET.get('sort', '')  # Get sort parameter from query string
+    """Display products from Fake Store API with optional sorting, search, and point conversion."""
+    sort_order = request.GET.get('sort', '')
     search_query = request.GET.get('search', '').strip()
 
     try:
@@ -2626,24 +2624,24 @@ def view_products(request):
         response = requests.get('https://fakestoreapi.com/products')
         response.raise_for_status()
         products = response.json()
-        
+
         # Sort products if requested
         if sort_order == 'price_asc':
             products.sort(key=lambda x: float(x['price']))
         elif sort_order == 'price_desc':
             products.sort(key=lambda x: float(x['price']), reverse=True)
-        
+
         # Filter products based on search query
         if search_query:
             search_lower = search_query.lower()
             products = [
                 product for product in products
-                if (search_lower in product.get('title', '').lower() or
-                    search_lower in product.get('description', '').lower() or
-                    search_lower in product.get('category', '').lower())
+                if (search_lower in product.get('title', '').lower()
+                    or search_lower in product.get('description', '').lower()
+                    or search_lower in product.get('category', '').lower())
             ]
 
-        # If the current user is a sponsor, apply their catalogue category preferences (if any)
+        # Apply sponsor catalogue preferences (if any)
         try:
             if request.session.get('is_authenticated') and request.session.get('account_type') == 'sponsor':
                 sponsor_id = request.session.get('user_id') or request.session.get('id')
@@ -2665,7 +2663,13 @@ def view_products(request):
             # Don't fail the whole page if preferences lookup or filtering fails
             pass
 
-        # Render template with products
+        # 💡 Convert dollar prices to points (1 cent = 1 point)
+        for p in products:
+            try:
+                p['price_points'] = int(float(p['price']) * 100)
+            except (ValueError, TypeError):
+                p['price_points'] = 0
+
         return render(request, 'products.html', {
             'products': products,
             'current_sort': sort_order,
@@ -2684,12 +2688,17 @@ def view_products(request):
 
 @db_login_required
 def view_product(request, product_id):
-    """Display a single product's details from Fake Store API"""
-
+    """Display a single product's details from Fake Store API with points conversion."""
     try:
         response = requests.get(f'https://fakestoreapi.com/products/{product_id}')
         response.raise_for_status()
         product = response.json()
+
+        # 💡 Add points conversion (1 point = 1 cent)
+        try:
+            product['price_points'] = int(float(product['price']) * 100)
+        except (ValueError, TypeError):
+            product['price_points'] = 0
 
         wishlist = []
         if request.session.get('is_authenticated'):
@@ -2704,8 +2713,7 @@ def view_product(request, product_id):
         })
     except requests.RequestException as e:
         messages.error(request, f"Failed to fetch product details: {str(e)}")
-        return redirect('view_products')
-      
+        return redirect('view_products')      
       
 @db_login_required
 def admin_sponsor_list(request):
@@ -3415,41 +3423,46 @@ def sponsor_adjust_points(request):
 
 @db_login_required
 def wishlist_page(request):
-    """Display the user's wishlist"""
-    # Accept either session key name used elsewhere ('user_id' or 'userID')
+    """Display the user's wishlist with points conversion."""
     user_id = request.session.get('user_id') or request.session.get('userID')
     cursor = connection.cursor()
-    
+
     try:
-        # For testing, let's add a sample product
-        # Get all product IDs from the user's wishlist
         cursor.execute("""
             SELECT product_id FROM user_wishlist WHERE user_id = %s
         """, [user_id])
         product_ids = [row[0] for row in cursor.fetchall()]
-        # Fetch product details from Fake Store API
+
         wishlist_items = []
         for product_id in product_ids:
             try:
                 response = requests.get(f'https://fakestoreapi.com/products/{product_id}')
                 if response.status_code == 200:
                     product_data = response.json()
+
+                    # 💡 Add points conversion (1 point = 1 cent)
+                    try:
+                        product_data['price_points'] = int(float(product_data['price']) * 100)
+                    except (ValueError, TypeError):
+                        product_data['price_points'] = 0
+
                     wishlist_items.append(product_data)
             except Exception as e:
-                # Skip product on error but log to console
                 print(f"Error fetching product {product_id}: {str(e)}")
-        
-        # Optional: add info message when wishlist is empty
+
         if not wishlist_items:
             messages.info(request, "Your wishlist is empty.")
 
         return render(request, 'wishlist.html', {'wishlist_items': wishlist_items})
-    
+
     except Exception as e:
         messages.error(request, f"Error fetching wishlist: {str(e)}")
         return redirect('homepage')
     finally:
-        cursor.close()
+        try:
+            cursor.close()
+        except:
+            pass
         
 @db_login_required
 def delete_from_wishlist(request, product_id):
@@ -3800,6 +3813,7 @@ def review_driver_points(request):
     """Placeholder for review driver points view."""
     from django.http import HttpResponse
     return HttpResponse("Review driver points feature is not yet implemented.")
+
 @db_login_required
 def view_cart(request):
     """Display the logged-in driver's shopping cart."""
@@ -3815,7 +3829,7 @@ def view_cart(request):
     cursor = connection.cursor()
 
     try:
-        # Create table if it doesn't exist
+        # Ensure cart table exists
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS user_cart (
                 id INT AUTO_INCREMENT PRIMARY KEY,
@@ -3828,17 +3842,16 @@ def view_cart(request):
             )
         """)
 
-        # Fetch all cart items
+        # Fetch all cart items for this user
         cursor.execute("""
             SELECT product_id, quantity FROM user_cart WHERE user_id = %s
         """, [user_id])
         rows = cursor.fetchall()
 
         cart_items = []
-        total = 0
+        total = 0.0
 
-        # Fetch live product info from API for each item
-        import requests
+        # Get live product info from API
         for product_id, qty in rows:
             try:
                 response = requests.get(f"https://fakestoreapi.com/products/{product_id}", timeout=5)
@@ -3847,6 +3860,10 @@ def view_cart(request):
                     product['quantity'] = qty
                     product['subtotal'] = product['price'] * qty
                     total += product['subtotal']
+
+                    # 💡 Add points conversion for each item
+                    product['price_points'] = int(product['price'] * 100)
+                    product['subtotal_points'] = int(product['subtotal'] * 100)
                     cart_items.append(product)
             except Exception as e:
                 print(f"Error fetching product {product_id}: {e}")
@@ -3854,9 +3871,13 @@ def view_cart(request):
         if not cart_items:
             messages.info(request, "Your cart is empty.")
 
+        # 💡 Convert total to points
+        points_total = int(total * 100)
+
         context = {
             'cart_items': cart_items,
             'total': round(total, 2),
+            'points_total': points_total,   # <-- pass to template
         }
         return render(request, 'cart.html', context)
 
@@ -3869,7 +3890,6 @@ def view_cart(request):
         except:
             pass
 
-@db_login_required
 def add_to_cart(request, product_id):
     """Add a product to the logged-in driver’s cart."""
     if not request.session.get('is_authenticated'):
@@ -3909,9 +3929,8 @@ def add_to_cart(request, product_id):
         messages.error(request, f"Error adding to cart: {e}")
         return redirect('view_products')
     finally:
-              cursor.close()
+        cursor.close()
 
-@db_login_required
 def remove_from_cart(request, product_id):
     """Remove a product from the logged-in driver's cart."""
     user_id = request.session.get('user_id')
@@ -3936,6 +3955,238 @@ def remove_from_cart(request, product_id):
             pass
 
     return redirect('view_cart')
+
+@db_login_required
+def checkout_page(request):
+    """Display checkout summary and current points balance."""
+    if not request.session.get('is_authenticated'):
+        messages.error(request, "Please log in to proceed to checkout.")
+        return redirect('login_page')
+
+    if request.session.get('account_type') != 'driver':
+        messages.error(request, "Only drivers can access checkout.")
+        return redirect('homepage')
+
+    user_id = request.session.get('user_id')
+    cursor = connection.cursor()
+
+    try:
+        # --- Get cart items ---
+        cursor.execute("""
+            SELECT product_id, quantity FROM user_cart WHERE user_id = %s
+        """, [user_id])
+        rows = cursor.fetchall()
+
+        if not rows:
+            messages.info(request, "Your cart is empty.")
+            return redirect('view_cart')
+
+        cart_items = []
+        total = 0
+
+        for product_id, qty in rows:
+            try:
+                response = requests.get(f"https://fakestoreapi.com/products/{product_id}", timeout=5)
+                if response.status_code == 200:
+                    product = response.json()
+                    product['quantity'] = qty
+                    product['subtotal'] = product['price'] * qty
+                    total += product['subtotal']
+                    product['subtotal_points'] = int(product['subtotal'] * 100)
+                    cart_items.append(product)
+            except Exception as e:
+                print(f"Error loading product {product_id}: {e}")
+
+        points_total = int(total * 100)
+
+        # --- ✅ FIX: Fetch real live points balance ---
+        cursor.execute("""
+            SELECT COALESCE(SUM(points), 0)
+            FROM driver_points_transactions
+            WHERE driver_user_id = %s
+        """, [user_id])
+        wallet_balance = cursor.fetchone()[0] or 0
+
+        # Compute remaining balance after purchase
+        remaining = wallet_balance - points_total
+
+        context = {
+            'cart_items': cart_items,
+            'points_total': points_total,
+            'wallet_balance': wallet_balance,
+            'remaining_balance': remaining,
+        }
+
+        return render(request, 'checkout_page.html', context)
+
+    except Exception as e:
+        messages.error(request, f"Error loading checkout page: {str(e)}")
+        return redirect('view_cart')
+    finally:
+        try:
+            cursor.close()
+        except:
+            pass
+
+@db_login_required
+def confirm_checkout(request):
+    """Handles point deduction and order confirmation."""
+    if request.method != "POST":
+        messages.error(request, "Invalid request method.")
+        return redirect('checkout_page')
+
+    user_id = request.session.get('user_id')
+    if not user_id:
+        messages.error(request, "Please log in to complete checkout.")
+        return redirect('login_page')
+
+    cursor = connection.cursor()
+
+    try:
+        # Fetch cart items
+        cursor.execute("""
+            SELECT product_id, quantity FROM user_cart WHERE user_id = %s
+        """, [user_id])
+        rows = cursor.fetchall()
+
+        if not rows:
+            messages.warning(request, "Your cart is empty.")
+            return redirect('view_cart')
+
+        # Calculate total in points
+        total_points = 0
+        for product_id, qty in rows:
+            response = requests.get(f"https://fakestoreapi.com/products/{product_id}", timeout=5)
+            if response.status_code == 200:
+                product = response.json()
+                total_points += int(product['price'] * qty * 100)
+
+        # Fetch driver’s available points (live total)
+        cursor.execute("""
+            SELECT COALESCE(SUM(points), 0)
+            FROM driver_points_transactions
+            WHERE driver_user_id = %s
+        """, [user_id])
+        current_points = cursor.fetchone()[0] or 0
+
+        if total_points > current_points:
+            messages.error(request, f"Insufficient points! You have {current_points:,} pts.")
+            return redirect('checkout_page')
+
+        # Deduct points by inserting a negative transaction
+        cursor.execute("""
+            INSERT INTO driver_points_transactions (sponsor_user_id, driver_user_id, points, message)
+            VALUES (%s, %s, %s, %s)
+        """, [0, user_id, -total_points, "Redeemed points for store purchase"])
+
+        # Commit and clear the cart
+        connection.commit()
+        cursor.execute("DELETE FROM user_cart WHERE user_id = %s", [user_id])
+
+        messages.success(request, f"Purchase successful! {total_points:,} pts deducted.")
+        return redirect('driver_order_history')
+
+    except Exception as e:
+        connection.rollback()
+        messages.error(request, f"Error completing purchase: {str(e)}")
+        return redirect('checkout_page')
+    finally:
+        try:
+            cursor.close()
+        except:
+            pass
+
+@db_login_required
+def confirm_checkout(request):
+    """Finalize checkout: deduct points and record purchase."""
+    if request.method != "POST":
+        messages.error(request, "Invalid request method.")
+        return redirect('checkout_page')
+
+    user_id = request.session.get('user_id')
+    if not user_id:
+        messages.error(request, "Please log in to complete checkout.")
+        return redirect('login_page')
+
+    cursor = connection.cursor()
+    try:
+        # --- Get cart contents ---
+        cursor.execute("SELECT product_id, quantity FROM user_cart WHERE user_id = %s", [user_id])
+        rows = cursor.fetchall()
+        if not rows:
+            messages.warning(request, "Your cart is empty.")
+            return redirect('view_cart')
+
+        total_points = 0
+        products = []
+
+        # Calculate total from API
+        for product_id, qty in rows:
+            resp = requests.get(f"https://fakestoreapi.com/products/{product_id}", timeout=5)
+            if resp.status_code == 200:
+                product = resp.json()
+                subtotal_pts = int(float(product['price']) * qty * 100)
+                total_points += subtotal_pts
+                products.append({
+                    "id": product_id,
+                    "title": product['title'],
+                    "quantity": qty,
+                    "subtotal_pts": subtotal_pts
+                })
+
+        # --- Get current balance from driver_points_transactions ---
+        cursor.execute("""
+            SELECT COALESCE(SUM(points), 0)
+            FROM driver_points_transactions
+            WHERE driver_user_id = %s
+        """, [user_id])
+        current_points = cursor.fetchone()[0] or 0
+
+        # --- Check for sufficient points ---
+        if total_points > current_points:
+            messages.error(request, f"Insufficient points! You have {current_points:,} pts.")
+            return redirect('checkout_page')
+
+        # --- Deduct points and record purchase ---
+        cursor.execute("""
+            INSERT INTO driver_points_transactions (sponsor_user_id, driver_user_id, points, message)
+            VALUES (%s, %s, %s, %s)
+        """, [0, user_id, -total_points, "Redeemed points for store purchase"])
+        connection.commit()
+
+        # --- Optional: record the order in a simple orders table ---
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS driver_orders (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                driver_user_id INT NOT NULL,
+                total_points INT NOT NULL,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                details TEXT
+            )
+        """)
+        cursor.execute("""
+            INSERT INTO driver_orders (driver_user_id, total_points, details)
+            VALUES (%s, %s, %s)
+        """, [user_id, total_points, str(products)])
+        connection.commit()
+
+        # --- Clear the cart ---
+        cursor.execute("DELETE FROM user_cart WHERE user_id = %s", [user_id])
+        connection.commit()
+
+        messages.success(request, f"✅ Purchase complete! {total_points:,} pts deducted.")
+        return redirect('driver_order_history')
+
+    except Exception as e:
+        connection.rollback()
+        messages.error(request, f"Error completing purchase: {e}")
+        return redirect('checkout_page')
+    finally:
+        try:
+            cursor.close()
+        except:
+            pass
+
 
 @admin_required
 def admin_change_user_type(request):

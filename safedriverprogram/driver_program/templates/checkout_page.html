@@ -1,0 +1,78 @@
+{% extends 'base.html' %}
+{% load humanize %}
+
+{% block title %}Checkout{% endblock %}
+
+{% block content %}
+<section class="section">
+  <div class="container">
+    <h1 class="title">💳 Checkout</h1>
+
+    {% if messages %}
+      {% for message in messages %}
+        <div class="notification 
+                    {% if message.tags == 'error' %}is-danger{% elif message.tags == 'success' %}is-success
+                    {% elif message.tags == 'warning' %}is-warning{% else %}is-info{% endif %}">
+          {{ message }}
+        </div>
+      {% endfor %}
+    {% endif %}
+
+    {% if cart_items %}
+      <h2 class="subtitle">Your Cart Summary</h2>
+      <table class="table is-fullwidth is-striped is-hoverable">
+        <thead>
+          <tr>
+            <th>Product</th>
+            <th>Qty</th>
+            <th>Subtotal (pts)</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for item in cart_items %}
+          <tr>
+            <td>{{ item.title }}</td>
+            <td>{{ item.quantity }}</td>
+            <td>{{ item.subtotal_points|intcomma }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+
+      <div class="box has-text-right">
+        <p><strong>Your Balance:</strong> {{ wallet_balance|intcomma }} pts</p>
+        <p><strong>Order Total:</strong> {{ points_total|intcomma }} pts</p>
+        <p>
+          <strong>Remaining After Purchase:</strong>
+          {% if remaining_balance < 0 %}
+            <span class="has-text-danger">{{ remaining_balance|intcomma }} pts (Insufficient)</span>
+          {% else %}
+            <span class="has-text-success">{{ remaining_balance|intcomma }} pts</span>
+          {% endif %}
+        </p>
+      </div>
+
+      <!-- ✅ Checkout confirmation form -->
+      <form method="post" action="{% url 'confirm_checkout' %}">
+        {% csrf_token %}
+        <div class="buttons is-right">
+          <button type="submit" class="button is-success is-medium">
+            <span class="icon"><i class="fas fa-check"></i></span>
+            <span>Confirm Purchase</span>
+          </button>
+          <a href="{% url 'view_cart' %}" class="button is-light is-medium">
+            <span class="icon"><i class="fas fa-arrow-left"></i></span>
+            <span>Cancel</span>
+          </a>
+        </div>
+      </form>
+
+    {% else %}
+      <div class="notification is-info">
+        Your cart is empty. 
+        <a href="{% url 'view_products' %}" class="has-text-weight-semibold">Shop now</a>.
+      </div>
+    {% endif %}
+  </div>
+</section>
+{% endblock %}

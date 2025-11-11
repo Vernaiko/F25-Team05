@@ -6,20 +6,26 @@
 <div class="container">
     <div class="content">
         <h1 class="title">My Wishlist</h1>
-        
-        <!-- Debug info -->
-        <div class="notification is-info">
-            Number of items in wishlist: {{ wishlist_items|length }}
-        </div>
 
         {% if wishlist_items %}
+            <div class="notification is-info">
+                Number of items in wishlist: {{ wishlist_items|length }}
+            </div>
+
             <div class="columns is-multiline">
                 {% for item in wishlist_items %}
                     <div class="column is-full">
                         <div class="box">
                             <h3 class="title is-4">{{ item.title }}</h3>
-                            <p>Price: ${{ item.price }}</p>
+
+                            <!-- 💡 Show price in points -->
+                            <p>
+                                <strong>{{ item.price_points|intcomma }} pts</strong>
+                                <span class="has-text-grey-light is-size-7">(~${{ item.price }})</span>
+                            </p>
+
                             <p>{{ item.description }}</p>
+
                             <div class="buttons">
                                 <a href="{% url 'view_product' item.id %}" class="button is-primary">View Details</a>
                                 <form method="post" action="{% url 'delete_from_wishlist' item.id %}" style="display:inline">
@@ -33,7 +39,9 @@
             </div>
         {% else %}
             <div class="notification is-warning">
-                Your wishlist is empty. Browse our <a href="{% url 'view_products' %}">products</a> to add items to your wishlist.
+                Your wishlist is empty. Browse our 
+                <a href="{% url 'view_products' %}" class="has-text-weight-semibold">products</a> 
+                to add items to your wishlist.
             </div>
         {% endif %}
     </div>

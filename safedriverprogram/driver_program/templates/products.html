@@ -1,6 +1,8 @@
 {% extends 'base.html' %}
+{% load humanize %}
 
 {% block title %}Products - Safe Driver Program{% endblock %}
+
 
 {% block content %}
 <section class="section">
@@ -93,7 +95,12 @@
                                     {{ product.title }}
                                 </a>
                             </h4>
-                            <p class="subtitle is-6">${{ product.price }}</p>
+
+                            <!-- 💡 Show price in points instead of dollars -->
+                            <p class="subtitle is-6">
+                                <strong>{{ product.price_points|intcomma }} pts</strong>
+                                <span class="has-text-grey-light is-size-7">(~${{ product.price }})</span>
+                            </p>
 
                             <div class="tags mb-2">
                                 <span class="tag is-primary">{{ product.category }}</span>
@@ -103,7 +110,6 @@
                                 Rating: {{ product.rating.rate }} ({{ product.rating.count }} reviews)
                             </div>
 
-                            {# ✅ ADD TO CART BUTTON (Visible only for Drivers) #}
                             {% if request.session.account_type == 'driver' %}
                             <div class="mt-3">
                                 <a href="{% url 'add_to_cart' product.id %}" class="button is-link is-small">
@@ -119,7 +125,6 @@
             {% endfor %}
         </div>
         {% else %}
-        <!-- No Products Found -->
         <div class="notification is-info">
             <div class="has-text-centered">
                 <span class="icon is-large">
