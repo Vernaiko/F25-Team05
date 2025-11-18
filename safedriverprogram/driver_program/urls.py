@@ -55,6 +55,9 @@ urlpatterns = [
     # Admin security log
     path('useradmin/failed-login-log/', views.admin_failed_login_log, name='admin_failed_login_log'),
     
+    # Admin audit logs
+    path('useradmin/audit-logs/', views.admin_view_audit_logs, name='admin_view_audit_logs'),
+
     #Admin user management
     path('useradmin/change-user-type/', views.admin_change_user_type, name='admin_change_user_type'),
 

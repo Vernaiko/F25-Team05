@@ -253,6 +253,7 @@ END//
 DELIMITER ;
 
 -- 3. TRIGGER FOR DRIVER APPLICATION UPDATES (Status Changes)
+DROP TRIGGER IF EXISTS audit_driver_application_updates;
 DELIMITER //
 
 CREATE TRIGGER audit_driver_application_updates
@@ -263,17 +264,32 @@ BEGIN
     DECLARE driver_username VARCHAR(50) DEFAULT '';
     DECLARE status_description TEXT DEFAULT '';
     
-    -- Only log if status actually changed
-    IF OLD.status != NEW.status THEN
-        -- Get usernames
-        SELECT username INTO sponsor_username FROM users WHERE userID = NEW.sponsor_id LIMIT 1;
-        SELECT username INTO driver_username FROM users WHERE userID = NEW.driver_id LIMIT 1;
+    -- Only log if application_status actually changed
+    IF OLD.application_status != NEW.application_status THEN
+        -- Get usernames (with NULL checks)
+        IF NEW.sponsor_user_id IS NOT NULL THEN
+            SELECT username INTO sponsor_username FROM users WHERE userID = NEW.sponsor_user_id LIMIT 1;
+        END IF;
+        
+        IF NEW.driver_user_id IS NOT NULL THEN
+            SELECT username INTO driver_username FROM users WHERE userID = NEW.driver_user_id LIMIT 1;
+        END IF;
         
         -- Create status description
         SET status_description = CONCAT(
-            'Driver application status updated from "', OLD.status, '" to "', NEW.status, 
-            '" for driver ', driver_username, ' by sponsor ', sponsor_username
+            'Driver application status updated from "', OLD.application_status, '" to "', NEW.application_status, 
+            '" for driver ', COALESCE(driver_username, CONCAT('ID:', NEW.driver_user_id))
         );
+        
+        -- Add sponsor info if available
+        IF sponsor_username != '' THEN
+            SET status_description = CONCAT(status_description, ' by sponsor ', sponsor_username);
+        END IF;
+        
+        -- Add admin notes if provided
+        IF NEW.admin_notes IS NOT NULL AND NEW.admin_notes != '' THEN
+            SET status_description = CONCAT(status_description, '. Admin notes: ', NEW.admin_notes);
+        END IF;
         
         INSERT INTO audit_logs (
             event_type,
@@ -296,23 +312,27 @@ BEGIN
         ) VALUES (
             'data_change',
             'application_status',
-            NEW.sponsor_id,
-            'sponsor',
-            sponsor_username,
-            NEW.driver_id,
+            COALESCE(NEW.reviewed_by_admin_id, NEW.sponsor_user_id),  -- Could be admin or sponsor
+            CASE 
+                WHEN NEW.reviewed_by_admin_id IS NOT NULL THEN 'admin'
+                WHEN NEW.sponsor_user_id IS NOT NULL THEN 'sponsor'
+                ELSE 'system'
+            END,
+            COALESCE(sponsor_username, 'system'),
+            NEW.driver_user_id,
             'driver',
             driver_username,
-            NEW.sponsor_id,
-            CONCAT('status_change_', NEW.status),
+            NEW.sponsor_user_id,
+            CONCAT('status_change_', NEW.application_status),
             status_description,
-            OLD.status,
-            NEW.status,
+            OLD.application_status,
+            NEW.application_status,
             CONCAT('APP-', NEW.application_id),
             'driver_application',
             'success',
             CASE 
-                WHEN NEW.status IN ('rejected', 'suspended') THEN 'high'
-                WHEN NEW.status = 'approved' THEN 'medium'
+                WHEN NEW.application_status IN ('rejected', 'withdrawn') THEN 'high'
+                WHEN NEW.application_status = 'approved' THEN 'medium'
                 ELSE 'low'
             END
         );
@@ -320,6 +340,7 @@ BEGIN
 END//
 
 DELIMITER ;
+
 
 -- 4. TRIGGER FOR PASSWORD CHANGES
 DELIMITER //

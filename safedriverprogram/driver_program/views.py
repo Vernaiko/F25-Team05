@@ -4812,3 +4812,144 @@ def admin_update_admin_status(request, admin_id):
         cursor.close()
 
     return redirect('admin_manage_admins')
+
+@db_login_required
+def admin_view_audit_logs(request):
+    """Admin view to see audit logs with filtering capabilities."""
+
+    # Check if user is logged in and is an admin
+    if not request.session.get('is_authenticated'):
+        messages.error(request, "Please log in to access this page.")
+        return redirect('login_page')
+
+    if request.session.get('account_type') != 'admin':
+        messages.error(request, "Access denied. Only administrators can view audit logs.")
+        return redirect('homepage')
+
+    cursor = connection.cursor()
+
+    try:
+        # Get filter parameters from request
+        event_type = request.GET.get('event_type', '').strip()
+        actor_type = request.GET.get('actor_type', '').strip()
+        severity = request.GET.get('severity', '').strip()
+        time_range = request.GET.get('time_range', '24h')
+
+        # Build the base query - FIXED: Use correct column names from audit_logs.sql
+        query = """
+            SELECT 
+                al.audit_id,  -- FIXED: Changed from log_id to audit_id
+                al.event_timestamp as created_at,
+                al.event_type,
+                al.event_category,
+                al.actor_user_id,
+                al.actor_type,
+                al.actor_username,
+                al.target_user_id,
+                al.target_type,
+                al.target_username,
+                al.related_sponsor_id,
+                al.action_performed,
+                al.description,
+                al.old_value,
+                al.new_value,
+                al.points_amount,
+                al.reference_id,
+                al.reference_type,
+                al.reason,
+                al.notes,
+                al.ip_address,
+                al.user_agent,
+                al.session_id,
+                al.status,
+                al.severity
+            FROM audit_logs al
+            WHERE 1=1
+        """
+
+        params = []
+
+        # Add filters
+        if event_type:
+            query += " AND al.event_type = %s"
+            params.append(event_type)
+
+        if actor_type:
+            query += " AND al.actor_type = %s"
+            params.append(actor_type)
+
+        if severity:
+            query += " AND al.severity = %s"
+            params.append(severity)
+
+        # Time range filter
+        if time_range == '24h':
+            query += " AND al.event_timestamp >= DATE_SUB(NOW(), INTERVAL 24 HOUR)"
+        elif time_range == '7d':
+            query += " AND al.event_timestamp >= DATE_SUB(NOW(), INTERVAL 7 DAY)"
+        elif time_range == '30d':
+            query += " AND al.event_timestamp >= DATE_SUB(NOW(), INTERVAL 30 DAY)"
+        # 'all' = no time filter
+
+        # Order by most recent first and limit results
+        query += " ORDER BY al.event_timestamp DESC LIMIT 100"
+
+        cursor.execute(query, params)
+        audit_logs_data = cursor.fetchall()
+
+        # Format the data for the template
+        audit_logs_list = []
+        for log in audit_logs_data:
+            audit_logs_list.append({
+                'audit_id': log[0],
+                'created_at': log[1],
+                'event_timestamp': log[1],  # Alias for template
+                'event_type': log[2],
+                'event_category': log[3],
+                'actor_user_id': log[4],
+                'actor_type': log[5],
+                'actor_username': log[6],
+                'target_user_id': log[7],
+                'target_type': log[8],
+                'target_username': log[9],
+                'related_sponsor_id': log[10],
+                'action_performed': log[11],
+                'description': log[12],
+                'old_value': log[13],
+                'new_value': log[14],
+                'points_amount': log[15],
+                'reference_id': log[16],
+                'reference_type': log[17],
+                'reason': log[18],
+                'notes': log[19],
+                'ip_address': log[20],
+                'user_agent': log[21],
+                'session_id': log[22],
+                'status': log[23],
+                'severity': log[24]
+            })
+
+        # Create filters object for template
+        filters = {
+            'event_type': event_type,
+            'actor_type': actor_type,
+            'severity': severity,
+            'time_range': time_range
+        }
+
+        context = {
+            'audit_logs': audit_logs_list,
+            'filters': filters,
+            'total_logs': len(audit_logs_list)
+        }
+
+        return render(request, 'admin_view_audit_logs.html', context)
+
+    except Exception as e:
+        messages.error(request, f"Error loading audit logs: {str(e)}")
+        print(f"Admin audit logs error: {e}")
+        import traceback
+        traceback.print_exc()
+        return redirect('account_page')
+    finally:
+        cursor.close()
