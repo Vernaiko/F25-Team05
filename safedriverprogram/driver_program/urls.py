@@ -39,8 +39,10 @@ urlpatterns = [
     
     # Address management
     path('addresses/', views.manage_addresses, name='manage_addresses'),
-    path('addresses/edit/<int:address_id>/', views.edit_address, name='edit_address'),
     path('addresses/delete/<int:address_id>/', views.delete_address, name='delete_address'),
+    path('addresses/edit/<int:address_id>/', views.edit_address, name='edit_address'),
+    path('addresses/set-default/<int:address_id>/', views.set_default_address, name='set_default_address'),
+
 
     # Admin sponsor management
     path('useradmin/sponsors/', views.admin_sponsor_list, name='admin_sponsor_list'),
@@ -51,7 +53,10 @@ urlpatterns = [
     # Admin admin management
     path('useradmin/admins/', views.admin_manage_admins, name='admin_manage_admins'),
     path('useradmin/admins/<int:admin_id>/update-status/', views.admin_update_admin_status, name='admin_update_admin_status'),
-    
+    path(
+    'useradmin/drivers/reset-password/<int:user_id>/', views.admin_reset_driver_password, name='admin_reset_driver_password'), #Testing
+
+
     # Admin security log
     path('useradmin/failed-login-log/', views.admin_failed_login_log, name='admin_failed_login_log'),
     
@@ -68,10 +73,15 @@ urlpatterns = [
     path('sponsor/adjust-points/', views.sponsor_adjust_points, name='sponsor_adjust_points'),
     path('sponsor/adjust-point-exchange-rate/', views.sponsor_adjust_point_exchange_rate, name='sponsor_adjust_point_exchange_rate'),
     path('sponsor/adjust-catalogue/', views.adjust_catalogue, name='sponsor_adjust_catalogue'),
+    path('sponsor/bulk-upload/', views.bulk_sponsor_upload, name='bulk_sponsor_upload'),
     path('sponsor/applications/', views.sponsor_manage_applications, name='sponsor_manage_applications'),
     path('sponsor/application/<int:application_id>/', views.sponsor_view_application, name='sponsor_view_application'),
     path('sponsor-application-action/<int:application_id>/', views.sponsor_application_action, name='sponsor_application_action'),
-    
+    path('sponsor/drivers/<int:driver_id>/delete/', views.sponsor_delete_driver, name='sponsor_delete_driver'),
+   path('sponsor/organization/', views.sponsor_organization_management, name='sponsor_organization_management'),
+   path('sponsor/drivers/<int:driver_id>/notes/add/', views.sponsor_add_driver_note, name='sponsor_add_driver_note'), #Testing
+
+
     # Wallet history pages
     path('sponsor/wallet-history/', views.sponsor_wallet_history, name='sponsor_wallet_history'),
     path('sponsor/wallet-history/<int:driver_id>/', views.sponsor_wallet_history, name='sponsor_wallet_history_driver'),
@@ -99,7 +109,15 @@ urlpatterns = [
 
     # Shopping cart
     path('cart/add/<int:product_id>/', views.add_to_cart, name='add_to_cart'),
-    path('cart/', views.view_cart, name='view_cart'),
+    path('cart/remove/<int:product_id>/', views.remove_from_cart, name='remove_from_cart'),
+    path('cart/', views.view_cart, name='view_cart'),  
+    
+    # Checkout page
+    path('checkout/', views.checkout_page, name='checkout_page'),
+    path('checkout/confirm/', views.confirm_checkout, name='confirm_checkout'),
+    
+
+
 
     # Reports and Account Review
     path('sponsor/driver-point-report/', views.generate_driver_point_report, name='generate_driver_point_report'),

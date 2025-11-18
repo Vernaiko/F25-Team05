@@ -13,6 +13,10 @@ from django.contrib.auth.decorators import user_passes_test, login_required  # <
 from datetime import datetime
 from driver_program.decorators import admin_required
 from django.contrib.auth.decorators import login_required
+import textwrap
+from django.db import connection
+from .forms import AddressForm
+
 
 
 
@@ -737,173 +741,103 @@ def add_to_wishlist(request, product_id=None):
         return redirect(ref)
     return redirect('view_products')
 
-# Address Management Views
-@db_login_required
+@login_required
 def manage_addresses(request):
-    """Manage delivery addresses using database authentication"""
-    user_id = request.session.get('user_id')
-    
-    # Create delivery address table if it doesn't exist
-    cursor = connection.cursor()
-    try:
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS delivery_addresses (
-                id INT AUTO_INCREMENT PRIMARY KEY,
-                user_id INT NOT NULL,
-                address TEXT NOT NULL,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                INDEX idx_user_id (user_id)
-            )
-        """)
-    except Exception as e:
-        print(f"Error creating table: {e}")
-    
-    addresses = []
-    
-    try:
-        # Get existing addresses for this user
-        cursor.execute("""
-            SELECT id, address, created_at 
-            FROM delivery_addresses 
-            WHERE user_id = %s 
-            ORDER BY created_at DESC
-        """, [user_id])
-        
-        addresses_raw = cursor.fetchall()
-        
-        # Convert to list of dictionaries for template
-        for addr in addresses_raw:
-            addresses.append({
-                'id': addr[0],
-                'address': addr[1],
-                'created_at': addr[2]
-            })
-        
-    except Exception as e:
-        print(f"Error fetching addresses: {e}")
-        addresses = []
-    
-    if request.method == 'POST' and 'add_address' in request.POST:
-        new_address = request.POST.get('address', '').strip()
-        if new_address:
-            try:
-                cursor.execute("""
-                    INSERT INTO delivery_addresses (user_id, address, created_at)
-                    VALUES (%s, %s, NOW())
-                """, [user_id, new_address])
-                
-                messages.success(request, "New delivery address added!")
-                cursor.close()
-                return redirect('manage_addresses')
-                
-            except Exception as e:
-                messages.error(request, f"Failed to add address: {str(e)}")
-    
-    cursor.close()
-    
+    """
+    Show all addresses for the logged-in user, allow adding a new one.
+    New address can optionally be set as default (and will unset others).
+    """
+    addresses = Address.objects.filter(user=request.user).order_by('-is_default', '-created_at')
+
+    if request.method == 'POST':
+        form = AddressForm(request.POST)
+        if form.is_valid():
+            addr = form.save(commit=False)
+            addr.user = request.user
+            addr.save()
+
+            # If this was marked default, unset all others
+            if addr.is_default:
+                Address.objects.filter(user=request.user).exclude(id=addr.id).update(is_default=False)
+
+            messages.success(request, "Address saved successfully.")
+            return redirect('manage_addresses')
+        else:
+            messages.error(request, "Please correct the errors below.")
+    else:
+        form = AddressForm()
+
     return render(request, 'manage_addresses.html', {
         'addresses': addresses,
+        'add_form': form,
     })
 
-@db_login_required
-def edit_address(request, address_id):
-    """Edit delivery address using database"""
-    user_id = request.session.get('user_id')
-    cursor = connection.cursor()
-    
-    # Get the address
-    try:
-        cursor.execute("""
-            SELECT id, address 
-            FROM delivery_addresses 
-            WHERE id = %s AND user_id = %s
-        """, [address_id, user_id])
-        
-        address_data = cursor.fetchone()
-        if not address_data:
-            messages.error(request, "Address not found.")
-            cursor.close()
-            return redirect('manage_addresses')
-            
-    except Exception as e:
-        messages.error(request, f"Error fetching address: {str(e)}")
-        cursor.close()
-        return redirect('manage_addresses')
-    
-    if request.method == 'POST':
-        new_address = request.POST.get('address', '').strip()
-        if new_address:
-            try:
-                cursor.execute("""
-                    UPDATE delivery_addresses 
-                    SET address = %s 
-                    WHERE id = %s AND user_id = %s
-                """, [new_address, address_id, user_id])
-                
-                messages.success(request, "Address updated successfully!")
-                cursor.close()
-                return redirect('manage_addresses')
-                
-            except Exception as e:
-                messages.error(request, f"Failed to update address: {str(e)}")
-    
-    cursor.close()
-    
-    return render(request, 'edit_address.html', {
-        'address': {
-            'id': address_data[0],
-            'address': address_data[1]
-        }
-    })
 
-@db_login_required
+@login_required
 def delete_address(request, address_id):
-    """Delete delivery address using database"""
-    user_id = request.session.get('user_id')
-    cursor = connection.cursor()
-    
-    # Get the address first
-    try:
-        cursor.execute("""
-            SELECT id, address 
-            FROM delivery_addresses 
-            WHERE id = %s AND user_id = %s
-        """, [address_id, user_id])
-        
-        address_data = cursor.fetchone()
-        if not address_data:
-            messages.error(request, "Address not found.")
-            cursor.close()
-            return redirect('manage_addresses')
-            
-    except Exception as e:
-        messages.error(request, f"Error fetching address: {str(e)}")
-        cursor.close()
-        return redirect('manage_addresses')
-    
+    """
+    Delete an address; if it was default and another exists, leave none default
+    (user can set a new default explicitly).
+    """
+    address = get_object_or_404(Address, id=address_id, user=request.user)
+
     if request.method == 'POST':
-        try:
-            cursor.execute("""
-                DELETE FROM delivery_addresses 
-                WHERE id = %s AND user_id = %s
-            """, [address_id, user_id])
-            
-            messages.success(request, "Address deleted successfully!")
-            cursor.close()
+        was_default = address.is_default
+        address.delete()
+
+        # Optionally: auto-pick a new default if any remain
+        # (Uncomment if you want this behavior)
+        # if was_default:
+        #     first = Address.objects.filter(user=request.user).order_by('-created_at').first()
+        #     if first:
+        #         first.is_default = True
+        #         first.save()
+
+        messages.success(request, "Address deleted successfully.")
+        return redirect('manage_addresses')
+
+    # If someone GETs this URL, just redirect back
+    return redirect('manage_addresses')
+
+@login_required
+def set_default_address(request, address_id):
+    """
+    Explicitly set an address as default for the logged-in user.
+    """
+    if request.method != 'POST':
+        return redirect('manage_addresses')
+
+    address = get_object_or_404(Address, id=address_id, user=request.user)
+    Address.objects.filter(user=request.user, is_default=True).update(is_default=False)
+    address.is_default = True
+    address.save()
+    messages.success(request, "Default address updated.")
+    return redirect('manage_addresses')
+
+@login_required
+def edit_address(request, address_id):
+    """
+    Edit an existing address belonging to the logged-in user.
+    """
+    address = get_object_or_404(Address, id=address_id, user=request.user)
+
+    if request.method == 'POST':
+        form = AddressForm(request.POST, instance=address)
+        if form.is_valid():
+            addr = form.save()
+
+            # If marked default, unset others
+            if addr.is_default:
+                Address.objects.filter(user=request.user).exclude(id=addr.id).update(is_default=False)
+
+            messages.success(request, "Address updated successfully.")
             return redirect('manage_addresses')
-            
-        except Exception as e:
-            messages.error(request, f"Failed to delete address: {str(e)}")
-    
-    cursor.close()
-    
-    return render(request, 'delete_address.html', {
-        'address': {
-            'id': address_data[0],
-            'address': address_data[1]
-        }
-    })
-# ...existing code...
+        else:
+            messages.error(request, "Please correct the errors below.")
+    else:
+        form = AddressForm(instance=address)
+
+    return render(request, 'edit_address.html', {'form': form})
 
 # Application Views
 def sponsor_application(request):
@@ -2681,10 +2615,8 @@ def review_driver_status(request):
     return render(request, "driver_status.html", {"drivers": drivers})
 
 def view_products(request):
-    """Display products from Fake Store API with optional sorting and search"""
-    import requests
-
-    sort_order = request.GET.get('sort', '')  # Get sort parameter from query string
+    """Display products from Fake Store API with optional sorting, search, and point conversion."""
+    sort_order = request.GET.get('sort', '')
     search_query = request.GET.get('search', '').strip()
 
     try:
@@ -2692,24 +2624,24 @@ def view_products(request):
         response = requests.get('https://fakestoreapi.com/products')
         response.raise_for_status()
         products = response.json()
-        
+
         # Sort products if requested
         if sort_order == 'price_asc':
             products.sort(key=lambda x: float(x['price']))
         elif sort_order == 'price_desc':
             products.sort(key=lambda x: float(x['price']), reverse=True)
-        
+
         # Filter products based on search query
         if search_query:
             search_lower = search_query.lower()
             products = [
                 product for product in products
-                if (search_lower in product.get('title', '').lower() or
-                    search_lower in product.get('description', '').lower() or
-                    search_lower in product.get('category', '').lower())
+                if (search_lower in product.get('title', '').lower()
+                    or search_lower in product.get('description', '').lower()
+                    or search_lower in product.get('category', '').lower())
             ]
 
-        # If the current user is a sponsor, apply their catalogue category preferences (if any)
+        # Apply sponsor catalogue preferences (if any)
         try:
             if request.session.get('is_authenticated') and request.session.get('account_type') == 'sponsor':
                 sponsor_id = request.session.get('user_id') or request.session.get('id')
@@ -2731,7 +2663,13 @@ def view_products(request):
             # Don't fail the whole page if preferences lookup or filtering fails
             pass
 
-        # Render template with products
+        # 💡 Convert dollar prices to points (1 cent = 1 point)
+        for p in products:
+            try:
+                p['price_points'] = int(float(p['price']) * 100)
+            except (ValueError, TypeError):
+                p['price_points'] = 0
+
         return render(request, 'products.html', {
             'products': products,
             'current_sort': sort_order,
@@ -2750,12 +2688,17 @@ def view_products(request):
 
 @db_login_required
 def view_product(request, product_id):
-    """Display a single product's details from Fake Store API"""
-
+    """Display a single product's details from Fake Store API with points conversion."""
     try:
         response = requests.get(f'https://fakestoreapi.com/products/{product_id}')
         response.raise_for_status()
         product = response.json()
+
+        # 💡 Add points conversion (1 point = 1 cent)
+        try:
+            product['price_points'] = int(float(product['price']) * 100)
+        except (ValueError, TypeError):
+            product['price_points'] = 0
 
         wishlist = []
         if request.session.get('is_authenticated'):
@@ -2770,8 +2713,7 @@ def view_product(request, product_id):
         })
     except requests.RequestException as e:
         messages.error(request, f"Failed to fetch product details: {str(e)}")
-        return redirect('view_products')
-      
+        return redirect('view_products')      
       
 @db_login_required
 def admin_sponsor_list(request):
@@ -3481,41 +3423,46 @@ def sponsor_adjust_points(request):
 
 @db_login_required
 def wishlist_page(request):
-    """Display the user's wishlist"""
-    # Accept either session key name used elsewhere ('user_id' or 'userID')
+    """Display the user's wishlist with points conversion."""
     user_id = request.session.get('user_id') or request.session.get('userID')
     cursor = connection.cursor()
-    
+
     try:
-        # For testing, let's add a sample product
-        # Get all product IDs from the user's wishlist
         cursor.execute("""
             SELECT product_id FROM user_wishlist WHERE user_id = %s
         """, [user_id])
         product_ids = [row[0] for row in cursor.fetchall()]
-        # Fetch product details from Fake Store API
+
         wishlist_items = []
         for product_id in product_ids:
             try:
                 response = requests.get(f'https://fakestoreapi.com/products/{product_id}')
                 if response.status_code == 200:
                     product_data = response.json()
+
+                    # 💡 Add points conversion (1 point = 1 cent)
+                    try:
+                        product_data['price_points'] = int(float(product_data['price']) * 100)
+                    except (ValueError, TypeError):
+                        product_data['price_points'] = 0
+
                     wishlist_items.append(product_data)
             except Exception as e:
-                # Skip product on error but log to console
                 print(f"Error fetching product {product_id}: {str(e)}")
-        
-        # Optional: add info message when wishlist is empty
+
         if not wishlist_items:
             messages.info(request, "Your wishlist is empty.")
 
         return render(request, 'wishlist.html', {'wishlist_items': wishlist_items})
-    
+
     except Exception as e:
         messages.error(request, f"Error fetching wishlist: {str(e)}")
         return redirect('homepage')
     finally:
-        cursor.close()
+        try:
+            cursor.close()
+        except:
+            pass
         
 @db_login_required
 def delete_from_wishlist(request, product_id):
@@ -3704,12 +3651,156 @@ def review_all_accounts(request):
 
 
 # Placeholder functions for missing views
-
 @login_required
-def admin_failed_login_log(request):
-    """Placeholder for admin failed login log view."""
+def sponsor_wallet_history(request, driver_id=None):
+    """Placeholder for sponsor wallet history view."""
     from django.http import HttpResponse
-    return HttpResponse("Admin failed login log feature is not yet implemented.")
+    return HttpResponse("Sponsor wallet history feature is not yet implemented.")
+
+@login_required  
+def admin_wallet_history(request, driver_id=None):
+    """Placeholder for admin wallet history view."""
+    from django.http import HttpResponse
+    return HttpResponse("Admin wallet history feature is not yet implemented.")
+
+@db_login_required
+def admin_failed_login_log(request):
+    # Ensure user is an admin according to session (db login system)
+    if request.session.get('account_type') != 'admin':
+        messages.error(request, "Access denied. Administrator privileges required.")
+        return redirect('account_page')
+    """Admin view to show failed login attempts with filters and statistics.
+
+    Supports GET filters: username (partial), account_type, time_range (1h,24h,7d,30d,all)
+    Renders `admin_failed_login_log.html` which expects: attempts, overall_stats,
+    account_type_breakdown, top_failures, ip_stats, filters
+    """
+    from datetime import datetime, timedelta
+
+    # Read filters from query string
+    username_filter = request.GET.get('username', '').strip()
+    account_type = request.GET.get('account_type', '').strip()
+    time_range = request.GET.get('time_range', '7d').strip() or '7d'
+
+    # Build WHERE clauses and params
+    where_clauses = []
+    params = []
+
+    if username_filter:
+        where_clauses.append("username LIKE %s")
+        params.append(f"%{username_filter}%")
+
+    if account_type:
+        where_clauses.append("account_type = %s")
+        params.append(account_type)
+
+    # time range mapping
+    now = datetime.now()
+    if time_range == '1h':
+        cutoff = now - timedelta(hours=1)
+    elif time_range == '24h':
+        cutoff = now - timedelta(hours=24)
+    elif time_range == '7d':
+        cutoff = now - timedelta(days=7)
+    elif time_range == '30d':
+        cutoff = now - timedelta(days=30)
+    else:
+        cutoff = None
+
+    if cutoff:
+        where_clauses.append("attempted_at >= %s")
+        params.append(cutoff)
+
+    where_sql = ''
+    if where_clauses:
+        where_sql = 'WHERE ' + ' AND '.join(where_clauses)
+
+    cursor = connection.cursor()
+    try:
+        # Overall stats
+        stats_sql = f"SELECT COUNT(*) as total_attempts, " \
+                    f"COUNT(DISTINCT username) as unique_usernames, " \
+                    f"COUNT(DISTINCT ip_address) as unique_ips, " \
+                    f"COUNT(DISTINCT DATE(attempted_at)) as days_with_attempts " \
+                    f"FROM failed_login_attempts {where_sql}"
+        cursor.execute(stats_sql, params)
+        stats_row = cursor.fetchone() or (0, 0, 0, 0)
+        overall_stats = {
+            'total_attempts': stats_row[0],
+            'unique_usernames': stats_row[1],
+            'unique_ips': stats_row[2],
+            'days_with_attempts': stats_row[3],
+        }
+
+        # Account type breakdown
+        acct_sql = f"SELECT account_type, COUNT(*) FROM failed_login_attempts {where_sql} GROUP BY account_type"
+        cursor.execute(acct_sql, params)
+        account_type_breakdown = {row[0] or 'unknown': row[1] for row in cursor.fetchall()}
+
+        # Top failures by username (limit 10)
+        top_sql = f"SELECT username, account_type, COUNT(*) as attempt_count, COUNT(DISTINCT ip_address) as unique_ips, MAX(attempted_at) as last_attempt " \
+                  f"FROM failed_login_attempts {where_sql} GROUP BY username, account_type ORDER BY attempt_count DESC, last_attempt DESC LIMIT 10"
+        cursor.execute(top_sql, params)
+        top_failures = [
+            {
+                'username': row[0],
+                'account_type': row[1] or 'unknown',
+                'attempt_count': row[2],
+                'unique_ips': row[3],
+                'last_attempt': row[4],
+            }
+            for row in cursor.fetchall()
+        ]
+
+        # Top IP addresses
+        ip_sql = f"SELECT ip_address, COUNT(*) as attempt_count, COUNT(DISTINCT username) as unique_usernames, MAX(attempted_at) as last_attempt " \
+                 f"FROM failed_login_attempts {where_sql} GROUP BY ip_address ORDER BY attempt_count DESC LIMIT 10"
+        cursor.execute(ip_sql, params)
+        ip_stats = [
+            {
+                'ip_address': row[0],
+                'attempt_count': row[1],
+                'unique_usernames': row[2],
+                'last_attempt': row[3],
+            }
+            for row in cursor.fetchall()
+        ]
+
+        # Fetch recent attempts (limit 500)
+        attempts_sql = f"SELECT attempt_id, username, account_type, attempted_at, ip_address, failure_reason, user_agent " \
+                       f"FROM failed_login_attempts {where_sql} ORDER BY attempted_at DESC LIMIT 500"
+        cursor.execute(attempts_sql, params)
+        attempts = [
+            {
+                'attempt_id': row[0],
+                'username': row[1],
+                'account_type': row[2] or 'unknown',
+                'attempted_at': row[3],
+                'ip_address': row[4],
+                'failure_reason': row[5],
+                'user_agent': row[6],
+            }
+            for row in cursor.fetchall()
+        ]
+
+        filters = {
+            'username': username_filter,
+            'account_type': account_type,
+            'time_range': time_range,
+        }
+
+        context = {
+            'attempts': attempts,
+            'overall_stats': overall_stats,
+            'account_type_breakdown': account_type_breakdown,
+            'top_failures': top_failures,
+            'ip_stats': ip_stats,
+            'filters': filters,
+        }
+
+        return render(request, 'admin_failed_login_log.html', context)
+    finally:
+        cursor.close()
 
 
 @login_required
@@ -3717,6 +3808,7 @@ def review_driver_points(request):
     """Placeholder for review driver points view."""
     from django.http import HttpResponse
     return HttpResponse("Review driver points feature is not yet implemented.")
+
 @db_login_required
 def view_cart(request):
     """Display the logged-in driver's shopping cart."""
@@ -3732,7 +3824,7 @@ def view_cart(request):
     cursor = connection.cursor()
 
     try:
-        # Create table if it doesn't exist
+        # Ensure cart table exists
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS user_cart (
                 id INT AUTO_INCREMENT PRIMARY KEY,
@@ -3745,17 +3837,16 @@ def view_cart(request):
             )
         """)
 
-        # Fetch all cart items
+        # Fetch all cart items for this user
         cursor.execute("""
             SELECT product_id, quantity FROM user_cart WHERE user_id = %s
         """, [user_id])
         rows = cursor.fetchall()
 
         cart_items = []
-        total = 0
+        total = 0.0
 
-        # Fetch live product info from API for each item
-        import requests
+        # Get live product info from API
         for product_id, qty in rows:
             try:
                 response = requests.get(f"https://fakestoreapi.com/products/{product_id}", timeout=5)
@@ -3764,6 +3855,10 @@ def view_cart(request):
                     product['quantity'] = qty
                     product['subtotal'] = product['price'] * qty
                     total += product['subtotal']
+
+                    # 💡 Add points conversion for each item
+                    product['price_points'] = int(product['price'] * 100)
+                    product['subtotal_points'] = int(product['subtotal'] * 100)
                     cart_items.append(product)
             except Exception as e:
                 print(f"Error fetching product {product_id}: {e}")
@@ -3771,9 +3866,13 @@ def view_cart(request):
         if not cart_items:
             messages.info(request, "Your cart is empty.")
 
+        # 💡 Convert total to points
+        points_total = int(total * 100)
+
         context = {
             'cart_items': cart_items,
             'total': round(total, 2),
+            'points_total': points_total,   # <-- pass to template
         }
         return render(request, 'cart.html', context)
 
@@ -3786,7 +3885,6 @@ def view_cart(request):
         except:
             pass
 
-@db_login_required
 def add_to_cart(request, product_id):
     """Add a product to the logged-in driver’s cart."""
     if not request.session.get('is_authenticated'):
@@ -3831,6 +3929,266 @@ def add_to_cart(request, product_id):
         except:
             pass
 @db_login_required
+        cursor.close()
+
+def remove_from_cart(request, product_id):
+    """Remove a product from the logged-in driver's cart."""
+    user_id = request.session.get('user_id')
+    if not user_id:
+        messages.error(request, "Please log in to modify your cart.")
+        return redirect('login_page')
+
+    cursor = connection.cursor()
+    try:
+        cursor.execute("DELETE FROM user_cart WHERE user_id = %s AND product_id = %s", [user_id, product_id])
+        try:
+            connection.commit()
+        except Exception:
+            pass
+        messages.success(request, "Item removed from your cart.")
+    except Exception as e:
+        messages.error(request, f"Error removing product: {e}")
+    finally:
+        try:
+            cursor.close()
+        except:
+            pass
+
+    return redirect('view_cart')
+
+@db_login_required
+def checkout_page(request):
+    """Display checkout summary and current points balance."""
+    if not request.session.get('is_authenticated'):
+        messages.error(request, "Please log in to proceed to checkout.")
+        return redirect('login_page')
+
+    if request.session.get('account_type') != 'driver':
+        messages.error(request, "Only drivers can access checkout.")
+        return redirect('homepage')
+
+    user_id = request.session.get('user_id')
+    cursor = connection.cursor()
+
+    try:
+        # --- Get cart items ---
+        cursor.execute("""
+            SELECT product_id, quantity FROM user_cart WHERE user_id = %s
+        """, [user_id])
+        rows = cursor.fetchall()
+
+        if not rows:
+            messages.info(request, "Your cart is empty.")
+            return redirect('view_cart')
+
+        cart_items = []
+        total = 0
+
+        for product_id, qty in rows:
+            try:
+                response = requests.get(f"https://fakestoreapi.com/products/{product_id}", timeout=5)
+                if response.status_code == 200:
+                    product = response.json()
+                    product['quantity'] = qty
+                    product['subtotal'] = product['price'] * qty
+                    total += product['subtotal']
+                    product['subtotal_points'] = int(product['subtotal'] * 100)
+                    cart_items.append(product)
+            except Exception as e:
+                print(f"Error loading product {product_id}: {e}")
+
+        points_total = int(total * 100)
+
+        # --- ✅ FIX: Fetch real live points balance ---
+        cursor.execute("""
+            SELECT COALESCE(SUM(points), 0)
+            FROM driver_points_transactions
+            WHERE driver_user_id = %s
+        """, [user_id])
+        wallet_balance = cursor.fetchone()[0] or 0
+
+        # Compute remaining balance after purchase
+        remaining = wallet_balance - points_total
+
+        context = {
+            'cart_items': cart_items,
+            'points_total': points_total,
+            'wallet_balance': wallet_balance,
+            'remaining_balance': remaining,
+        }
+
+        return render(request, 'checkout_page.html', context)
+
+    except Exception as e:
+        messages.error(request, f"Error loading checkout page: {str(e)}")
+        return redirect('view_cart')
+    finally:
+        try:
+            cursor.close()
+        except:
+            pass
+
+@db_login_required
+def confirm_checkout(request):
+    """Handles point deduction and order confirmation."""
+    if request.method != "POST":
+        messages.error(request, "Invalid request method.")
+        return redirect('checkout_page')
+
+    user_id = request.session.get('user_id')
+    if not user_id:
+        messages.error(request, "Please log in to complete checkout.")
+        return redirect('login_page')
+
+    cursor = connection.cursor()
+
+    try:
+        # Fetch cart items
+        cursor.execute("""
+            SELECT product_id, quantity FROM user_cart WHERE user_id = %s
+        """, [user_id])
+        rows = cursor.fetchall()
+
+        if not rows:
+            messages.warning(request, "Your cart is empty.")
+            return redirect('view_cart')
+
+        # Calculate total in points
+        total_points = 0
+        for product_id, qty in rows:
+            response = requests.get(f"https://fakestoreapi.com/products/{product_id}", timeout=5)
+            if response.status_code == 200:
+                product = response.json()
+                total_points += int(product['price'] * qty * 100)
+
+        # Fetch driver’s available points (live total)
+        cursor.execute("""
+            SELECT COALESCE(SUM(points), 0)
+            FROM driver_points_transactions
+            WHERE driver_user_id = %s
+        """, [user_id])
+        current_points = cursor.fetchone()[0] or 0
+
+        if total_points > current_points:
+            messages.error(request, f"Insufficient points! You have {current_points:,} pts.")
+            return redirect('checkout_page')
+
+        # Deduct points by inserting a negative transaction
+        cursor.execute("""
+            INSERT INTO driver_points_transactions (sponsor_user_id, driver_user_id, points, message)
+            VALUES (%s, %s, %s, %s)
+        """, [0, user_id, -total_points, "Redeemed points for store purchase"])
+
+        # Commit and clear the cart
+        connection.commit()
+        cursor.execute("DELETE FROM user_cart WHERE user_id = %s", [user_id])
+
+        messages.success(request, f"Purchase successful! {total_points:,} pts deducted.")
+        return redirect('driver_order_history')
+
+    except Exception as e:
+        connection.rollback()
+        messages.error(request, f"Error completing purchase: {str(e)}")
+        return redirect('checkout_page')
+    finally:
+        try:
+            cursor.close()
+        except:
+            pass
+
+@db_login_required
+def confirm_checkout(request):
+    """Finalize checkout: deduct points and record purchase."""
+    if request.method != "POST":
+        messages.error(request, "Invalid request method.")
+        return redirect('checkout_page')
+
+    user_id = request.session.get('user_id')
+    if not user_id:
+        messages.error(request, "Please log in to complete checkout.")
+        return redirect('login_page')
+
+    cursor = connection.cursor()
+    try:
+        # --- Get cart contents ---
+        cursor.execute("SELECT product_id, quantity FROM user_cart WHERE user_id = %s", [user_id])
+        rows = cursor.fetchall()
+        if not rows:
+            messages.warning(request, "Your cart is empty.")
+            return redirect('view_cart')
+
+        total_points = 0
+        products = []
+
+        # Calculate total from API
+        for product_id, qty in rows:
+            resp = requests.get(f"https://fakestoreapi.com/products/{product_id}", timeout=5)
+            if resp.status_code == 200:
+                product = resp.json()
+                subtotal_pts = int(float(product['price']) * qty * 100)
+                total_points += subtotal_pts
+                products.append({
+                    "id": product_id,
+                    "title": product['title'],
+                    "quantity": qty,
+                    "subtotal_pts": subtotal_pts
+                })
+
+        # --- Get current balance from driver_points_transactions ---
+        cursor.execute("""
+            SELECT COALESCE(SUM(points), 0)
+            FROM driver_points_transactions
+            WHERE driver_user_id = %s
+        """, [user_id])
+        current_points = cursor.fetchone()[0] or 0
+
+        # --- Check for sufficient points ---
+        if total_points > current_points:
+            messages.error(request, f"Insufficient points! You have {current_points:,} pts.")
+            return redirect('checkout_page')
+
+        # --- Deduct points and record purchase ---
+        cursor.execute("""
+            INSERT INTO driver_points_transactions (sponsor_user_id, driver_user_id, points, message)
+            VALUES (%s, %s, %s, %s)
+        """, [0, user_id, -total_points, "Redeemed points for store purchase"])
+        connection.commit()
+
+        # --- Optional: record the order in a simple orders table ---
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS driver_orders (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                driver_user_id INT NOT NULL,
+                total_points INT NOT NULL,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                details TEXT
+            )
+        """)
+        cursor.execute("""
+            INSERT INTO driver_orders (driver_user_id, total_points, details)
+            VALUES (%s, %s, %s)
+        """, [user_id, total_points, str(products)])
+        connection.commit()
+
+        # --- Clear the cart ---
+        cursor.execute("DELETE FROM user_cart WHERE user_id = %s", [user_id])
+        connection.commit()
+
+        messages.success(request, f"✅ Purchase complete! {total_points:,} pts deducted.")
+        return redirect('driver_order_history')
+
+    except Exception as e:
+        connection.rollback()
+        messages.error(request, f"Error completing purchase: {e}")
+        return redirect('checkout_page')
+    finally:
+        try:
+            cursor.close()
+        except:
+            pass
+
+
+@admin_required
 def admin_change_user_type(request):
     """Admin page to change any user's account type"""
     
@@ -4221,7 +4579,7 @@ def sponsor_deactivate_organization_member(request, member_id):
         print(f"Deactivate member error: {e}")
     finally:
         cursor.close()
-    
+
     return redirect('sponsor_create_user')
 
 @db_login_required

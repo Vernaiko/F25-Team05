@@ -1,5 +1,7 @@
 {% extends 'base.html' %}
-{% block title %}My Cart - Safe Driver Program{% endblock %}
+{% load humanize %}
+
+{% block title %}My Cart{% endblock %}
 
 {% block content %}
 <section class="section">
@@ -14,6 +16,7 @@
           <th>Price</th>
           <th>Quantity</th>
           <th>Subtotal</th>
+          <th></th>
         </tr>
       </thead>
       <tbody>
@@ -24,20 +27,42 @@
               <strong>{{ item.title }}</strong>
             </a>
           </td>
-          <td>${{ item.price }}</td>
+
+          <!-- Price shown in points -->
+          <td>{{ item.price_points|intcomma }} pts</td>
+
           <td>{{ item.quantity }}</td>
-          <td>${{ item.subtotal|floatformat:2 }}</td>
+
+          <!-- Subtotal shown in points -->
+          <td>{{ item.subtotal_points|intcomma }} pts</td>
+
+          <td class="has-text-centered">
+            <form action="{% url 'remove_from_cart' item.id %}" method="post" style="display:inline;">
+              {% csrf_token %}
+              <button type="submit" class="button is-danger is-small" title="Remove item">
+                <span class="icon"><i class="fas fa-times"></i></span>
+              </button>
+            </form>
+          </td>
         </tr>
         {% endfor %}
       </tbody>
     </table>
 
+    <!-- Cart total and checkout -->
     <div class="has-text-right mt-5">
-      <h3 class="subtitle is-4">Total: <strong>${{ total|floatformat:2 }}</strong></h3>
-      <button class="button is-success">Proceed to Checkout</button>
+      <h3 class="subtitle is-4">
+        Total: <strong>{{ points_total|intcomma }} points</strong>
+      </h3>
+
+      <a href="{% url 'checkout_page' %}" class="button is-success is-medium">
+        <span class="icon"><i class="fas fa-credit-card"></i></span>
+        <span>Proceed to Checkout</span>
+      </a>
     </div>
 
     {% else %}
+    <!-- Empty cart message -->
     <div class="notification is-info">
       Your cart is currently empty.  
       <a href="{% url 'view_products' %}" class="has-text-weight-semibold">Browse products</a> to add items!

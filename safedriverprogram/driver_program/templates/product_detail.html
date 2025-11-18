@@ -13,7 +13,12 @@
       </div>
       <div class="column">
         <h1 class="title">{{ product.title }}</h1>
-        <h2 class="subtitle">${{ product.price }}</h2>
+
+        <!-- 💡 Show points and equivalent dollars -->
+        <h2 class="subtitle">
+          <strong>{{ product.price_points|intcomma }} pts</strong>
+          <span class="has-text-grey-light is-size-6">(~${{ product.price }})</span>
+        </h2>
 
         <div class="tags">
           <span class="tag is-info">{{ product.category }}</span>
@@ -30,13 +35,11 @@
 
         <div style="margin-top: 1rem;">
           {% if request.session.is_authenticated %}
-            
-              <form method="post" action="{% url 'add_to_wishlist' product.id %}">
-                {% csrf_token %}
-                <input type="hidden" name="product_id" value="{{ product.id }}">
-                <button type="submit" class="button is-primary">Add to wishlist</button>
-              </form>
-
+            <form method="post" action="{% url 'add_to_wishlist' product.id %}">
+              {% csrf_token %}
+              <input type="hidden" name="product_id" value="{{ product.id }}">
+              <button type="submit" class="button is-primary">Add to wishlist</button>
+            </form>
           {% else %}
             <p><em>Log in to add this product to your wishlist.</em></p>
           {% endif %}
