@@ -140,6 +140,49 @@
                 </a>
               </div>
             </div>
+
+            <!-- Admin Bulk Upload Section -->
+            <div class="box has-background-light" style="margin-top: 1.5rem;">
+              <h3 class="subtitle is-5">
+                <span class="icon has-text-danger"><i class="fas fa-upload"></i></span>
+                Bulk Upload Users
+              </h3>
+              <p class="content">Upload a pipe-delimited file to add Drivers (D) and Sponsors (S) to the system.</p>
+
+              <div class="notification is-light">
+                <p class="mb-2"><strong>Format:</strong> &lt;user type&gt; || First Name | Last Name | email</p>
+                <pre class="has-background-light p-3" style="white-space: pre-wrap;">
+D || Joe | Driver | joe@example.com
+S || Jill | Sponsor | jill@example.com
+                </pre>
+              </div>
+
+              <form method="post" action="{% url 'admin_bulk_upload' %}" enctype="multipart/form-data">
+                {% csrf_token %}
+                <div class="field is-grouped is-align-items-center">
+                  <div class="control">
+                    <div class="file has-name is-small">
+                      <label class="file-label">
+                        <input class="file-input" type="file" name="upload_file" accept=".txt,.csv,.dat">
+                        <span class="file-cta">
+                          <span class="file-icon">
+                            <i class="fas fa-upload"></i>
+                          </span>
+                          <span class="file-label">
+                            Choose a file…
+                          </span>
+                        </span>
+                      </label>
+                    </div>
+                  </div>
+                  <div class="control">
+                    <button type="submit" class="button is-danger is-small">
+                      Upload
+                    </button>
+                  </div>
+                </div>
+              </form>
+            </div>
           </div>
           {% endif %}
 

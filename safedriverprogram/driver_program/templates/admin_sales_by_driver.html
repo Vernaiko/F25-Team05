@@ -1,0 +1,102 @@
+{% extends 'base.html' %}
+
+{% block title %}Sales by Driver - Admin{% endblock %}
+
+{% block content %}
+<div class="container">
+  <div class="box">
+    <h1 class="title">Sales by Driver</h1>
+
+    <form method="get" class="box">
+      <div class="columns is-multiline">
+        <div class="column is-one-third">
+          <label class="label">Driver username</label>
+          <div class="control">
+            <input class="input" type="text" name="driver" value="{{ filters.driver }}" placeholder="username..." />
+          </div>
+        </div>
+        <div class="column is-one-quarter">
+          <label class="label">Start date</label>
+          <div class="control">
+            <input class="input" type="date" name="start_date" value="{{ filters.start_date }}" />
+          </div>
+        </div>
+        <div class="column is-one-quarter">
+          <label class="label">End date</label>
+          <div class="control">
+            <input class="input" type="date" name="end_date" value="{{ filters.end_date }}" />
+          </div>
+        </div>
+        <div class="column is-narrow">
+          <label class="label">&nbsp;</label>
+          <div class="control">
+            <button class="button is-danger" type="submit">Filter</button>
+          </div>
+        </div>
+      </div>
+    </form>
+
+    <h2 class="subtitle">Top Drivers</h2>
+    {% if drivers %}
+    <div class="table-container">
+      <table class="table is-fullwidth is-striped">
+        <thead>
+          <tr>
+            <th>Driver</th>
+            <th>Orders</th>
+            <th>Total Points</th>
+            <th>Last Order</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for d in drivers %}
+          <tr>
+            <td><strong>{{ d.username }}</strong><br><small>{{ d.first_name }} {{ d.last_name }}</small></td>
+            <td>{{ d.order_count }}</td>
+            <td>{{ d.total_points }}</td>
+            <td>{{ d.last_order|date:"M d, Y H:i" }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+      <div class="notification is-warning">No driver data found for the selected filters.</div>
+    {% endif %}
+
+    <h2 class="subtitle mt-5">Recent Orders</h2>
+    {% if orders %}
+    <div class="table-container">
+      <table class="table is-fullwidth is-striped is-narrow">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Driver</th>
+            <th>Points</th>
+            <th>Date</th>
+            <th>Details</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for o in orders %}
+          <tr>
+            <td><code>{{ o.order_id }}</code></td>
+            <td><strong>{{ o.username }}</strong></td>
+            <td>{{ o.total_points }}</td>
+            <td>{{ o.created_at|date:"M d, Y H:i" }}</td>
+            <td><pre style="white-space:pre-wrap;">{{ o.details }}</pre></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+      <div class="notification is-info">No orders found for the selected filters.</div>
+    {% endif %}
+
+    <div class="buttons mt-4">
+      <a href="{% url 'account_page' %}" class="button is-light">Back to Account</a>
+    </div>
+  </div>
+</div>
+{% endblock %}
