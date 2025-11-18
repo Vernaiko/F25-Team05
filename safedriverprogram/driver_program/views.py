@@ -180,7 +180,6 @@ def homepage(request):
     return render(request, 'homepage.html', {'wishlist': wishlist_display})
 
 @csrf_protect
-@csrf_protect
 def login_page(request):
     """Handle user login"""
     if request.method == 'POST':
@@ -291,7 +290,7 @@ def logout_view(request):
     
     return redirect('homepage')
 
-@admin_required
+@db_login_required
 def signup_page(request):
     """Handle user registration - ADMIN ONLY"""
     
@@ -1760,7 +1759,7 @@ def add_admin(request):
 
     return render(request, "add_admin.html")
 
-@user_passes_test(is_admin)
+@db_login_required
 def admin_list(request):
     """Show all admins with option to delete."""
     admins = User.objects.filter(is_staff=True)
@@ -1796,7 +1795,7 @@ def driver_list(request):
     return render(request, "driver_list.html", {"drivers": drivers})
 
 
-@admin_required
+@db_login_required
 def admin_driver_dashboard(request):
     """Admin dashboard: list all drivers with their points from all sponsors.
 
@@ -1890,7 +1889,7 @@ def admin_driver_dashboard(request):
             pass
 
 
-@admin_required
+@db_login_required
 def admin_delete_driver(request, user_id):
     """Delete a driver and related records from the custom database tables.
 
@@ -1942,7 +1941,7 @@ def admin_delete_driver(request, user_id):
 # Add these functions to your existing driver_program/views.py file
 
 
-@admin_required
+@db_login_required
 def admin_drivers_csv_export(request):
     """Export all drivers and their point transactions to CSV format."""
     import csv
@@ -2564,21 +2563,21 @@ def is_admin(user):
     return user.is_staff or user.is_superuser
 
 
-@user_passes_test(is_admin)
-def review_admin_status(request):
-    """View all admins and their account status."""
-    admins = User.objects.filter(is_staff=True)
+# @user_passes_test(is_admin)
+# def review_admin_status(request):
+#     """View all admins and their account status."""
+#     admins = User.objects.filter(is_staff=True)
 
-    if request.method == "POST":
-        admin_id = request.POST.get("admin_id")
-        new_status = request.POST.get("status") == "True"
-        admin_user = get_object_or_404(User, id=admin_id)
-        admin_user.is_active = new_status
-        admin_user.save()
-        messages.success(request, f"Admin '{admin_user.username}' status updated.")
-        return redirect("review_admin_status")
+#     if request.method == "POST":
+#         admin_id = request.POST.get("admin_id")
+#         new_status = request.POST.get("status") == "True"
+#         admin_user = get_object_or_404(User, id=admin_id)
+#         admin_user.is_active = new_status
+#         admin_user.save()
+#         messages.success(request, f"Admin '{admin_user.username}' status updated.")
+#         return redirect("review_admin_status")
 
-    return render(request, "admin_status.html", {"admins": admins})
+#     return render(request, "admin_status.html", {"admins": admins})
 
 
 @user_passes_test(is_admin)
@@ -3511,7 +3510,7 @@ def admin_required(view_func):
 
 
 # --- Review Admin Accounts ---
-@admin_required
+@db_login_required
 def review_admin_status(request):
     cursor = connection.cursor()
     try:
@@ -3529,7 +3528,7 @@ def review_admin_status(request):
 
 
 # --- Review Driver Accounts ---
-@admin_required
+@db_login_required
 def review_driver_status(request):
     cursor = connection.cursor()
     try:
@@ -3547,7 +3546,7 @@ def review_driver_status(request):
 
 
 # --- Review Sponsor Accounts ---
-@admin_required
+@db_login_required
 def review_sponsor_status(request):
     cursor = connection.cursor()
     try:
@@ -3624,7 +3623,7 @@ def driver_order_history(request):
     finally:
         cursor.close()
 
-@admin_required
+@db_login_required
 def review_all_accounts(request):
     cursor = connection.cursor()
     try:
@@ -3892,11 +3891,6 @@ def admin_failed_login_log(request):
     finally:
         cursor.close()
 
-@login_required
-def admin_update_admin_status(request, admin_id):
-    """Placeholder for admin update admin status view."""
-    from django.http import HttpResponse
-    return HttpResponse("Admin update admin status feature is not yet implemented.")
 
 @login_required
 def review_driver_points(request):
@@ -4019,6 +4013,10 @@ def add_to_cart(request, product_id):
         messages.error(request, f"Error adding to cart: {e}")
         return redirect('view_products')
     finally:
+        try:
+            cursor.close()
+        except:
+            pass
         cursor.close()
 
 def remove_from_cart(request, product_id):
@@ -4278,7 +4276,7 @@ def confirm_checkout(request):
             pass
 
 
-@admin_required
+@db_login_required
 def admin_change_user_type(request):
     """Admin page to change any user's account type"""
     
@@ -4671,565 +4669,1207 @@ def sponsor_deactivate_organization_member(request, member_id):
         cursor.close()
 
     return redirect('sponsor_create_user')
-    try:
-        cursor.close()
-    except:
-        pass
-
-
-# Delete Sponsor Drivers
-@db_login_required 
-def sponsor_delete_driver(request, driver_id):
-    """Remove a driver from the currently logged-in sponsor's organization.
-
-    Deletes the sponsor<->driver relationship (and, optionally, that pair's
-    point transactions). It does NOT delete the user's global account.
-    """
-    # Only sponsors can do this
-    if request.session.get('account_type') != 'sponsor':
-        messages.error(request, "Access denied. Only sponsors can perform this action.")
-        return redirect('homepage')
-
-    if request.method != 'POST':
-        messages.error(request, "Invalid request method.")
-        return redirect('sponsor_drivers')
-
-    sponsor_id = request.session.get('user_id')
-    cursor = connection.cursor()
-    try:
-        # Remove the relationship for this sponsor and driver
-        cursor.execute("""
-            DELETE FROM sponsor_driver_relationships
-            WHERE sponsor_user_id = %s AND driver_user_id = %s
-        """, [sponsor_id, driver_id])
-
-        # (Optional) also remove point transactions between this sponsor & driver
-        try:
-            cursor.execute("""
-                DELETE FROM driver_points_transactions
-                WHERE sponsor_user_id = %s AND driver_user_id = %s
-            """, [sponsor_id, driver_id])
-        except Exception:
-            # safe to ignore if table doesn't exist yet
-            pass
-
-        try:
-            connection.commit()
-        except Exception:
-            pass
-
-        messages.success(request, "Driver removed from your organization.")
-    except Exception as e:
-        messages.error(request, f"Could not remove driver: {e}")
-    finally:
-        try:
-            cursor.close()
-        except Exception:
-            pass
-
-    return redirect('sponsor_drivers')
-
 
 @db_login_required
-def sponsor_organization_management(request):
-    """View for sponsors to manage other sponsors in their organization."""
-    
+def admin_manage_admins(request):
+    """Admin page to view and manage all admin accounts"""
+
+    # Check if user is logged in and is an admin
+    if not request.session.get('is_authenticated'):
+        messages.error(request, "Please log in to access this page.")
+        return redirect('login_page')
+
+    if request.session.get('account_type') != 'admin':
+        messages.error(request, "Access denied. Only administrators can view this page.")
+        return redirect('homepage')
+
+    cursor = connection.cursor()
+
+    try:
+        # Get all admin users from the users table
+        cursor.execute("""
+            SELECT userID, username, first_name, last_name, email,
+                   phone_number, address, is_active, created_at
+            FROM users
+            WHERE account_type = 'admin'
+            ORDER BY created_at DESC
+        """)
+
+        admins_data = cursor.fetchall()
+
+        admins_list = []
+        for admin in admins_data:
+            admins_list.append({
+                'userID': admin[0],
+                'username': admin[1],
+                'first_name': admin[2],
+                'last_name': admin[3],
+                'email': admin[4],
+                'phone_number': admin[5],
+                'address': admin[6],
+                'is_active': admin[7],
+                'created_at': admin[8]
+            })
+
+        # Get statistics
+        total_admins = len(admins_list)
+        active_admins = len([a for a in admins_list if a['is_active']])
+        inactive_admins = total_admins - active_admins
+
+        context = {
+            'admins': admins_list,
+            'total_admins': total_admins,
+            'active_admins': active_admins,
+            'inactive_admins': inactive_admins,
+            'current_user_id': request.session.get('user_id')
+        }
+
+        return render(request, 'admin_manage_admins.html', context)
+
+    except Exception as e:
+        messages.error(request, f"Error loading admins: {str(e)}")
+        print(f"Admin manage admins error: {e}")
+        return redirect('account_page')
+    finally:
+        cursor.close()
+
+@db_login_required
+def sponsor_wallet_history(request, driver_id=None):
+    """
+    View wallet transaction history for drivers sponsored by this sponsor.
+    If driver_id is provided, show history for that specific driver.
+    Otherwise, show aggregated view for all drivers.
+    """
     # Only sponsors can access this page
     if request.session.get('account_type') != 'sponsor':
         messages.error(request, "Access denied. Only sponsors can view this page.")
         return redirect('homepage')
+
+    sponsor_id = request.session.get('user_id')
+    cursor = connection.cursor()
+
+    try:
+        # Get all drivers sponsored by this sponsor
+        cursor.execute("""
+            SELECT 
+                u.userID, u.username, u.first_name, u.last_name,
+                dw.wallet_id, dw.points_balance, dw.last_transaction_date
+            FROM sponsor_driver_relationships sdr
+            JOIN users u ON sdr.driver_user_id = u.userID
+            LEFT JOIN driver_wallets dw ON dw.driver_id = u.userID
+            WHERE sdr.sponsor_user_id = %s AND sdr.relationship_status = 'active'
+            ORDER BY u.last_name, u.first_name
+        """, [sponsor_id])
+
+        sponsored_drivers = cursor.fetchall()
+        drivers_list = []
+
+        for driver in sponsored_drivers:
+            drivers_list.append({
+                'user_id': driver[0],
+                'username': driver[1],
+                'first_name': driver[2],
+                'last_name': driver[3],
+                'wallet_id': driver[4],
+                'points_balance': driver[5] or 0,
+                'last_transaction_date': driver[6]
+            })
+
+        transactions = []
+        selected_driver = None
+
+        if driver_id:
+            # Verify this sponsor has access to this driver
+            driver_found = next((d for d in drivers_list if d['user_id'] == driver_id), None)
+
+            if not driver_found:
+                messages.error(request, "You don't have access to this driver's wallet history.")
+                return redirect('sponsor_wallet_history')
+
+            selected_driver = driver_found
+
+            # Get transaction history for specific driver
+            cursor.execute("""
+                SELECT 
+                    wth.transaction_id, wth.transaction_type, wth.points_amount,
+                    wth.points_before, wth.points_after, wth.description,
+                    wth.reference_type, wth.status, wth.transaction_date,
+                    wth.processed_by, wth.notes,
+                    sponsor.username as sponsor_username,
+                    admin.username as admin_username
+                FROM wallet_transaction_history wth
+                LEFT JOIN users sponsor ON wth.sponsor_id = sponsor.userID
+                LEFT JOIN users admin ON wth.admin_id = admin.userID
+                WHERE wth.driver_id = %s
+                ORDER BY wth.transaction_date DESC
+                LIMIT 100
+            """, [driver_id])
+
+            transaction_rows = cursor.fetchall()
+
+            for tx in transaction_rows:
+                transactions.append({
+                    'transaction_id': tx[0],
+                    'transaction_type': tx[1],
+                    'points_amount': tx[2],
+                    'points_before': tx[3],
+                    'points_after': tx[4],
+                    'description': tx[5],
+                    'reference_type': tx[6],
+                    'status': tx[7],
+                    'transaction_date': tx[8],
+                    'processed_by': tx[9],
+                    'notes': tx[10],
+                    'sponsor_username': tx[11],
+                    'admin_username': tx[12]
+                })
+
+        context = {
+            'drivers': drivers_list,
+            'selected_driver': selected_driver,
+            'transactions': transactions,
+            'total_drivers': len(drivers_list)
+        }
+
+        return render(request, 'sponsor_wallet_history.html', context)
+
+    except Exception as e:
+        messages.error(request, f"Error loading wallet history: {str(e)}")
+        print(f"Sponsor wallet history error: {e}")
+        return redirect('sponsor_home')
+    finally:
+        cursor.close()
+
+@db_login_required
+def admin_wallet_history(request, driver_id=None):
+    """
+    Admin view for wallet transaction history.
+    Can view all drivers or filter by specific driver.
+    """
+    # Only admins can access this page
+    if request.session.get('account_type') != 'admin':
+        messages.error(request, "Access denied. Only admins can view this page.")
+        return redirect('homepage')
+
+    cursor = connection.cursor()
+    
+    try:
+        # Get all drivers with wallets
+        cursor.execute("""
+            SELECT 
+                u.userID, u.username, u.first_name, u.last_name, u.email,
+                dw.wallet_id, dw.points_balance, dw.last_transaction_date, dw.is_active,
+                sp.organization_name
+            FROM users u
+            LEFT JOIN driver_wallets dw ON dw.driver_id = u.userID
+            LEFT JOIN driver_program_profile p ON p.user_id = u.userID
+            LEFT JOIN driver_program_sponsorprofile sp ON p.sponsor_id = sp.id
+            WHERE u.account_type = 'driver'
+            ORDER BY u.last_name, u.first_name
+        """)
+
+        all_drivers = cursor.fetchall()
+        drivers_list = []
+
+        for driver in all_drivers:
+            drivers_list.append({
+                'user_id': driver[0],
+                'username': driver[1],
+                'first_name': driver[2],
+                'last_name': driver[3],
+                'email': driver[4],
+                'wallet_id': driver[5],
+                'points_balance': driver[6] or 0,
+                'last_transaction_date': driver[7],
+                'wallet_active': driver[8] if driver[8] is not None else False,
+                'sponsor_organization': driver[9]
+            })
+
+        transactions = []
+        selected_driver = None
+        transaction_stats = {}
+
+        if driver_id:
+            # Get specific driver info
+            selected_driver = next((d for d in drivers_list if d['user_id'] == driver_id), None)
+
+            if not selected_driver:
+                messages.error(request, "Driver not found.")
+                return redirect('admin_wallet_history')
+
+            # Get transaction history for specific driver
+            cursor.execute("""
+                SELECT 
+                    wth.transaction_id, wth.transaction_type, wth.points_amount,
+                    wth.points_before, wth.points_after, wth.description,
+                    wth.reference_id, wth.reference_type, wth.status, 
+                    wth.transaction_date, wth.processed_by, wth.notes,
+                    sponsor.username as sponsor_username, sponsor.first_name as sponsor_first_name,
+                    sponsor.last_name as sponsor_last_name,
+                    admin.username as admin_username, admin.first_name as admin_first_name,
+                    admin.last_name as admin_last_name
+                FROM wallet_transaction_history wth
+                LEFT JOIN users sponsor ON wth.sponsor_id = sponsor.userID
+                LEFT JOIN users admin ON wth.admin_id = admin.userID
+                WHERE wth.driver_id = %s
+                ORDER BY wth.transaction_date DESC
+            """, [driver_id])
+
+            transaction_rows = cursor.fetchall()
+
+            for tx in transaction_rows:
+                transactions.append({
+                    'transaction_id': tx[0],
+                    'transaction_type': tx[1],
+                    'points_amount': tx[2],
+                    'points_before': tx[3],
+                    'points_after': tx[4],
+                    'description': tx[5],
+                    'reference_id': tx[6],
+                    'reference_type': tx[7],
+                    'status': tx[8],
+                    'transaction_date': tx[9],
+                    'processed_by': tx[10],
+                    'notes': tx[11],
+                    'sponsor_username': tx[12],
+                    'sponsor_full_name': f"{tx[13]} {tx[14]}" if tx[13] else None,
+                    'admin_username': tx[15],
+                    'admin_full_name': f"{tx[16]} {tx[17]}" if tx[16] else None
+                })
+
+            # Calculate transaction statistics
+            cursor.execute("""
+                SELECT 
+                    transaction_type,
+                    COUNT(*) as count,
+                    SUM(points_amount) as total_points,
+                    AVG(points_amount) as avg_points
+                FROM wallet_transaction_history
+                WHERE driver_id = %s
+                GROUP BY transaction_type
+            """, [driver_id])
+
+            stats_rows = cursor.fetchall()
+            transaction_stats = {}
+            for stat in stats_rows:
+                transaction_stats[stat[0]] = {
+                    'count': stat[1],
+                    'total_points': stat[2],
+                    'avg_points': round(stat[3], 2) if stat[3] else 0
+                }
+
+        # Get overall statistics
+        cursor.execute("""
+            SELECT 
+                COUNT(DISTINCT driver_id) as total_drivers_with_wallets,
+                COUNT(*) as total_transactions,
+                SUM(CASE WHEN points_amount > 0 THEN points_amount ELSE 0 END) as total_points_added,
+                SUM(CASE WHEN points_amount < 0 THEN points_amount ELSE 0 END) as total_points_deducted
+            FROM wallet_transaction_history
+        """)
+
+        overall_stats = cursor.fetchone()
+
+        context = {
+            'drivers': drivers_list,
+            'selected_driver': selected_driver,
+            'transactions': transactions,
+            'transaction_stats': transaction_stats,
+            'total_drivers': len(drivers_list),
+            'overall_stats': {
+                'total_drivers_with_wallets': overall_stats[0] if overall_stats else 0,
+                'total_transactions': overall_stats[1] if overall_stats else 0,
+                'total_points_added': overall_stats[2] if overall_stats else 0,
+                'total_points_deducted': overall_stats[3] if overall_stats else 0
+            } if overall_stats else {}
+        }
+
+        return render(request, 'admin_wallet_history.html', context)
+
+    except Exception as e:
+        messages.error(request, f"Error loading wallet history: {str(e)}")
+        print(f"Admin wallet history error: {e}")
+        import traceback
+        traceback.print_exc()
+        return redirect('homepage')
+    finally:
+        cursor.close()
+
+@db_login_required
+def admin_failed_login_log(request):
+    """
+    Admin view to monitor failed login attempts across all users.
+    Provides security insights and potential threat detection.
+    """
+    cursor = connection.cursor()
+    
+    try:
+        # Get filter parameters
+        username_filter = request.GET.get('username', '').strip()
+        account_type_filter = request.GET.get('account_type', '')
+        time_range = request.GET.get('time_range', '24h')  # 1h, 24h, 7d, 30d, all
+
+        # Ensure table exists
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS failed_login_attempts (
+                attempt_id INT AUTO_INCREMENT PRIMARY KEY,
+                username VARCHAR(150) NOT NULL,
+                attempted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                ip_address VARCHAR(45),
+                user_agent TEXT,
+                failure_reason VARCHAR(255),
+                account_type VARCHAR(50),
+                INDEX idx_username (username),
+                INDEX idx_attempted_at (attempted_at),
+                INDEX idx_ip_address (ip_address)
+            )
+        """)
+
+        # Build WHERE clause based on filters
+        where_conditions = []
+        query_params = []
+
+        if username_filter:
+            where_conditions.append("username LIKE %s")
+            query_params.append(f"%{username_filter}%")
+
+        if account_type_filter:
+            where_conditions.append("account_type = %s")
+            query_params.append(account_type_filter)
+
+        # Time range filter
+        if time_range == '1h':
+            where_conditions.append("attempted_at >= DATE_SUB(NOW(), INTERVAL 1 HOUR)")
+        elif time_range == '24h':
+            where_conditions.append("attempted_at >= DATE_SUB(NOW(), INTERVAL 24 HOUR)")
+        elif time_range == '7d':
+            where_conditions.append("attempted_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)")
+        elif time_range == '30d':
+            where_conditions.append("attempted_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)")
+        # 'all' - no time filter
+
+        where_clause = "WHERE " + " AND ".join(where_conditions) if where_conditions else ""
+
+        # Get failed login attempts
+        query = f"""
+            SELECT 
+                attempt_id, username, attempted_at, ip_address,
+                user_agent, failure_reason, account_type
+            FROM failed_login_attempts
+            {where_clause}
+            ORDER BY attempted_at DESC
+            LIMIT 500
+        """
+
+        cursor.execute(query, query_params)
+        attempts_rows = cursor.fetchall()
+
+        attempts_list = []
+        for row in attempts_rows:
+            attempts_list.append({
+                'attempt_id': row[0],
+                'username': row[1],
+                'attempted_at': row[2],
+                'ip_address': row[3],
+                'user_agent': row[4][:100] if row[4] else '',  # Truncate for display
+                'failure_reason': row[5],
+                'account_type': row[6]
+            })
+
+        # Get statistics - Top 10 usernames with most failures
+        stats_query = f"""
+            SELECT 
+                username,
+                account_type,
+                COUNT(*) as attempt_count,
+                MAX(attempted_at) as last_attempt,
+                COUNT(DISTINCT ip_address) as unique_ips
+            FROM failed_login_attempts
+            {where_clause}
+            GROUP BY username, account_type
+            ORDER BY attempt_count DESC
+            LIMIT 10
+        """
+
+        cursor.execute(stats_query, query_params)
+        top_failures_rows = cursor.fetchall()
+
+        top_failures = []
+        for row in top_failures_rows:
+            top_failures.append({
+                'username': row[0],
+                'account_type': row[1],
+                'attempt_count': row[2],
+                'last_attempt': row[3],
+                'unique_ips': row[4]
+            })
+
+        # Get IP address statistics
+        ip_stats_query = f"""
+            SELECT 
+                ip_address,
+                COUNT(*) as attempt_count,
+                COUNT(DISTINCT username) as unique_usernames,
+                MAX(attempted_at) as last_attempt
+            FROM failed_login_attempts
+            {where_clause}
+            GROUP BY ip_address
+            ORDER BY attempt_count DESC
+            LIMIT 10
+        """
+
+        cursor.execute(ip_stats_query, query_params)
+        ip_stats_rows = cursor.fetchall()
+
+        ip_stats = []
+        for row in ip_stats_rows:
+            ip_stats.append({
+                'ip_address': row[0],
+                'attempt_count': row[1],
+                'unique_usernames': row[2],
+                'last_attempt': row[3]
+            })
+
+        # Overall statistics
+        overall_query = f"""
+            SELECT 
+                COUNT(*) as total_attempts,
+                COUNT(DISTINCT username) as unique_usernames,
+                COUNT(DISTINCT ip_address) as unique_ips,
+                COUNT(DISTINCT DATE(attempted_at)) as days_with_attempts
+            FROM failed_login_attempts
+            {where_clause}
+        """
+
+        cursor.execute(overall_query, query_params)
+        overall_stats = cursor.fetchone()
+
+        # Get account type breakdown
+        account_type_query = f"""
+            SELECT 
+                account_type,
+                COUNT(*) as count
+            FROM failed_login_attempts
+            {where_clause}
+            GROUP BY account_type
+            ORDER BY count DESC
+        """
+
+        cursor.execute(account_type_query, query_params)
+        account_type_stats = cursor.fetchall()
+
+        account_type_breakdown = {}
+        for row in account_type_stats:
+            account_type_breakdown[row[0]] = row[1]
+
+        context = {
+            'attempts': attempts_list,
+            'top_failures': top_failures,
+            'ip_stats': ip_stats,
+            'overall_stats': {
+                'total_attempts': overall_stats[0] if overall_stats else 0,
+                'unique_usernames': overall_stats[1] if overall_stats else 0,
+                'unique_ips': overall_stats[2] if overall_stats else 0,
+                'days_with_attempts': overall_stats[3] if overall_stats else 0
+            } if overall_stats else {},
+            'account_type_breakdown': account_type_breakdown,
+            'filters': {
+                'username': username_filter,
+                'account_type': account_type_filter,
+                'time_range': time_range
+            }
+        }
+
+        return render(request, 'admin_failed_login_log.html', context)
+
+    except Exception as e:
+        messages.error(request, f"Error loading failed login log: {str(e)}")
+        print(f"Failed login log error: {e}")
+        import traceback
+        traceback.print_exc()
+        return redirect('account_page')
+    finally:
+        cursor.close()
+@login_required
+@db_login_required
+def admin_update_admin_status(request, admin_id):
+    """Toggle admin active/inactive status"""
+
+    if request.method != 'POST':
+        messages.error(request, "Invalid request method.")
+        return redirect('admin_manage_admins')
+
+    # Check if user is logged in and is an admin
+    if not request.session.get('is_authenticated'):
+        messages.error(request, "Please log in to access this page.")
+        return redirect('login_page')
+
+    if request.session.get('account_type') != 'admin':
+        messages.error(request, "Access denied. Only administrators can perform this action.")
+        return redirect('homepage')
+
+    current_user_id = request.session.get('user_id')
+
+    # Prevent admin from deactivating themselves
+    if int(admin_id) == current_user_id:
+        messages.error(request, "You cannot change your own account status.")
+        return redirect('admin_manage_admins')
+
+    cursor = connection.cursor()
+
+    try:
+        # Get current admin status
+        cursor.execute("""
+            SELECT username, first_name, last_name, is_active, account_type
+            FROM users
+            WHERE userID = %s
+        """, [admin_id])
+
+        admin_data = cursor.fetchone()
+
+        if not admin_data:
+            messages.error(request, "Admin not found.")
+            return redirect('admin_manage_admins')
+
+        if admin_data[4] != 'admin':
+            messages.error(request, "This user is not an admin.")
+            return redirect('admin_manage_admins')
+
+        username = admin_data[0]
+        full_name = f"{admin_data[1]} {admin_data[2]}"
+        current_status = admin_data[3]
+
+        # Toggle status
+        new_status = 0 if current_status else 1
+
+        cursor.execute("""
+            UPDATE users
+            SET is_active = %s
+            WHERE userID = %s
+        """, [new_status, admin_id])
+
+        status_text = "activated" if new_status else "deactivated"
+        messages.success(request, f"Admin {full_name} (@{username}) has been {status_text}.")
+
+    except Exception as e:
+        messages.error(request, f"Error updating admin status: {str(e)}")
+        print(f"Update admin status error: {e}")
+    finally:
+        cursor.close()
+
+    return redirect('admin_manage_admins')
+
+@db_login_required
+def admin_view_audit_logs(request):
+    """Admin view to see audit logs with filtering capabilities."""
+
+    # Check if user is logged in and is an admin
+    if not request.session.get('is_authenticated'):
+        messages.error(request, "Please log in to access this page.")
+        return redirect('login_page')
+
+    if request.session.get('account_type') != 'admin':
+        messages.error(request, "Access denied. Only administrators can view audit logs.")
+        return redirect('homepage')
+
+    cursor = connection.cursor()
+
+    try:
+        # Get filter parameters from request
+        event_type = request.GET.get('event_type', '').strip()
+        actor_type = request.GET.get('actor_type', '').strip()
+        severity = request.GET.get('severity', '').strip()
+        time_range = request.GET.get('time_range', '24h')
+
+        # Build the base query - FIXED: Use correct column names from audit_logs.sql
+        query = """
+            SELECT 
+                al.audit_id,  -- FIXED: Changed from log_id to audit_id
+                al.event_timestamp as created_at,
+                al.event_type,
+                al.event_category,
+                al.actor_user_id,
+                al.actor_type,
+                al.actor_username,
+                al.target_user_id,
+                al.target_type,
+                al.target_username,
+                al.related_sponsor_id,
+                al.action_performed,
+                al.description,
+                al.old_value,
+                al.new_value,
+                al.points_amount,
+                al.reference_id,
+                al.reference_type,
+                al.reason,
+                al.notes,
+                al.ip_address,
+                al.user_agent,
+                al.session_id,
+                al.status,
+                al.severity
+            FROM audit_logs al
+            WHERE 1=1
+        """
+
+        params = []
+
+        # Add filters
+        if event_type:
+            query += " AND al.event_type = %s"
+            params.append(event_type)
+
+        if actor_type:
+            query += " AND al.actor_type = %s"
+            params.append(actor_type)
+
+        if severity:
+            query += " AND al.severity = %s"
+            params.append(severity)
+
+        # Time range filter
+        if time_range == '24h':
+            query += " AND al.event_timestamp >= DATE_SUB(NOW(), INTERVAL 24 HOUR)"
+        elif time_range == '7d':
+            query += " AND al.event_timestamp >= DATE_SUB(NOW(), INTERVAL 7 DAY)"
+        elif time_range == '30d':
+            query += " AND al.event_timestamp >= DATE_SUB(NOW(), INTERVAL 30 DAY)"
+        # 'all' = no time filter
+
+        # Order by most recent first and limit results
+        query += " ORDER BY al.event_timestamp DESC LIMIT 100"
+
+        cursor.execute(query, params)
+        audit_logs_data = cursor.fetchall()
+
+        # Format the data for the template
+        audit_logs_list = []
+        for log in audit_logs_data:
+            audit_logs_list.append({
+                'audit_id': log[0],
+                'created_at': log[1],
+                'event_timestamp': log[1],  # Alias for template
+                'event_type': log[2],
+                'event_category': log[3],
+                'actor_user_id': log[4],
+                'actor_type': log[5],
+                'actor_username': log[6],
+                'target_user_id': log[7],
+                'target_type': log[8],
+                'target_username': log[9],
+                'related_sponsor_id': log[10],
+                'action_performed': log[11],
+                'description': log[12],
+                'old_value': log[13],
+                'new_value': log[14],
+                'points_amount': log[15],
+                'reference_id': log[16],
+                'reference_type': log[17],
+                'reason': log[18],
+                'notes': log[19],
+                'ip_address': log[20],
+                'user_agent': log[21],
+                'session_id': log[22],
+                'status': log[23],
+                'severity': log[24]
+            })
+
+        # Create filters object for template
+        filters = {
+            'event_type': event_type,
+            'actor_type': actor_type,
+            'severity': severity,
+            'time_range': time_range
+        }
+
+        context = {
+            'audit_logs': audit_logs_list,
+            'filters': filters,
+            'total_logs': len(audit_logs_list)
+        }
+
+        return render(request, 'admin_view_audit_logs.html', context)
+
+    except Exception as e:
+        messages.error(request, f"Error loading audit logs: {str(e)}")
+        print(f"Admin audit logs error: {e}")
+        import traceback
+        traceback.print_exc()
+        return redirect('account_page')
+    finally:
+        cursor.close()
+@db_login_required
+def admin_reset_driver_password(request, user_id):
+    """Admin function to reset a driver's password"""
+    
+    if request.method != 'POST':
+        messages.error(request, "Invalid request method.")
+        return redirect('admin_driver_dashboard')
+    
+    cursor = connection.cursor()
+    
+    try:
+        # Verify the user exists and is a driver
+        cursor.execute("""
+            SELECT username, first_name, last_name, account_type
+            FROM users
+            WHERE userID = %s
+        """, [user_id])
+        
+        user_data = cursor.fetchone()
+        
+        if not user_data:
+            messages.error(request, "User not found.")
+            return redirect('admin_driver_dashboard')
+        
+        if user_data[3] != 'driver':
+            messages.error(request, "This user is not a driver.")
+            return redirect('admin_driver_dashboard')
+        
+        username = user_data[0]
+        full_name = f"{user_data[1]} {user_data[2]}"
+        
+        # Generate a temporary password
+        import secrets
+        import string
+        temp_password = ''.join(secrets.choice(string.ascii_letters + string.digits) for _ in range(8))
+        
+        # Hash the new password
+        temp_password_hash = hashlib.sha256(temp_password.encode()).hexdigest()
+        
+        # Update the password in database
+        cursor.execute("""
+            UPDATE users 
+            SET password_hash = %s, updated_at = NOW()
+            WHERE userID = %s
+        """, [temp_password_hash, user_id])
+        
+        messages.success(request, 
+            f"Password reset for {full_name} (@{username}). "
+            f"Temporary password: {temp_password} "
+            f"Please provide this to the driver securely.")
+        
+    except Exception as e:
+        messages.error(request, f"Error resetting password: {str(e)}")
+        print(f"Password reset error: {e}")
+    finally:
+        cursor.close()
+    
+    return redirect('admin_driver_dashboard')
+@db_login_required
+def bulk_sponsor_upload(request):
+    """Allow sponsors to bulk upload driver data or other information"""
+    
+    # Check if user is logged in and is a sponsor
+    if not request.session.get('is_authenticated'):
+        messages.error(request, "Please log in to access this page.")
+        return redirect('login_page')
+    
+    if request.session.get('account_type') != 'sponsor':
+        messages.error(request, "Access denied. Only sponsors can access this feature.")
+        return redirect('homepage')
+    
+    sponsor_id = request.session.get('user_id')
+    
+    if request.method == 'POST':
+        # Handle file upload
+        if 'bulk_file' not in request.FILES:
+            messages.error(request, "Please select a file to upload.")
+            return redirect('bulk_sponsor_upload')
+        
+        uploaded_file = request.FILES['bulk_file']
+        
+        # Validate file type (CSV or Excel)
+        if not uploaded_file.name.endswith(('.csv', '.xlsx', '.xls')):
+            messages.error(request, "Please upload a CSV or Excel file.")
+            return redirect('bulk_sponsor_upload')
+        
+        try:
+            # Process the uploaded file
+            if uploaded_file.name.endswith('.csv'):
+                import csv
+                import io
+                
+                # Read CSV file
+                file_content = uploaded_file.read().decode('utf-8')
+                csv_reader = csv.DictReader(io.StringIO(file_content))
+                
+                processed_count = 0
+                error_count = 0
+                
+                for row_num, row in enumerate(csv_reader, start=2):  # Start at 2 for header
+                    try:
+                        # Example: Process driver data upload
+                        # Adjust these fields based on your CSV format
+                        driver_username = row.get('username', '').strip()
+                        driver_email = row.get('email', '').strip()
+                        points_to_award = row.get('points', '0').strip()
+                        
+                        if driver_username and points_to_award.isdigit():
+                            # Find driver and award points
+                            cursor = connection.cursor()
+                            try:
+                                # Check if driver exists and is sponsored by this sponsor
+                                cursor.execute("""
+                                    SELECT u.userID FROM users u
+                                    JOIN sponsor_driver_relationships sdr ON u.userID = sdr.driver_user_id
+                                    WHERE u.username = %s AND sdr.sponsor_user_id = %s 
+                                    AND sdr.relationship_status = 'active'
+                                """, [driver_username, sponsor_id])
+                                
+                                driver_data = cursor.fetchone()
+                                
+                                if driver_data:
+                                    driver_id = driver_data[0]
+                                    points = int(points_to_award)
+                                    
+                                    # Award points
+                                    cursor.execute("""
+                                        INSERT INTO driver_points_transactions 
+                                        (sponsor_user_id, driver_user_id, points, message, created_at)
+                                        VALUES (%s, %s, %s, %s, NOW())
+                                    """, [sponsor_id, driver_id, points, f'Bulk upload - Row {row_num}'])
+                                    
+                                    processed_count += 1
+                                else:
+                                    error_count += 1
+                                    print(f"Row {row_num}: Driver '{driver_username}' not found or not sponsored")
+                            finally:
+                                cursor.close()
+                        else:
+                            error_count += 1
+                            print(f"Row {row_num}: Invalid data")
+                            
+                    except Exception as e:
+                        error_count += 1
+                        print(f"Row {row_num}: Error processing - {str(e)}")
+                
+                if processed_count > 0:
+                    messages.success(request, f"Successfully processed {processed_count} records.")
+                if error_count > 0:
+                    messages.warning(request, f"Failed to process {error_count} records. Check the file format.")
+            
+            else:
+                # Handle Excel files (requires openpyxl)
+                messages.error(request, "Excel file processing is not yet implemented. Please use CSV format.")
+                
+        except Exception as e:
+            messages.error(request, f"Error processing file: {str(e)}")
+        
+        return redirect('bulk_sponsor_upload')
+    
+    # GET request - show upload form
+    return render(request, 'sponsor_bulk_upload.html', {
+        'sponsor_id': sponsor_id
+    })
+
+@db_login_required
+def sponsor_delete_driver(request, driver_id):
+    """Allow sponsors to end relationships with their drivers"""
+    
+    # Check if user is logged in and is a sponsor
+    if not request.session.get('is_authenticated'):
+        messages.error(request, "Please log in to access this page.")
+        return redirect('login_page')
+    
+    if request.session.get('account_type') != 'sponsor':
+        messages.error(request, "Access denied. Only sponsors can perform this action.")
+        return redirect('homepage')
+    
+    if request.method != 'POST':
+        messages.error(request, "Invalid request method.")
+        return redirect('sponsor_drivers')
     
     sponsor_id = request.session.get('user_id')
     cursor = connection.cursor()
     
     try:
-        # Get current sponsor's organization
+        # Verify this sponsor has an active relationship with this driver
         cursor.execute("""
-            SELECT organization, first_name, last_name
-            FROM users 
-            WHERE userID = %s AND account_type = 'sponsor'
+            SELECT u.username, u.first_name, u.last_name, sdr.relationship_id
+            FROM sponsor_driver_relationships sdr
+            JOIN users u ON sdr.driver_user_id = u.userID
+            WHERE sdr.sponsor_user_id = %s 
+            AND sdr.driver_user_id = %s 
+            AND sdr.relationship_status = 'active'
+        """, [sponsor_id, driver_id])
+        
+        relationship_data = cursor.fetchone()
+        
+        if not relationship_data:
+            messages.error(request, "Driver not found or you don't have an active relationship with this driver.")
+            return redirect('sponsor_drivers')
+        
+        driver_username = relationship_data[0]
+        driver_name = f"{relationship_data[1]} {relationship_data[2]}"
+        relationship_id = relationship_data[3]
+        
+        # End the relationship (don't actually delete the driver user)
+        cursor.execute("""
+            UPDATE sponsor_driver_relationships
+            SET relationship_status = 'ended',
+                relationship_end_date = NOW(),
+                updated_at = NOW(),
+                terminated_by_user_id = %s,
+                termination_reason = 'Ended by sponsor'
+            WHERE relationship_id = %s
+        """, [sponsor_id, relationship_id])
+        
+        messages.success(request, 
+            f"Successfully ended sponsorship relationship with {driver_name} (@{driver_username}).")
+        
+    except Exception as e:
+        messages.error(request, f"Error ending relationship: {str(e)}")
+        print(f"Sponsor delete driver error: {e}")
+    finally:
+        cursor.close()
+    
+    return redirect('sponsor_drivers')
+
+@db_login_required  
+def sponsor_add_driver_note(request, driver_id):
+    """Allow sponsors to add notes about their drivers"""
+    
+    if request.session.get('account_type') != 'sponsor':
+        messages.error(request, "Access denied. Only sponsors can add driver notes.")
+        return redirect('homepage')
+    
+    if request.method != 'POST':
+        messages.error(request, "Invalid request method.")
+        return redirect('sponsor_drivers')
+    
+    sponsor_id = request.session.get('user_id')
+    note_text = request.POST.get('note', '').strip()
+    
+    if not note_text:
+        messages.error(request, "Please provide a note.")
+        return redirect('sponsor_drivers')
+    
+    cursor = connection.cursor()
+    
+    try:
+        # Verify relationship exists
+        cursor.execute("""
+            SELECT COUNT(*) FROM sponsor_driver_relationships
+            WHERE sponsor_user_id = %s AND driver_user_id = %s AND relationship_status = 'active'
+        """, [sponsor_id, driver_id])
+        
+        if not cursor.fetchone()[0]:
+            messages.error(request, "You don't have an active relationship with this driver.")
+            return redirect('sponsor_drivers')
+        
+        # Add note to relationship
+        cursor.execute("""
+            UPDATE sponsor_driver_relationships
+            SET relationship_notes = CONCAT(COALESCE(relationship_notes, ''), '\n[', NOW(), '] ', %s),
+                updated_at = NOW()
+            WHERE sponsor_user_id = %s AND driver_user_id = %s AND relationship_status = 'active'
+        """, [note_text, sponsor_id, driver_id])
+        
+        messages.success(request, "Note added successfully.")
+        
+    except Exception as e:
+        messages.error(request, f"Error adding note: {str(e)}")
+    finally:
+        cursor.close()
+    
+    return redirect('sponsor_drivers')
+
+@db_login_required
+def sponsor_organization_management(request):
+    """Allow sponsors to manage their organization settings and members"""
+    
+    # Check if user is logged in and is a sponsor
+    if not request.session.get('is_authenticated'):
+        messages.error(request, "Please log in to access this page.")
+        return redirect('login_page')
+    
+    if request.session.get('account_type') != 'sponsor':
+        messages.error(request, "Access denied. Only sponsors can access this feature.")
+        return redirect('homepage')
+    
+    sponsor_id = request.session.get('user_id')
+    cursor = connection.cursor()
+    
+    # Handle POST request for updating organization settings
+    if request.method == 'POST':
+        action = request.POST.get('action')
+        
+        if action == 'update_organization':
+            organization_name = request.POST.get('organization_name', '').strip()
+            organization_description = request.POST.get('organization_description', '').strip()
+            
+            try:
+                # Update organization info in users table
+                cursor.execute("""
+                    UPDATE users 
+                    SET organization = %s, updated_at = NOW()
+                    WHERE userID = %s
+                """, [organization_name, sponsor_id])
+                
+                # Update session data
+                request.session['organization'] = organization_name
+                
+                messages.success(request, "Organization information updated successfully.")
+                
+            except Exception as e:
+                messages.error(request, f"Error updating organization: {str(e)}")
+        
+        elif action == 'update_member_status':
+            member_id = request.POST.get('member_id')
+            new_status = request.POST.get('status') == 'active'
+            
+            if member_id:
+                try:
+                    # Update member status
+                    cursor.execute("""
+                        UPDATE users 
+                        SET is_active = %s, updated_at = NOW()
+                        WHERE userID = %s
+                    """, [new_status, member_id])
+                    
+                    # Update relationship status
+                    cursor.execute("""
+                        UPDATE sponsor_driver_relationships
+                        SET relationship_status = %s, updated_at = NOW()
+                        WHERE sponsor_user_id = %s AND driver_user_id = %s
+                    """, ['active' if new_status else 'suspended', sponsor_id, member_id])
+                    
+                    status_text = "activated" if new_status else "deactivated"
+                    messages.success(request, f"Member has been {status_text}.")
+                    
+                except Exception as e:
+                    messages.error(request, f"Error updating member status: {str(e)}")
+        
+        return redirect('sponsor_organization_management')
+    
+    try:
+        # Get current sponsor's organization info
+        cursor.execute("""
+            SELECT userID, username, first_name, last_name, email, 
+                   phone_number, organization, is_active, created_at
+            FROM users
+            WHERE userID = %s
         """, [sponsor_id])
         
         sponsor_info = cursor.fetchone()
-        if not sponsor_info or not sponsor_info[0]:
-            messages.error(request, "You must be part of an organization to manage members.")
-            return redirect('account_page')
+        current_organization = sponsor_info[6] if sponsor_info else None
         
-        current_organization = sponsor_info[0]
-        sponsor_name = f"{sponsor_info[1]} {sponsor_info[2]}"
-        
-        # Handle member removal
-        if request.method == 'POST':
-            member_id = request.POST.get('member_id')
-            action = request.POST.get('action')
-            
-            if action == 'remove_member' and member_id:
-                try:
-                    # Don't allow sponsors to remove themselves
-                    if int(member_id) == sponsor_id:
-                        messages.error(request, "You cannot remove yourself from the organization.")
-                    else:
-                        # Remove the member by setting their organization to NULL
-                        cursor.execute("""
-                            UPDATE users 
-                            SET organization = NULL 
-                            WHERE userID = %s AND account_type = 'sponsor' AND organization = %s
-                        """, [member_id, current_organization])
-                        
-                        if cursor.rowcount > 0:
-                            # Get the removed member's name for the message
-                            cursor.execute("""
-                                SELECT first_name, last_name 
-                                FROM users 
-                                WHERE userID = %s
-                            """, [member_id])
-                            removed_member = cursor.fetchone()
-                            member_name = f"{removed_member[0]} {removed_member[1]}" if removed_member else "Member"
-                            
-                            connection.commit()
-                            messages.success(request, f"Successfully removed {member_name} from the organization.")
-                        else:
-                            messages.error(request, "Member not found or could not be removed.")
-                            
-                except Exception as e:
-                    messages.error(request, f"Error removing member: {str(e)}")
-                    
-                return redirect('sponsor_organization_management')
-        
-        # Get all sponsors in the same organization
+        # Get organization members (other sponsors in same organization)
         cursor.execute("""
-            SELECT userID, username, first_name, last_name, email, phone_number, is_active, created_at
-            FROM users 
-            WHERE account_type = 'sponsor' AND organization = %s
-            ORDER BY first_name, last_name
-        """, [current_organization])
+            SELECT u.userID, u.username, u.first_name, u.last_name, u.email,
+                   u.phone_number, u.is_active, u.created_at,
+                   sdr.relationship_status, sdr.relationship_start_date
+            FROM users u
+            LEFT JOIN sponsor_driver_relationships sdr ON (
+                u.userID = sdr.driver_user_id AND sdr.sponsor_user_id = %s
+            )
+            WHERE u.account_type = 'sponsor' 
+                AND u.organization = %s 
+                AND u.userID != %s
+            ORDER BY u.last_name, u.first_name
+        """, [sponsor_id, current_organization, sponsor_id])
         
         organization_members = cursor.fetchall()
         
-        # Format the data
+        # Get drivers sponsored by this organization
+        cursor.execute("""
+            SELECT u.userID, u.username, u.first_name, u.last_name, u.email,
+                   sdr.relationship_status, sdr.relationship_start_date,
+                   sdr.safe_driving_streak_days, sdr.total_trips_logged,
+                   sponsor_user.first_name as sponsor_first_name,
+                   sponsor_user.last_name as sponsor_last_name
+            FROM sponsor_driver_relationships sdr
+            JOIN users u ON sdr.driver_user_id = u.userID
+            JOIN users sponsor_user ON sdr.sponsor_user_id = sponsor_user.userID
+            WHERE sponsor_user.organization = %s AND u.account_type = 'driver'
+            ORDER BY sdr.relationship_start_date DESC
+        """, [current_organization])
+        
+        organization_drivers = cursor.fetchall()
+        
+        # Format data for template
         members_list = []
         for member in organization_members:
             members_list.append({
-                'user_id': member[0],
+                'userID': member[0],
                 'username': member[1],
                 'first_name': member[2],
                 'last_name': member[3],
                 'email': member[4],
                 'phone_number': member[5],
-                'is_active': bool(member[6]),
+                'is_active': member[6],
                 'created_at': member[7],
-                'is_current_user': member[0] == sponsor_id
+                'relationship_status': member[8],
+                'relationship_start_date': member[9]
             })
         
+        drivers_list = []
+        for driver in organization_drivers:
+            drivers_list.append({
+                'userID': driver[0],
+                'username': driver[1],
+                'first_name': driver[2],
+                'last_name': driver[3],
+                'email': driver[4],
+                'relationship_status': driver[5],
+                'relationship_start_date': driver[6],
+                'streak_days': driver[7] or 0,
+                'total_trips': driver[8] or 0,
+                'sponsor_name': f"{driver[9]} {driver[10]}"
+            })
+        
+        # Get organization statistics
+        cursor.execute("""
+            SELECT 
+                COUNT(DISTINCT CASE WHEN u.account_type = 'sponsor' AND u.userID != %s THEN u.userID END) as total_sponsors,
+                COUNT(DISTINCT CASE WHEN u.account_type = 'driver' THEN u.userID END) as total_drivers,
+                COUNT(DISTINCT CASE WHEN sdr.relationship_status = 'active' AND u.account_type = 'driver' THEN u.userID END) as active_drivers
+            FROM users u
+            LEFT JOIN sponsor_driver_relationships sdr ON u.userID = sdr.driver_user_id
+            LEFT JOIN users sponsor_org ON sdr.sponsor_user_id = sponsor_org.userID
+            WHERE (u.organization = %s AND u.account_type = 'sponsor') 
+                OR (sponsor_org.organization = %s AND u.account_type = 'driver')
+        """, [sponsor_id, current_organization, current_organization])
+        
+        stats = cursor.fetchone()
+        
         context = {
+            'sponsor_info': {
+                'userID': sponsor_info[0],
+                'username': sponsor_info[1],
+                'first_name': sponsor_info[2],
+                'last_name': sponsor_info[3],
+                'email': sponsor_info[4],
+                'phone_number': sponsor_info[5],
+                'organization': sponsor_info[6],
+                'is_active': sponsor_info[7],
+                'created_at': sponsor_info[8]
+            } if sponsor_info else {},
+            'current_organization': current_organization or 'No Organization',
             'organization_members': members_list,
-            'current_organization': current_organization,
-            'sponsor_name': sponsor_name,
-            'total_members': len(members_list)
+            'organization_drivers': drivers_list,
+            'stats': {
+                'total_sponsors': stats[0] if stats else 0,
+                'total_drivers': stats[1] if stats else 0,
+                'active_drivers': stats[2] if stats else 0
+            }
         }
         
         return render(request, 'sponsor_organization_management.html', context)
         
     except Exception as e:
-        messages.error(request, f"Error loading organization members: {str(e)}")
-        return redirect('account_page')
-    finally:
-        try:
-            cursor.close()
-        except:
-            pass
-
-#Admin Reset Driver Password ... Testing
-@admin_required
-def admin_reset_driver_password(request, user_id):
-    """
-    Admin action: reset a driver's password to a temporary value.
-
-    - Only accepts POST
-    - Uses same SHA-256 hashing convention as change_password
-    - Puts the temp password in a flash message so the admin can share it
-    """
-    if request.method != 'POST':
-        messages.error(request, "Invalid request.")
-        return redirect('admin_driver_dashboard')
-
-    cursor = connection.cursor()
-    try:
-        # Ensure this is a driver account and exists
-        cursor.execute("""
-            SELECT userID, username, account_type, email
-            FROM users WHERE userID = %s
-        """, [user_id])
-        row = cursor.fetchone()
-        if not row:
-            messages.error(request, "Driver not found.")
-            return redirect('admin_driver_dashboard')
-        if row[2] != 'driver':
-            messages.error(request, "Password reset is only allowed for driver accounts.")
-            return redirect('admin_driver_dashboard')
-
-        username = row[1]
-
-        # Generate a temp password (12 chars: URL-safe, no punctuation confusion)
-        alphabet = string.ascii_letters + string.digits
-        temp_password = ''.join(secrets.choice(alphabet) for _ in range(12))
-
-        # Hash exactly like your change_password view (SHA-256 hex)
-        temp_hash = hashlib.sha256(temp_password.encode()).hexdigest()
-
-        # Update DB
-        cursor.execute("""
-            UPDATE users
-            SET password_hash = %s, updated_at = NOW()
-            WHERE userID = %s
-        """, [temp_hash, user_id])
-
-        try:
-            connection.commit()
-        except Exception:
-            pass
-
-        messages.success(
-            request,
-            f"Password for @{username} has been reset. Temporary password: {temp_password}"
-        )
-    except Exception as e:
-        messages.error(request, f"Error resetting password: {e}")
-    finally:
-        try:
-            cursor.close()
-        except Exception:
-            pass
-
-    return redirect('admin_driver_dashboard')
-
-# Sponsor Add Driver Notes
-@db_login_required
-def sponsor_add_driver_note(request, driver_id):
-    """
-    Sponsors can add private notes about individual drivers.
-    In addition to saving in sponsor_driver_notes, we also write a 0-point
-    transaction row so the note is visible immediately in the 'Recent Transactions'
-    column without changing the sponsor_drivers view.
-    """
-    # Access control
-    acct = (request.session.get('account_type') or '').lower()
-    if acct != 'sponsor':
-        messages.error(request, "Access denied. Only sponsors can perform this action.")
-        return redirect('homepage')
-
-    if request.method != 'POST':
-        messages.error(request, "Invalid request.")
-        return redirect('sponsor_drivers')
-
-    # Robust sponsor_id retrieval
-    sponsor_id = (
-        request.session.get('user_id')
-        or request.session.get('id')
-        or request.session.get('userID')
-    )
-    if not sponsor_id:
-        messages.error(request, "Session error: could not identify sponsor user.")
-        return redirect('sponsor_drivers')
-
-    note_text = (request.POST.get('note_text') or '').strip()
-    if not note_text:
-        messages.error(request, "Please enter a note before saving.")
-        return redirect('sponsor_drivers')
-    if len(note_text) > 4000:
-        messages.error(request, "Note is too long (max 4000 characters).")
-        return redirect('sponsor_drivers')
-
-    cursor = connection.cursor()
-    try:
-        engine = settings.DATABASES['default']['ENGINE']
-
-        # Create notes table if needed (engine-aware)
-        if 'sqlite' in engine:
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS sponsor_driver_notes (
-                    note_id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    sponsor_user_id INTEGER NOT NULL,
-                    driver_user_id INTEGER NOT NULL,
-                    note_text TEXT NOT NULL,
-                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-                )
-            """)
-        elif 'postgresql' in engine:
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS sponsor_driver_notes (
-                    note_id SERIAL PRIMARY KEY,
-                    sponsor_user_id INT NOT NULL,
-                    driver_user_id INT NOT NULL,
-                    note_text TEXT NOT NULL,
-                    created_at TIMESTAMP NOT NULL DEFAULT NOW()
-                )
-            """)
-        else:
-            # MySQL / MariaDB
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS sponsor_driver_notes (
-                    note_id INT AUTO_INCREMENT PRIMARY KEY,
-                    sponsor_user_id INT NOT NULL,
-                    driver_user_id INT NOT NULL,
-                    note_text TEXT NOT NULL,
-                    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                    INDEX (sponsor_user_id),
-                    INDEX (driver_user_id)
-                )
-            """)
-
-        # Validate sponsor<->driver relationship
-        cursor.execute("""
-            SELECT 1
-            FROM sponsor_driver_relationships
-            WHERE sponsor_user_id = %s AND driver_user_id = %s
-            LIMIT 1
-        """, [sponsor_id, driver_id])
-        if not cursor.fetchone():
-            messages.error(request, "You can only add notes for your own drivers.")
-            return redirect('sponsor_drivers')
-
-        # 1) Save the note to the notes table
-        cursor.execute("""
-            INSERT INTO sponsor_driver_notes (sponsor_user_id, driver_user_id, note_text)
-            VALUES (%s, %s, %s)
-        """, [sponsor_id, driver_id, note_text])
-
-        # 2) ALSO write a zero-point "NOTE" transaction so it shows up under Recent Transactions
-        #    Your sponsor_drivers page already queries driver_points_transactions and renders message/created_at.
-        #    If your table has additional required columns, adjust this insert accordingly.
-        try:
-            cursor.execute("""
-                INSERT INTO driver_points_transactions (sponsor_user_id, driver_user_id, points, message)
-                VALUES (%s, %s, %s, %s)
-            """, [sponsor_id, driver_id, 0, f"NOTE: {note_text}"])
-        except Exception as tx_e:
-            # If schema differs (extra columns), don't block note saving—just log it.
-            print("Warning: could not insert 0-point NOTE transaction:", tx_e)
-            traceback.print_exc()
-
-        try:
-            connection.commit()
-        except Exception:
-            pass
-
-        messages.success(request, "Note saved successfully.")
-    except Exception as e:
-        print("sponsor_add_driver_note error:", e)
+        messages.error(request, f"Error loading organization data: {str(e)}")
+        print(f"Organization management error: {e}")
+        import traceback
         traceback.print_exc()
-        messages.error(request, "Could not save note due to an internal error.")
+        return redirect('sponsor_home')
     finally:
-        try:
-            cursor.close()
-        except Exception:
-            pass
-
-    return redirect('sponsor_drivers')
-
-@db_login_required
-def bulk_sponsor_upload(request):
-    """Bulk upload Drivers and Sponsors from a pipe-delimited file.
-
-    Expected line format (whitespace tolerant):
-      <user type> || First Name | Last Name | email
-
-    Where <user type> is 'D' (driver) or 'S' (sponsor).
-    The uploading user must be a sponsor; created drivers are linked to the
-    uploading sponsor via sponsor_driver_relationships.
-    """
-    # Auth: sponsors only
-    if not request.session.get('is_authenticated'):
-        messages.error(request, "Please log in to access this feature.")
-        return redirect('login_page')
-
-    if request.session.get('account_type') != 'sponsor':
-        messages.error(request, "Only sponsors can bulk upload users.")
-        return redirect('homepage')
-
-    sponsor_id = request.session.get('user_id') or request.session.get('id')
-    if not sponsor_id:
-        messages.error(request, "Unable to determine your sponsor account. Please log in again.")
-        return redirect('login_page')
-
-    # Accept only POST uploads; GET just redirects back to dashboard
-    if request.method != 'POST':
-        return redirect('sponsor_home')
-
-    upload = request.FILES.get('upload_file')
-    if not upload:
-        messages.error(request, "Please choose a file to upload.")
-        return redirect('sponsor_home')
-
-    # Read file lines safely
-    try:
-        content = upload.read()
-        try:
-            text = content.decode('utf-8')
-        except Exception:
-            text = content.decode('latin-1', errors='ignore')
-        lines = text.splitlines()
-    except Exception as e:
-        messages.error(request, f"Could not read uploaded file: {e}")
-        return redirect('sponsor_home')
-
-    # Prepare results
-    created_drivers = 0
-    created_sponsors = 0
-    skipped = 0
-    errors = 0
-
-    cursor = connection.cursor()
-    try:
-        # Create a simple log table for imports (optional, idempotent)
-        cursor.execute(
-            """
-            CREATE TABLE IF NOT EXISTS sponsor_bulk_uploads (
-                id INT AUTO_INCREMENT PRIMARY KEY,
-                sponsor_user_id INT NOT NULL,
-                row_text TEXT,
-                status VARCHAR(20),
-                message TEXT,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-            )
-            """
-        )
-
-        # Helper: check if user email already exists
-        def email_exists(email):
-            cursor.execute("SELECT userID FROM users WHERE email = %s", [email])
-            return cursor.fetchone() is not None
-
-        # Helper: insert user and return userID
-        def create_user(account_type, first, last, email):
-            username = email  # simplest unique username
-            cursor.execute(
-                """
-                INSERT INTO users (username, first_name, last_name, email, phone_number, address, is_active, account_type, created_at)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, NOW())
-                """,
-                [username, first, last, email, '', '', 1, account_type]
-            )
-            cursor.execute("SELECT LAST_INSERT_ID()")
-            row = cursor.fetchone()
-            return row[0] if row else None
-
-        # Helper: link driver to sponsor
-        def link_driver_to_sponsor(driver_id):
-            try:
-                cursor.execute(
-                    """
-                    CREATE TABLE IF NOT EXISTS sponsor_driver_relationships (
-                        relationship_id INT AUTO_INCREMENT PRIMARY KEY,
-                        sponsor_user_id INT NOT NULL,
-                        driver_user_id INT NOT NULL,
-                        relationship_status VARCHAR(50) DEFAULT 'active',
-                        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                        UNIQUE KEY uniq_sponsor_driver (sponsor_user_id, driver_user_id)
-                    )
-                    """
-                )
-                cursor.execute(
-                    """
-                    INSERT INTO sponsor_driver_relationships (sponsor_user_id, driver_user_id, relationship_status)
-                    VALUES (%s, %s, 'active')
-                    ON DUPLICATE KEY UPDATE relationship_status = VALUES(relationship_status)
-                    """,
-                    [sponsor_id, driver_id]
-                )
-            except Exception:
-                # Don't fail import if relationship table/insert has trouble
-                pass
-
-        # Parse and process each line
-        for raw in lines:
-            line = (raw or '').strip()
-            if not line or line.startswith('#'):
-                continue
-            # normalize delimiters, tolerate spaces
-            normalized = line.replace('||', '|')
-            parts = [p.strip() for p in normalized.split('|')]
-            parts = [p for p in parts if p != '']  # remove empty elements from extra pipes/spaces
-
-            # Expect at least 4 fields
-            if len(parts) < 4:
-                cursor.execute(
-                    "INSERT INTO sponsor_bulk_uploads (sponsor_user_id, row_text, status, message) VALUES (%s, %s, %s, %s)",
-                    [sponsor_id, line, 'failed', 'Invalid format: need 4 fields (type, first, last, email)']
-                )
-                errors += 1
-                continue
-
-            user_type_raw, first, last, email = parts[0], parts[1], parts[2], parts[3]
-            user_type = user_type_raw.upper()[:1]
-            if user_type not in ('D', 'S'):
-                cursor.execute(
-                    "INSERT INTO sponsor_bulk_uploads (sponsor_user_id, row_text, status, message) VALUES (%s, %s, %s, %s)",
-                    [sponsor_id, line, 'failed', "Invalid user type (must be 'D' or 'S')"]
-                )
-                errors += 1
-                continue
-
-            if not first or not last or not email or '@' not in email:
-                cursor.execute(
-                    "INSERT INTO sponsor_bulk_uploads (sponsor_user_id, row_text, status, message) VALUES (%s, %s, %s, %s)",
-                    [sponsor_id, line, 'failed', 'Missing or invalid name/email']
-                )
-                errors += 1
-                continue
-
-            account_type = 'driver' if user_type == 'D' else 'sponsor'
-
-            # Skip if email already exists
-            if email_exists(email):
-                cursor.execute(
-                    "INSERT INTO sponsor_bulk_uploads (sponsor_user_id, row_text, status, message) VALUES (%s, %s, %s, %s)",
-                    [sponsor_id, line, 'skipped', 'Email already exists']
-                )
-                skipped += 1
-                continue
-
-            # Create user
-            try:
-                new_user_id = create_user(account_type, first, last, email)
-                if not new_user_id:
-                    raise Exception('Could not retrieve new user id')
-
-                if account_type == 'driver':
-                    link_driver_to_sponsor(new_user_id)
-                    created_drivers += 1
-                else:
-                    created_sponsors += 1
-
-                cursor.execute(
-                    "INSERT INTO sponsor_bulk_uploads (sponsor_user_id, row_text, status, message) VALUES (%s, %s, %s, %s)",
-                    [sponsor_id, line, 'processed', f'Created {account_type} userID={new_user_id}']
-                )
-            except Exception as e:
-                cursor.execute(
-                    "INSERT INTO sponsor_bulk_uploads (sponsor_user_id, row_text, status, message) VALUES (%s, %s, %s, %s)",
-                    [sponsor_id, line, 'failed', str(e)]
-                )
-                errors += 1
-
-        # Finish
-        connection.commit()
-        summary = f"Drivers created: {created_drivers}, Sponsors created: {created_sponsors}, Skipped: {skipped}, Errors: {errors}"
-        if errors:
-            messages.warning(request, f"Bulk upload completed with issues. {summary}")
-        else:
-            messages.success(request, f"Bulk upload successful. {summary}")
-    except Exception as e:
-        messages.error(request, f"Bulk upload failed: {e}")
-    finally:
-        try:
-            cursor.close()
-        except Exception:
-            pass
-
+        cursor.close()
     return redirect('sponsor_home')
 
-@admin_required
+@db_login_required
 def admin_bulk_upload(request):
     """Bulk upload Drivers and Sponsors from a pipe-delimited file (Admin version).
 

@@ -82,6 +82,12 @@
                   <span class="icon"><i class="fas fa-car"></i></span>
                   <span>Manage Drivers</span>
                 </a>
+                </div>
+                <div class="control">
+                <a href="{% url 'admin_view_audit_logs' %}" class="button is-light">
+                  <span class="icon"><i class="fas fa-clipboard-list"></i></span>
+                  <span>View Audit Log</span>
+                </a>
               </div>
               <div class="control">
                 <a href="{% url 'admin_sponsor_list' %}" class="button is-primary">
@@ -90,11 +96,19 @@
                 </a>
               </div>
               <div class="control">
-                <a href="{% url 'admin_failed_login_log' %}" class="button is-danger">
+                <a href="{% url 'admin_wallet_history' %}" class="button is-info">
+                  <span class="icon"><i class="fas fa-wallet"></i></span>
+                  <span>Wallet History</span>
+                </a>
+              </div>
+
+              <div class="control">
+                <a href="{% url 'admin_failed_login_log' %}" class="button is-dark">
                   <span class="icon"><i class="fas fa-shield-alt"></i></span>
                   <span>Security Log</span>
                 </a>
               </div>
+            </div>
               <div class="control">
                 <a href="{% url 'view_sponsor_requests' %}" class="button is-warning">
                   <span class="icon"><i class="fas fa-clipboard-check"></i></span>
@@ -239,19 +253,13 @@ S || Jill | Sponsor | jill@example.com
               <div class="control"><a href="{% url 'sponsor_profile' %}" class="button is-light"><i class="fas fa-user-cog"></i>&nbsp;Sponsor Profile</a></div>
               <div class="control"><a href="{% url 'sponsor_organization_management' %}" class="button is-link"><i class="fas fa-building"></i>&nbsp;Manage Organization</a></div>
               <div class="control">
-                <a href="{% url 'sponsor_home' %}" class="button is-primary">
-                  <span class="icon">
-                    <i class="fas fa-home"></i>
-                  </span>
-                  <span>Sponsor Home</span>
-                </a>
               </div>
-              <div class="control">
+                            <div class="control">
                 <a href="{% url 'sponsor_create_user' %}" class="button is-primary">
                   <span class="icon"><i class="fas fa-user-plus"></i></span>
-                  <span>Create Organization Users</span>
+                  <span>Create Organization Sponsor Users</span>
                 </a>
-              </div>              
+              </div>
               <div class="control">
                 <a href="{% url 'sponsor_manage_applications' %}" class="button is-info">
                   <span class="icon">
@@ -260,31 +268,6 @@ S || Jill | Sponsor | jill@example.com
                   <span>Manage Applications</span>
                 </a>
               </div>
-              
-              <div class="control">
-                <a href="{% url 'sponsor_drivers' %}" class="button is-success">
-                  <span class="icon">
-                    <i class="fas fa-users"></i>
-                  </span>
-                  <span>My Drivers</span>
-                </a>
-              </div>
-              
-              <div class="control">
-                <a href="{% url 'sponsor_wallet_history' %}" class="button is-warning">
-                  <span class="icon">
-                    <i class="fas fa-wallet"></i>
-                  </span>
-                  <span>Driver Wallet History</span>
-                </a>
-              </div>
-              
-              <div class="control">
-                <a href="{% url 'sponsor_profile' %}" class="button is-light">
-                  <span class="icon">
-                    <i class="fas fa-user-cog"></i>
-                  </span>
-                  <span>Sponsor Profile</span>
                 <a href="{% url 'review_driver_points' %}" class="button is-warning">
                   <span class="icon"><i class="fas fa-file-alt"></i></span>
                   <span>Generate Driver Point History Report</span>

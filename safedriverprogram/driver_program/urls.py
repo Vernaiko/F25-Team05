@@ -51,7 +51,7 @@ urlpatterns = [
     path('useradmin/sponsors/<int:sponsor_id>/delete/', views.admin_delete_sponsor, name='admin_delete_sponsor'),
     
     # Admin admin management
-    path('useradmin/admins/', views.admin_list, name='admin_manage_admins'),
+    path('useradmin/admins/', views.admin_manage_admins, name='admin_manage_admins'),
     path('useradmin/admins/<int:admin_id>/update-status/', views.admin_update_admin_status, name='admin_update_admin_status'),
     path(
     'useradmin/drivers/reset-password/<int:user_id>/', views.admin_reset_driver_password, name='admin_reset_driver_password'), #Testing
@@ -64,11 +64,13 @@ urlpatterns = [
     # Admin bulk upload
     path('useradmin/bulk-upload/', views.admin_bulk_upload, name='admin_bulk_upload'),
     
+    # Admin audit logs
+    path('useradmin/audit-logs/', views.admin_view_audit_logs, name='admin_view_audit_logs'),
+
     #Admin user management
     path('useradmin/change-user-type/', views.admin_change_user_type, name='admin_change_user_type'),
 
     # Sponsor-specific pages - FIXED: Remove duplicates
-    # Sponsor-specific pages
     path('sponsor/home/', views.sponsor_home, name='sponsor_home'),
     path('sponsor/profile/', views.sponsor_profile, name='sponsor_profile'),
     path('sponsor/drivers/', views.sponsor_drivers, name='sponsor_drivers'),
