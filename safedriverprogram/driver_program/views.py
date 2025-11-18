@@ -3650,6 +3650,96 @@ def review_all_accounts(request):
         cursor.close()
 
 
+@db_login_required
+def admin_sales_by_driver(request):
+    # Ensure session-based admin (project uses DB-backed sessions)
+    if request.session.get('account_type') != 'admin':
+        messages.error(request, "Access denied. Administrator privileges required.")
+        return redirect('login_page')
+    """Admin report: view sales (orders) grouped by driver and list recent orders.
+
+    Filters (GET): driver (partial username), start_date (YYYY-MM-DD), end_date (YYYY-MM-DD)
+    """
+    driver_filter = request.GET.get('driver', '').strip()
+    start_date = request.GET.get('start_date', '').strip()
+    end_date = request.GET.get('end_date', '').strip()
+
+    where_clauses = []
+    params = []
+
+    # We'll query the `driver_orders` table (created by checkout). If it doesn't exist, the query will return empty.
+    if start_date:
+        where_clauses.append("o.created_at >= %s")
+        params.append(start_date + " 00:00:00")
+    if end_date:
+        where_clauses.append("o.created_at <= %s")
+        params.append(end_date + " 23:59:59")
+    if driver_filter:
+        where_clauses.append("u.username LIKE %s")
+        params.append(f"%{driver_filter}%")
+
+    where_sql = ''
+    if where_clauses:
+        where_sql = 'WHERE ' + ' AND '.join(where_clauses)
+
+    cursor = connection.cursor()
+    try:
+        # Aggregated per-driver summary (top drivers by points)
+        agg_sql = f"SELECT u.userID, u.username, u.first_name, u.last_name, COUNT(o.id) as order_count, COALESCE(SUM(o.total_points),0) as total_points, MAX(o.created_at) as last_order " \
+                  f"FROM driver_orders o JOIN users u ON o.driver_user_id = u.userID {where_sql} GROUP BY u.userID, u.username, u.first_name, u.last_name " \
+                  f"ORDER BY total_points DESC LIMIT 250"
+        try:
+            cursor.execute(agg_sql, params)
+            drivers = [
+                {
+                    'userID': row[0],
+                    'username': row[1],
+                    'first_name': row[2],
+                    'last_name': row[3],
+                    'order_count': row[4],
+                    'total_points': row[5],
+                    'last_order': row[6],
+                }
+                for row in cursor.fetchall()
+            ]
+        except Exception:
+            # Table may not exist or query failed - return empty lists gracefully
+            drivers = []
+
+        # Recent orders list (limit 1000)
+        orders_sql = f"SELECT o.id, o.driver_user_id, u.username, o.total_points, o.created_at, o.details " \
+                     f"FROM driver_orders o JOIN users u ON o.driver_user_id = u.userID {where_sql} ORDER BY o.created_at DESC LIMIT 1000"
+        try:
+            cursor.execute(orders_sql, params)
+            orders = [
+                {
+                    'order_id': row[0],
+                    'driver_user_id': row[1],
+                    'username': row[2],
+                    'total_points': row[3],
+                    'created_at': row[4],
+                    'details': row[5],
+                }
+                for row in cursor.fetchall()
+            ]
+        except Exception:
+            orders = []
+
+        context = {
+            'drivers': drivers,
+            'orders': orders,
+            'filters': {
+                'driver': driver_filter,
+                'start_date': start_date,
+                'end_date': end_date,
+            }
+        }
+
+        return render(request, 'admin_sales_by_driver.html', context)
+    finally:
+        cursor.close()
+
+
 # Placeholder functions for missing views
 @login_required
 def sponsor_wallet_history(request, driver_id=None):
