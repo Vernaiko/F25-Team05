@@ -4754,3 +4754,177 @@ def bulk_sponsor_upload(request):
             pass
 
     return redirect('sponsor_home')
+
+@admin_required
+def admin_bulk_upload(request):
+    """Bulk upload Drivers and Sponsors from a pipe-delimited file (Admin version).
+
+    Expected line format (whitespace tolerant):
+      <user type> || First Name | Last Name | email
+
+    Where <user type> is 'D' (driver) or 'S' (sponsor).
+    Admins can create both drivers and sponsors; created users are not automatically
+    linked to any sponsor (admins can manage relationships separately).
+    """
+    # Auth: admins only
+    if not request.session.get('is_authenticated'):
+        messages.error(request, "Please log in to access this feature.")
+        return redirect('login_page')
+
+    if request.session.get('account_type') != 'admin':
+        messages.error(request, "Only administrators can bulk upload users.")
+        return redirect('homepage')
+
+    admin_id = request.session.get('user_id') or request.session.get('id')
+    if not admin_id:
+        messages.error(request, "Unable to determine your admin account. Please log in again.")
+        return redirect('login_page')
+
+    # Accept only POST uploads; GET just redirects back to account page
+    if request.method != 'POST':
+        return redirect('account_page')
+
+    upload = request.FILES.get('upload_file')
+    if not upload:
+        messages.error(request, "Please choose a file to upload.")
+        return redirect('account_page')
+
+    # Read file lines safely
+    try:
+        content = upload.read()
+        try:
+            text = content.decode('utf-8')
+        except Exception:
+            text = content.decode('latin-1', errors='ignore')
+        lines = text.splitlines()
+    except Exception as e:
+        messages.error(request, f"Could not read uploaded file: {e}")
+        return redirect('account_page')
+
+    # Prepare results
+    created_drivers = 0
+    created_sponsors = 0
+    skipped = 0
+    errors = 0
+
+    cursor = connection.cursor()
+    try:
+        # Create a simple log table for imports (optional, idempotent)
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS admin_bulk_uploads (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                admin_user_id INT NOT NULL,
+                row_text TEXT,
+                status VARCHAR(20),
+                message TEXT,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+
+        # Helper: check if user email already exists
+        def email_exists(email):
+            cursor.execute("SELECT userID FROM users WHERE email = %s", [email])
+            return cursor.fetchone() is not None
+
+        # Helper: insert user and return userID
+        def create_user(account_type, first, last, email):
+            username = email  # simplest unique username
+            cursor.execute(
+                """
+                INSERT INTO users (username, first_name, last_name, email, phone_number, address, is_active, account_type, created_at)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, NOW())
+                """,
+                [username, first, last, email, '', '', 1, account_type]
+            )
+            cursor.execute("SELECT LAST_INSERT_ID()")
+            row = cursor.fetchone()
+            return row[0] if row else None
+
+        # Parse and process each line
+        for raw in lines:
+            line = (raw or '').strip()
+            if not line or line.startswith('#'):
+                continue
+            # normalize delimiters, tolerate spaces
+            normalized = line.replace('||', '|')
+            parts = [p.strip() for p in normalized.split('|')]
+            parts = [p for p in parts if p != '']  # remove empty elements from extra pipes/spaces
+
+            # Expect at least 4 fields
+            if len(parts) < 4:
+                cursor.execute(
+                    "INSERT INTO admin_bulk_uploads (admin_user_id, row_text, status, message) VALUES (%s, %s, %s, %s)",
+                    [admin_id, line, 'failed', 'Invalid format: need 4 fields (type, first, last, email)']
+                )
+                errors += 1
+                continue
+
+            user_type_raw, first, last, email = parts[0], parts[1], parts[2], parts[3]
+            user_type = user_type_raw.upper()[:1]
+            if user_type not in ('D', 'S'):
+                cursor.execute(
+                    "INSERT INTO admin_bulk_uploads (admin_user_id, row_text, status, message) VALUES (%s, %s, %s, %s)",
+                    [admin_id, line, 'failed', "Invalid user type (must be 'D' or 'S')"]
+                )
+                errors += 1
+                continue
+
+            if not first or not last or not email or '@' not in email:
+                cursor.execute(
+                    "INSERT INTO admin_bulk_uploads (admin_user_id, row_text, status, message) VALUES (%s, %s, %s, %s)",
+                    [admin_id, line, 'failed', 'Missing or invalid name/email']
+                )
+                errors += 1
+                continue
+
+            account_type = 'driver' if user_type == 'D' else 'sponsor'
+
+            # Skip if email already exists
+            if email_exists(email):
+                cursor.execute(
+                    "INSERT INTO admin_bulk_uploads (admin_user_id, row_text, status, message) VALUES (%s, %s, %s, %s)",
+                    [admin_id, line, 'skipped', 'Email already exists']
+                )
+                skipped += 1
+                continue
+
+            # Create user
+            try:
+                new_user_id = create_user(account_type, first, last, email)
+                if not new_user_id:
+                    raise Exception('Could not retrieve new user id')
+
+                if account_type == 'driver':
+                    created_drivers += 1
+                else:
+                    created_sponsors += 1
+
+                cursor.execute(
+                    "INSERT INTO admin_bulk_uploads (admin_user_id, row_text, status, message) VALUES (%s, %s, %s, %s)",
+                    [admin_id, line, 'processed', f'Created {account_type} userID={new_user_id}']
+                )
+            except Exception as e:
+                cursor.execute(
+                    "INSERT INTO admin_bulk_uploads (admin_user_id, row_text, status, message) VALUES (%s, %s, %s, %s)",
+                    [admin_id, line, 'failed', str(e)]
+                )
+                errors += 1
+
+        # Finish
+        connection.commit()
+        summary = f"Drivers created: {created_drivers}, Sponsors created: {created_sponsors}, Skipped: {skipped}, Errors: {errors}"
+        if errors:
+            messages.warning(request, f"Bulk upload completed with issues. {summary}")
+        else:
+            messages.success(request, f"Bulk upload successful. {summary}")
+    except Exception as e:
+        messages.error(request, f"Bulk upload failed: {e}")
+    finally:
+        try:
+            cursor.close()
+        except Exception:
+            pass
+
+    return redirect('account_page')
