@@ -4755,7 +4755,7 @@ def bulk_sponsor_upload(request):
 
     return redirect('sponsor_home')
 
-@admin_required
+@db_login_required
 def admin_bulk_upload(request):
     """Bulk upload Drivers and Sponsors from a pipe-delimited file (Admin version).
 
