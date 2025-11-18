@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load humanize %}
 {% block content %}
 <div class="container mt-4">
     <h2>Order History</h2>
@@ -8,28 +9,36 @@
         <thead>
             <tr>
                 <th>Order ID</th>
-                <th>Product</th>
+                <th>Products</th>
                 <th>Date</th>
                 <th>Points Used</th>
-                <th>Status</th>
             </tr>
         </thead>
         <tbody>
             {% for order in orders %}
             <tr>
-                <td>{{ order.order_id }}</td>
-                <td>{{ order.product_name }}</td>
-                <td>{{ order.order_date }}</td>
-                <td>{{ order.points_used }}</td>
-                <td>{{ order.status }}</td>
+                <td>{{ order.id }}</td>
+
+                <!-- Display product names in a list -->
+                <td>
+                    <ul class="mb-0">
+                        {% for item in order.items %}
+                        <li>
+                            {{ item.title }} (x{{ item.quantity }})
+                        </li>
+                        {% endfor %}
+                    </ul>
+                </td>
+
+                <td>{{ order.created_at }}</td>
+                <td>{{ order.total_points|intcomma }}</td>
             </tr>
             {% endfor %}
         </tbody>
     </table>
+
     {% else %}
     <p>No order history available.</p>
     {% endif %}
-
-    <a href="{% url 'driver_home' %}" class="btn btn-secondary mt-3">Back to Home</a>
 </div>
 {% endblock %}

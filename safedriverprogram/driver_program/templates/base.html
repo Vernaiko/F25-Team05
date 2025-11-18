@@ -26,21 +26,29 @@
           <div class="navbar-item">
             <div class="buttons">
                 {% if request.session.is_authenticated %}
+
                 <!-- Logged in user navigation -->
                 <a class="button is-primary" href="{% url 'account_page' %}">
                   <span class="icon"><i class="fas fa-user"></i></span>
                   <span>My Account</span>
                 </a>
+
                 <a class="button is-warning" href="{% url 'wishlist' %}">
                   <span class="icon"><i class="fas fa-heart"></i></span>
                   <span>My Wishlist</span>
                 </a>
 
-                {# ✅ NEW CART BUTTON FOR DRIVERS ONLY #}
                 {% if request.session.account_type == 'driver' %}
+                <!-- Driver Cart -->
                 <a class="button is-link" href="{% url 'view_cart' %}">
                   <span class="icon"><i class="fas fa-shopping-cart"></i></span>
                   <span>My Cart</span>
+                </a>
+
+                {# ✅ NEW: Order History Button for Drivers #}
+                <a class="button is-info" href="{% url 'driver_order_history' %}">
+                  <span class="icon"><i class="fas fa-receipt"></i></span>
+                  <span>Order History</span>
                 </a>
                 {% endif %}
 
@@ -50,16 +58,19 @@
                     <span>Create User</span>
                   </a>
                 {% endif %}
+
                 <a class="button is-info" href="{% url 'database_status' %}">
                   <span class="icon"><i class="fas fa-database"></i></span>
                   <span>Database Status</span>
                 </a>
+
                 <a class="button is-light" href="{% url 'logout' %}">
                   <span class="icon"><i class="fas fa-sign-out-alt"></i></span>
                   <span>Logout</span>
                 </a>
+
               {% else %}
-                <!-- Guest navigation - FIXED URL NAMES -->
+                <!-- Guest navigation -->
                 <a class="button is-light" href="{% url 'login_page' %}">
                   <span class="icon"><i class="fas fa-sign-in-alt"></i></span>
                   <span>Log In</span>
@@ -105,32 +116,37 @@
       </div>
     </footer>
     
-    <!-- JavaScript for navbar and notifications -->
+    <!-- JS for navbar + notifications -->
     <script>
       document.addEventListener('DOMContentLoaded', () => {
+
         // Navbar burger functionality
         const $navbarBurgers = Array.prototype.slice.call(document.querySelectorAll('.navbar-burger'), 0);
+
         if ($navbarBurgers.length > 0) {
-          $navbarBurgers.forEach( el => {
+          $navbarBurgers.forEach(el => {
             el.addEventListener('click', () => {
               const target = el.dataset.target;
               const $target = document.getElementById(target);
+
               el.classList.toggle('is-active');
               $target.classList.toggle('is-active');
             });
           });
         }
-        
-        // Delete notification functionality
+
+        // Notification delete buttons
         (document.querySelectorAll('.notification .delete') || []).forEach(($delete) => {
           const $notification = $delete.parentNode;
+
           $delete.addEventListener('click', () => {
             $notification.parentNode.removeChild($notification);
           });
         });
+
       });
     </script>
-    
+
     {% block body_extra %}{% endblock %}
   </body>
 </html>
