@@ -20,6 +20,7 @@ from .forms import AddressForm
 
 
 
+
 # Database authentication helper functions
 class DatabaseUser:
     """Custom user authentication with MySQL database"""
@@ -6087,3 +6088,57 @@ def driver_points_breakdown(request):
     return render(request, "driver/points_breakdown.html", {
         "sponsors": sponsors
     })
+
+def approve_driver_application(request, application_id):
+    if request.session.get('account_type') != 'sponsor':
+        messages.error(request, "Only sponsors can approve applications.")
+        return redirect('homepage')
+
+    cursor = connection.cursor()
+    try:
+        # Update the sponsor-driver relationship to active
+        cursor.execute("""
+            UPDATE sponsor_driver_relationships
+            SET relationship_status = 'active'
+            WHERE application_id = %s
+        """, [application_id])
+        
+        # Commit the change
+        connection.commit()
+        messages.success(request, "Driver application approved successfully!")
+    except Exception as e:
+        messages.error(request, f"Error approving application: {e}")
+    finally:
+        cursor.close()
+
+    return redirect('account_page')
+
+
+def driver_organizations(request):
+    # Only allow drivers
+    if request.session.get('account_type') != 'driver':
+        messages.error(request, "Only drivers can view organizations.")
+        return redirect('homepage')
+
+    driver_id = request.session.get('user_id')
+    
+    with connection.cursor() as cursor:
+        cursor.execute("""
+            SELECT s.userID, s.username, s.email, s.organization
+            FROM sponsor_driver_relationships r
+            JOIN users s ON r.sponsor_user_id = s.userID
+            WHERE r.driver_user_id = %s
+        """, [driver_id])
+        organizations = dictfetchall(cursor)
+
+    context = {
+        'organizations': organizations,
+    }
+    return render(request, 'driver_organizations.html', context)
+
+
+# Helper function to return query results as dict
+def dictfetchall(cursor):
+    """Return all rows from a cursor as a dict"""
+    columns = [col[0] for col in cursor.description]
+    return [dict(zip(columns, row)) for row in cursor.fetchall()]

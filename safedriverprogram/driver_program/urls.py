@@ -128,5 +128,7 @@ urlpatterns = [
     path('driver/order-history/', views.driver_order_history, name='driver_order_history'),
     path('admin/review-all-accounts/', views.review_all_accounts, name='review_all_accounts'),
     path("driver/points-breakdown/", views.driver_points_breakdown, name="driver_points_breakdown"),
+    path('approve_driver/<int:application_id>/', views.approve_driver_application, name='approve_driver'),
+    path('driver/organizations/', views.driver_organizations, name='driver_organizations'),
 
 ]

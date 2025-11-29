@@ -1,0 +1,22 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container mt-4">
+    <h1 style="font-weight: 700; color: #000;">My Organizations</h1> <!-- force bold -->
+
+    {% if organizations %}
+        <ul class="list-group mt-3">
+            {% for org in organizations %}
+                <li class="list-group-item">
+                    <strong>{{ org.organization }}</strong> ({{ org.username }} - {{ org.email }})
+                </li>
+            {% endfor %}
+        </ul>
+    {% else %}
+        <p class="text-muted mt-3">You are not part of any organization.</p>
+    {% endif %}
+</div>
+{% endblock %}
+
+
+

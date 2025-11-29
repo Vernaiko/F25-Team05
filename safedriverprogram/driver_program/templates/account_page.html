@@ -25,11 +25,6 @@
             </div>
           {% endif %}
 
-          <!-- Administrator Dashboard -->
-          {% if user_info.account_type == 'admin' %}
-          <!-- admin content unchanged -->
-          {% endif %}
-
           <!-- Personal Information -->
           <div class="box has-background-light">
             <h2 class="subtitle">
@@ -84,14 +79,7 @@
             </div>
           </div>
 
-          <!-- Sponsor Dashboard -->
-          {% if user_info.account_type == 'sponsor' %}
-          <!-- sponsor content unchanged -->
-          {% endif %}
-          
-          <!-- ========================= -->
-          <!-- 🚗 DRIVER DASHBOARD -->
-          <!-- ========================= -->
+          <!-- Driver Dashboard -->
           {% if user_info.account_type == 'driver' %}
           <div class="box has-background-success-light">
             <h2 class="subtitle">
@@ -120,7 +108,6 @@
                 </a>
               </div>
 
-              <!-- View Order History -->
               <div class="control">
                 <a href="{% url 'driver_order_history' %}" class="button is-primary">
                   <span class="icon"><i class="fas fa-receipt"></i></span>
@@ -128,11 +115,18 @@
                 </a>
               </div>
 
-              <!-- ⭐ NEW: View Points Breakdown -->
               <div class="control">
                 <a href="{% url 'driver_points_breakdown' %}" class="button is-danger">
                   <span class="icon"><i class="fas fa-chart-line"></i></span>
                   <span>View Points Breakdown</span>
+                </a>
+              </div>
+
+              <!-- NEW BUTTON: View Organizations -->
+              <div class="control">
+                <a href="{% url 'driver_organizations' %}" class="button is-info">
+                  <span class="icon"><i class="fas fa-building"></i></span>
+                  <span>View Organizations</span>
                 </a>
               </div>
 
@@ -170,3 +164,4 @@
   </div>
 </div>
 {% endblock %}
+

@@ -1,0 +1,27 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container">
+  <h1 class="title">My Sponsors</h1>
+  {% if sponsors %}
+    <table class="table is-fullwidth is-striped">
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Email</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for sponsor in sponsors %}
+        <tr>
+          <td>{{ sponsor.first_name }} {{ sponsor.last_name }}</td>
+          <td>{{ sponsor.email }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p>You are not part of any sponsor organizations.</p>
+  {% endif %}
+</div>
+{% endblock %}
