@@ -6042,3 +6042,46 @@ def admin_bulk_upload(request):
             pass
 
     return redirect('account_page')
+
+
+@login_required
+@db_login_required
+def driver_points_breakdown(request):
+    if request.session.get('account_type') != 'driver':
+        messages.error(request, "Access denied. Only drivers can view this page.")
+        return redirect('homepage')
+
+    driver_id = request.session.get('user_id')
+    cursor = connection.cursor()
+    try:
+        cursor.execute("""
+            SELECT s.organization AS sponsor_org,
+                   SUM(dpt.points) AS total_points
+            FROM driver_points_transactions dpt
+            JOIN users s ON s.userID = dpt.sponsor_user_id
+            WHERE dpt.driver_user_id = %s
+            GROUP BY s.organization
+            ORDER BY total_points DESC
+        """, [driver_id])
+        rows = cursor.fetchall()
+
+        breakdown = []
+        for row in rows:
+            breakdown.append({
+                'sponsor_org': row[0],
+                'total_points': row[1] or 0
+            })
+
+        context = {
+            'breakdown': breakdown
+        }
+        return render(request, 'driver_points_breakdown.html', context)
+
+    except Exception as e:
+        messages.error(request, f"Error loading points breakdown: {str(e)}")
+        print(f"Driver points breakdown error: {e}")
+        import traceback
+        traceback.print_exc()
+        return redirect('homepage')
+    finally:
+        cursor.close()
