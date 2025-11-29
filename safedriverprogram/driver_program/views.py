@@ -6044,44 +6044,46 @@ def admin_bulk_upload(request):
     return redirect('account_page')
 
 
-@login_required
 @db_login_required
 def driver_points_breakdown(request):
     if request.session.get('account_type') != 'driver':
-        messages.error(request, "Access denied. Only drivers can view this page.")
-        return redirect('homepage')
+        messages.error(request, "Access restricted to drivers.")
+        return redirect('login_page')
 
     driver_id = request.session.get('user_id')
     cursor = connection.cursor()
-    try:
+
+    # Step 1: Get sponsors this driver belongs to
+    cursor.execute("""
+        SELECT s.userID, s.organization
+        FROM sponsor_driver_relationships sr
+        JOIN users s ON s.userID = sr.sponsor_user_id
+        WHERE sr.driver_user_id = %s
+          AND sr.relationship_status = 'active';
+    """, [driver_id])
+
+    sponsor_rows = cursor.fetchall()
+
+    sponsors = []
+
+    for sponsor_id, sponsor_name in sponsor_rows:
+
+        # Step 2: Sum points given by this sponsor
         cursor.execute("""
-            SELECT s.organization AS sponsor_org,
-                   SUM(dpt.points) AS total_points
-            FROM driver_points_transactions dpt
-            JOIN users s ON s.userID = dpt.sponsor_user_id
-            WHERE dpt.driver_user_id = %s
-            GROUP BY s.organization
-            ORDER BY total_points DESC
-        """, [driver_id])
-        rows = cursor.fetchall()
+            SELECT COALESCE(SUM(points_amount), 0)
+            FROM wallet_transaction_history
+            WHERE driver_id = %s
+              AND sponsor_id = %s
+              AND transaction_type IN ('reward', 'bonus', 'sponsor_reward');
+        """, [driver_id, sponsor_id])
 
-        breakdown = []
-        for row in rows:
-            breakdown.append({
-                'sponsor_org': row[0],
-                'total_points': row[1] or 0
-            })
+        total_points = cursor.fetchone()[0]
 
-        context = {
-            'breakdown': breakdown
-        }
-        return render(request, 'driver_points_breakdown.html', context)
+        sponsors.append({
+            "sponsor_name": sponsor_name,
+            "total_points": total_points
+        })
 
-    except Exception as e:
-        messages.error(request, f"Error loading points breakdown: {str(e)}")
-        print(f"Driver points breakdown error: {e}")
-        import traceback
-        traceback.print_exc()
-        return redirect('homepage')
-    finally:
-        cursor.close()
+    return render(request, "driver/points_breakdown.html", {
+        "sponsors": sponsors
+    })
