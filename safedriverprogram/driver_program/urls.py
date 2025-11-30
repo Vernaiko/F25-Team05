@@ -130,5 +130,5 @@ urlpatterns = [
     path("driver/points-breakdown/", views.driver_points_breakdown, name="driver_points_breakdown"),
     path('approve_driver/<int:application_id>/', views.approve_driver_application, name='approve_driver'),
     path('driver/organizations/', views.driver_organizations, name='driver_organizations'),
-
+    path('apply-sponsor/', views.apply_sponsor, name='apply_sponsor'), 
 ]

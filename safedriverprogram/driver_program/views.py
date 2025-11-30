@@ -6123,18 +6123,51 @@ def driver_organizations(request):
     driver_id = request.session.get('user_id')
     
     with connection.cursor() as cursor:
+        # Get current active organizations
         cursor.execute("""
             SELECT s.userID, s.username, s.email, s.organization
             FROM sponsor_driver_relationships r
             JOIN users s ON r.sponsor_user_id = s.userID
-            WHERE r.driver_user_id = %s
+            WHERE r.driver_user_id = %s AND r.relationship_status = 'active'
         """, [driver_id])
         organizations = dictfetchall(cursor)
 
+        # Get all available sponsors that the driver has not applied to yet
+        cursor.execute("""
+            SELECT userID, username, organization
+            FROM users
+            WHERE account_type='sponsor'
+              AND userID NOT IN (
+                  SELECT sponsor_user_id
+                  FROM sponsor_driver_relationships
+                  WHERE driver_user_id=%s
+              )
+        """, [driver_id])
+        all_sponsors = dictfetchall(cursor)
+
     context = {
         'organizations': organizations,
+        'all_sponsors': all_sponsors,  # For the "Apply" dropdown
     }
+
     return render(request, 'driver_organizations.html', context)
+
+
+def apply_sponsor(request):
+    if request.method == 'POST':
+        driver_id = request.session.get('user_id')
+        sponsor_id = request.POST.get('sponsor_id')
+
+        with connection.cursor() as cursor:
+            cursor.execute("""
+                INSERT INTO sponsor_driver_relationships 
+                (sponsor_user_id, driver_user_id, application_id, relationship_status, relationship_start_date)
+                VALUES (%s, %s, NULL, 'pending', NOW())
+            """, [sponsor_id, driver_id])
+
+        messages.success(request, "Application submitted successfully!")
+        return redirect('driver_organizations')
+    return redirect('driver_organizations')
 
 
 # Helper function to return query results as dict

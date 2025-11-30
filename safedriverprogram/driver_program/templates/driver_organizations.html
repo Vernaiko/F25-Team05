@@ -2,7 +2,7 @@
 
 {% block content %}
 <div class="container mt-4">
-    <h1 style="font-weight: 700; color: #000;">My Organizations</h1> <!-- force bold -->
+    <h1 style="font-weight: 700; color: #000;">My Organizations</h1>
 
     {% if organizations %}
         <ul class="list-group mt-3">
@@ -14,6 +14,26 @@
         </ul>
     {% else %}
         <p class="text-muted mt-3">You are not part of any organization.</p>
+    {% endif %}
+
+    <hr class="my-4">
+
+    <h2>Apply to Join a Sponsor</h2>
+    <form method="post" action="{% url 'apply_sponsor' %}">
+        {% csrf_token %}
+        <div class="mb-3">
+            <label for="sponsor_id" class="form-label">Select Sponsor</label>
+            <select id="sponsor_id" name="sponsor_id" class="form-select" required>
+                {% for sponsor in all_sponsors %}
+                    <option value="{{ sponsor.userID }}">{{ sponsor.organization }} ({{ sponsor.username }})</option>
+                {% endfor %}
+            </select>
+        </div>
+        <button type="submit" class="btn btn-primary">Apply</button>
+    </form>
+
+    {% if message %}
+        <div class="alert alert-info mt-3">{{ message }}</div>
     {% endif %}
 </div>
 {% endblock %}
