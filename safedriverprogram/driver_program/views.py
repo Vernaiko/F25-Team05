@@ -20,7 +20,6 @@ from .forms import AddressForm
 
 
 
-
 # Database authentication helper functions
 class DatabaseUser:
     """Custom user authentication with MySQL database"""
@@ -2621,7 +2620,18 @@ def view_products(request):
 
     try:
         # Fetch products from the Fake Store API
-        response = requests.get('https://fakestoreapi.com/products')
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'application/json, text/plain, */*',
+            'Accept-Language': 'en-US,en;q=0.9',
+            'Referer': 'https://fakestoreapi.com/',
+            'Origin': 'https://fakestoreapi.com',
+            'Connection': 'keep-alive',
+        }
+        response = requests.get('https://fakestoreapi.com/products', headers=headers, timeout=10)
+        if response.status_code == 403:
+            # Log for server diagnostics; UI will show a friendly message below
+            print('Fake Store API returned 403 Forbidden on /products')
         response.raise_for_status()
         products = response.json()
 
@@ -2678,8 +2688,19 @@ def view_products(request):
         })
 
     except requests.RequestException as e:
+        # Provide a clearer message for 403 responses; fall back to generic otherwise
+        error_message = f"Failed to fetch products: {str(e)}"
+        try:
+            if isinstance(e, requests.HTTPError) and getattr(e.response, 'status_code', None) == 403:
+                error_message = (
+                    "The catalogue service returned 403 Forbidden. "
+                    "Please try again shortly."
+                )
+        except Exception:
+            pass
+
         return render(request, 'products.html', {
-            'error_message': f"Failed to fetch products: {str(e)}",
+            'error_message': error_message,
             'products': [],
             'search_query': search_query,
             'total_products': 0
@@ -6043,7 +6064,6 @@ def admin_bulk_upload(request):
             pass
 
     return redirect('account_page')
-
 
 @db_login_required
 def driver_points_breakdown(request):
