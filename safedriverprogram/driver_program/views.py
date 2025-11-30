@@ -2684,9 +2684,7 @@ def view_products(request):
         if products is None:
             print('API failed, attempting cache fallback')
             products = get_cached_products()
-            if products:
-                messages.warning(request, "Showing cached product catalog. Live data temporarily unavailable.")
-            else:
+            if not products:
                 # No cache available, raise error
                 if last_error:
                     raise last_error
@@ -4056,8 +4054,6 @@ def view_cart(request):
 
         if not cart_items:
             messages.info(request, "Your cart is empty.")
-        elif using_cache:
-            messages.warning(request, "Showing cached product information. Live data temporarily unavailable.")
 
         # 💡 Convert total to points
         points_total = int(total * 100)
@@ -4207,9 +4203,6 @@ def checkout_page(request):
                 print(f"Product {product_id} not found in API or cache")
 
         points_total = int(total * 100)
-
-        if using_cache:
-            messages.warning(request, "Showing cached product information. Live data temporarily unavailable.")
 
         # --- ✅ FIX: Fetch real live points balance ---
         cursor.execute("""
