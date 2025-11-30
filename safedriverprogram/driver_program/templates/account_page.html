@@ -25,7 +25,168 @@
             </div>
           {% endif %}
 
-          <!-- Personal Information -->
+          <!-- Administrator Dashboard -->
+          {% if user_info.account_type == 'admin' %}
+          <div class="box has-background-danger-light">
+            <h2 class="subtitle">
+              <span class="icon has-text-danger">
+                <i class="fas fa-user-shield"></i>
+              </span>
+              Administrator Dashboard
+            </h2>
+            <p class="mb-4">Manage system users and review account statuses.</p>
+
+            <!-- Summary of all account types -->
+            <div class="columns is-multiline mb-4">
+              <div class="column is-one-third">
+                <div class="box has-background-danger-light has-text-centered">
+                  <p class="heading">Admins</p>
+                  <p class="title">{{ total_admins|default:0 }}</p>
+                </div>
+              </div>
+              <div class="column is-one-third">
+                <div class="box has-background-success-light has-text-centered">
+                  <p class="heading">Drivers</p>
+                  <p class="title">{{ total_drivers|default:0 }}</p>
+                </div>
+              </div>
+              <div class="column is-one-third">
+                <div class="box has-background-primary-light has-text-centered">
+                  <p class="heading">Sponsors</p>
+                  <p class="title">{{ total_sponsors|default:0 }}</p>
+                </div>
+              </div>
+            </div>
+
+            <div class="field is-grouped is-grouped-multiline">
+              <div class="control">
+                <a href="{% url 'add_admin' %}" class="button is-danger">
+                  <span class="icon"><i class="fas fa-user-plus"></i></span>
+                  <span>Add Admin</span>
+                </a>
+              </div>
+              <div class="control">
+                <a href="{% url 'admin_manage_admins' %}" class="button is-danger">
+                  <span class="icon"><i class="fas fa-user-shield"></i></span>
+                  <span>Manage Admins</span>
+                </a>
+              </div>
+              <div class="control">
+                <a href="{% url 'admin_change_user_type' %}" class="button is-warning">
+                  <span class="icon"><i class="fas fa-exchange-alt"></i></span>
+                  <span>Change User Types</span>
+                </a>
+              </div>              
+              <div class="control">
+                <a href="{% url 'admin_driver_dashboard' %}" class="button is-success">
+                  <span class="icon"><i class="fas fa-car"></i></span>
+                  <span>Manage Drivers</span>
+                </a>
+                </div>
+                <div class="control">
+                <a href="{% url 'admin_view_audit_logs' %}" class="button is-light">
+                  <span class="icon"><i class="fas fa-clipboard-list"></i></span>
+                  <span>View Audit Log</span>
+                </a>
+              </div>
+              <div class="control">
+                <a href="{% url 'admin_sponsor_list' %}" class="button is-primary">
+                  <span class="icon"><i class="fas fa-user-tie"></i></span>
+                  <span>Manage Sponsors</span>
+                </a>
+              </div>
+              <div class="control">
+                <a href="{% url 'admin_wallet_history' %}" class="button is-info">
+                  <span class="icon"><i class="fas fa-wallet"></i></span>
+                  <span>Wallet History</span>
+                </a>
+              </div>
+
+              <div class="control">
+                <a href="{% url 'admin_failed_login_log' %}" class="button is-dark">
+                  <span class="icon"><i class="fas fa-shield-alt"></i></span>
+                  <span>Security Log</span>
+                </a>
+              </div>
+            </div>
+              <div class="control">
+                <a href="{% url 'view_sponsor_requests' %}" class="button is-warning">
+                  <span class="icon"><i class="fas fa-clipboard-check"></i></span>
+                  <span>Review Applications</span>
+                </a>
+              </div>
+              <div class="control">
+                <a href="{% url 'review_admin_status' %}" class="button is-danger">
+                  <span class="icon"><i class="fas fa-user-shield"></i></span>
+                  <span>Review Admins</span>
+                </a>
+              </div>
+              <div class="control">
+                <a href="{% url 'review_driver_status' %}" class="button is-success">
+                  <span class="icon"><i class="fas fa-car"></i></span>
+                  <span>Review Drivers</span>
+                </a>
+              </div>
+              <div class="control">
+                <a href="{% url 'review_sponsor_status' %}" class="button is-primary">
+                  <span class="icon"><i class="fas fa-user-tie"></i></span>
+                  <span>Review Sponsors</span>
+                </a>
+              </div>
+              <div class="control">
+                <a href="{% url 'review_all_accounts' %}" class="button is-warning is-small">
+                  <span class="icon"><i class="fas fa-users"></i></span>
+                  <span>Review All Accounts</span>
+                </a>
+              </div>
+            </div>
+
+            <!-- Admin Bulk Upload Section -->
+            <div class="box has-background-light" style="margin-top: 1.5rem;">
+              <h3 class="subtitle is-5">
+                <span class="icon has-text-danger"><i class="fas fa-upload"></i></span>
+                Bulk Upload Users
+              </h3>
+              <p class="content">Upload a pipe-delimited file to add Drivers (D) and Sponsors (S) to the system.</p>
+
+              <div class="notification is-light">
+                <p class="mb-2"><strong>Format:</strong> &lt;user type&gt; || First Name | Last Name | email</p>
+                <pre class="has-background-light p-3" style="white-space: pre-wrap;">
+D || Joe | Driver | joe@example.com
+S || Jill | Sponsor | jill@example.com
+                </pre>
+              </div>
+
+              <form method="post" action="{% url 'admin_bulk_upload' %}" enctype="multipart/form-data">
+                {% csrf_token %}
+                <div class="field is-grouped is-align-items-center">
+                  <div class="control">
+                    <div class="file has-name is-small">
+                      <label class="file-label">
+                        <input class="file-input" type="file" name="upload_file" accept=".txt,.csv,.dat">
+                        <span class="file-cta">
+                          <span class="file-icon">
+                            <i class="fas fa-upload"></i>
+                          </span>
+                          <span class="file-label">
+                            Choose a file…
+                          </span>
+                        </span>
+                      </label>
+                    </div>
+                  </div>
+                  <div class="control">
+                    <button type="submit" class="button is-danger is-small">
+                      Upload
+                    </button>
+                  </div>
+                </div>
+              </form>
+            </div>
+          </div>
+          {% endif %}
+
+          <!-- Personal Information Section -->
           <div class="box has-background-light">
             <h2 class="subtitle">
               <span class="icon has-text-primary">
@@ -130,6 +291,24 @@
                 </a>
               </div>
 
+            </div>
+          </div>
+          {% endif %}
+
+          <!-- Sponsor Dashboard -->
+          {% if user_info.account_type == 'sponsor' %}
+          <div class="box has-background-primary-light">
+            <h2 class="subtitle">
+              <span class="icon has-text-primary"><i class="fas fa-user-tie"></i></span>
+              Sponsor Dashboard
+            </h2>
+            <div class="field is-grouped">
+              <div class="control">
+                <a href="{% url 'sponsor_home' %}" class="button is-primary">
+                  <span class="icon"><i class="fas fa-home"></i></span>
+                  <span>Sponsor Home</span>
+                </a>
+              </div>
             </div>
           </div>
           {% endif %}
