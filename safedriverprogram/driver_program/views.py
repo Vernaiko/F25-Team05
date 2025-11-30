@@ -3986,6 +3986,8 @@ def review_driver_points(request):
 @db_login_required
 def view_cart(request):
     """Display the logged-in driver's shopping cart."""
+    from .product_cache import get_cached_products
+    
     # Check login and driver role
     if not request.session.get('is_authenticated'):
         messages.error(request, "Please log in to view your cart.")
@@ -4019,26 +4021,43 @@ def view_cart(request):
 
         cart_items = []
         total = 0.0
+        using_cache = False
 
-        # Get live product info from API
+        # Try to get cached products as fallback
+        cached_products = get_cached_products()
+        cached_by_id = {p['id']: p for p in cached_products} if cached_products else {}
+
+        # Get product info from API or cache
         for product_id, qty in rows:
+            product = None
             try:
                 response = requests.get(f"https://fakestoreapi.com/products/{product_id}", timeout=5)
                 if response.status_code == 200:
                     product = response.json()
-                    product['quantity'] = qty
-                    product['subtotal'] = product['price'] * qty
-                    total += product['subtotal']
-
-                    # 💡 Add points conversion for each item
-                    product['price_points'] = int(product['price'] * 100)
-                    product['subtotal_points'] = int(product['subtotal'] * 100)
-                    cart_items.append(product)
             except Exception as e:
-                print(f"Error fetching product {product_id}: {e}")
+                print(f"API error fetching product {product_id}: {e}")
+            
+            # Fall back to cache if API failed
+            if not product and product_id in cached_by_id:
+                product = cached_by_id[product_id]
+                using_cache = True
+            
+            if product:
+                product['quantity'] = qty
+                product['subtotal'] = product['price'] * qty
+                total += product['subtotal']
+
+                # 💡 Add points conversion for each item
+                product['price_points'] = int(product['price'] * 100)
+                product['subtotal_points'] = int(product['subtotal'] * 100)
+                cart_items.append(product)
+            else:
+                print(f"Product {product_id} not found in API or cache")
 
         if not cart_items:
             messages.info(request, "Your cart is empty.")
+        elif using_cache:
+            messages.warning(request, "Showing cached product information. Live data temporarily unavailable.")
 
         # 💡 Convert total to points
         points_total = int(total * 100)
@@ -4132,6 +4151,8 @@ def remove_from_cart(request, product_id):
 @db_login_required
 def checkout_page(request):
     """Display checkout summary and current points balance."""
+    from .product_cache import get_cached_products
+    
     if not request.session.get('is_authenticated'):
         messages.error(request, "Please log in to proceed to checkout.")
         return redirect('login_page')
@@ -4156,21 +4177,39 @@ def checkout_page(request):
 
         cart_items = []
         total = 0
+        using_cache = False
+
+        # Try to get cached products as fallback
+        cached_products = get_cached_products()
+        cached_by_id = {p['id']: p for p in cached_products} if cached_products else {}
 
         for product_id, qty in rows:
+            product = None
             try:
                 response = requests.get(f"https://fakestoreapi.com/products/{product_id}", timeout=5)
                 if response.status_code == 200:
                     product = response.json()
-                    product['quantity'] = qty
-                    product['subtotal'] = product['price'] * qty
-                    total += product['subtotal']
-                    product['subtotal_points'] = int(product['subtotal'] * 100)
-                    cart_items.append(product)
             except Exception as e:
-                print(f"Error loading product {product_id}: {e}")
+                print(f"API error loading product {product_id}: {e}")
+            
+            # Fall back to cache if API failed
+            if not product and product_id in cached_by_id:
+                product = cached_by_id[product_id]
+                using_cache = True
+            
+            if product:
+                product['quantity'] = qty
+                product['subtotal'] = product['price'] * qty
+                total += product['subtotal']
+                product['subtotal_points'] = int(product['subtotal'] * 100)
+                cart_items.append(product)
+            else:
+                print(f"Product {product_id} not found in API or cache")
 
         points_total = int(total * 100)
+
+        if using_cache:
+            messages.warning(request, "Showing cached product information. Live data temporarily unavailable.")
 
         # --- ✅ FIX: Fetch real live points balance ---
         cursor.execute("""
@@ -4272,6 +4311,8 @@ def confirm_checkout(request):
 @db_login_required
 def confirm_checkout(request):
     """Finalize checkout: deduct points and record purchase."""
+    from .product_cache import get_cached_products
+    
     if request.method != "POST":
         messages.error(request, "Invalid request method.")
         return redirect('checkout_page')
@@ -4293,11 +4334,25 @@ def confirm_checkout(request):
         total_points = 0
         products = []
 
-        # Calculate total from API
+        # Try to get cached products as fallback
+        cached_products = get_cached_products()
+        cached_by_id = {p['id']: p for p in cached_products} if cached_products else {}
+
+        # Calculate total from API or cache
         for product_id, qty in rows:
-            resp = requests.get(f"https://fakestoreapi.com/products/{product_id}", timeout=5)
-            if resp.status_code == 200:
-                product = resp.json()
+            product = None
+            try:
+                resp = requests.get(f"https://fakestoreapi.com/products/{product_id}", timeout=5)
+                if resp.status_code == 200:
+                    product = resp.json()
+            except Exception as e:
+                print(f"API error during checkout for product {product_id}: {e}")
+            
+            # Fall back to cache if API failed
+            if not product and product_id in cached_by_id:
+                product = cached_by_id[product_id]
+            
+            if product:
                 subtotal_pts = int(float(product['price']) * qty * 100)
                 total_points += subtotal_pts
                 products.append({
@@ -4306,6 +4361,9 @@ def confirm_checkout(request):
                     "quantity": qty,
                     "subtotal_pts": subtotal_pts
                 })
+            else:
+                messages.error(request, f"Could not load product {product_id}. Please try again later.")
+                return redirect('checkout_page')
 
         # --- Get current balance from driver_points_transactions ---
         cursor.execute("""
