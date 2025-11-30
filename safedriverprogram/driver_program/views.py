@@ -4411,6 +4411,52 @@ def confirm_checkout(request):
         except:
             pass
 
+@db_login_required
+def driver_order_history(request):
+    """Display all past orders for the logged-in driver."""
+    user_id = request.session.get('user_id')
+    if not user_id:
+        messages.error(request, "You must be logged in to view order history.")
+        return redirect('login_page')
+
+    cursor = connection.cursor()
+    try:
+        cursor.execute("""
+            SELECT id, total_points, created_at, details
+            FROM driver_orders
+            WHERE driver_user_id = %s
+            ORDER BY created_at DESC
+        """, [user_id])
+
+        rows = cursor.fetchall()
+
+        orders = []
+        for order_id, total_points, created_at, details in rows:
+            try:
+                # Convert stringified list → Python list of dicts
+                import ast
+                items = ast.literal_eval(details)
+            except:
+                items = []
+
+            orders.append({
+                "id": order_id,
+                "total_points": total_points,
+                "created_at": created_at,
+                "items": items,
+            })
+
+        return render(request, "driver_order_history.html", {"orders": orders})
+
+    except Exception as e:
+        messages.error(request, f"Unable to load order history: {e}")
+        return redirect("homepage")
+
+    finally:
+        try:
+            cursor.close()
+        except:
+            pass
 
 @db_login_required
 def admin_change_user_type(request):
