@@ -240,43 +240,6 @@ S || Jill | Sponsor | jill@example.com
             </div>
           </div>
 
-          <!-- Sponsor Dashboard -->
-          {% if user_info.account_type == 'sponsor' %}
-          <div class="box has-background-primary-light">
-            <h2 class="subtitle"><i class="fas fa-user-tie has-text-primary"></i> Sponsor Dashboard</h2>
-            <p class="mb-4">Manage your sponsored drivers and review applications.</p>
-            <div class="field is-grouped is-grouped-multiline">
-              <div class="control"><a href="{% url 'sponsor_home' %}" class="button is-primary"><i class="fas fa-home"></i>&nbsp;Sponsor Home</a></div>
-              <div class="control"><a href="{% url 'sponsor_manage_applications' %}" class="button is-info"><i class="fas fa-clipboard-list"></i>&nbsp;Manage Applications</a></div>
-              <div class="control"><a href="{% url 'sponsor_drivers' %}" class="button is-success"><i class="fas fa-users"></i>&nbsp;My Drivers</a></div>
-              <div class="control"><a href="{% url 'sponsor_wallet_history' %}" class="button is-warning"><i class="fas fa-wallet"></i>&nbsp;Driver Wallet History</a></div>
-              <div class="control"><a href="{% url 'sponsor_profile' %}" class="button is-light"><i class="fas fa-user-cog"></i>&nbsp;Sponsor Profile</a></div>
-              <div class="control"><a href="{% url 'sponsor_organization_management' %}" class="button is-link"><i class="fas fa-building"></i>&nbsp;Manage Organization</a></div>
-              <div class="control">
-              </div>
-                            <div class="control">
-                <a href="{% url 'sponsor_create_user' %}" class="button is-primary">
-                  <span class="icon"><i class="fas fa-user-plus"></i></span>
-                  <span>Create Organization Sponsor Users</span>
-                </a>
-              </div>
-              <div class="control">
-                <a href="{% url 'sponsor_manage_applications' %}" class="button is-info">
-                  <span class="icon">
-                    <i class="fas fa-clipboard-list"></i>
-                  </span>
-                  <span>Manage Applications</span>
-                </a>
-              </div>
-                <a href="{% url 'review_driver_points' %}" class="button is-warning">
-                  <span class="icon"><i class="fas fa-file-alt"></i></span>
-                  <span>Generate Driver Point History Report</span>
-                </a>
-              </div>
-            </div>
-          </div>
-          {% endif %}
-          
           <!-- Driver Dashboard -->
           {% if user_info.account_type == 'driver' %}
           <div class="box has-background-success-light">
@@ -284,9 +247,10 @@ S || Jill | Sponsor | jill@example.com
               <span class="icon has-text-success"><i class="fas fa-car"></i></span>
               Driver Dashboard
             </h2>
-            <p class="mb-4">Apply for sponsors, manage your driving profile, and view your order history.</p>
+            <p class="mb-4">Apply for sponsors, manage your profile, and view your history.</p>
             
             <div class="field is-grouped is-grouped-multiline">
+
               <div class="control">
                 <a href="{% url 'sponsor_application' %}" class="button is-success">
                   <i class="fas fa-plus-circle"></i>&nbsp;Apply for Sponsor
@@ -298,18 +262,51 @@ S || Jill | Sponsor | jill@example.com
                   <i class="fas fa-exchange-alt"></i>&nbsp;Request Sponsor Change
                 </a>
               </div>
-              
+
               <div class="control">
                 <a href="{% url 'view_sponsor_requests' %}" class="button is-info">
                   <i class="fas fa-history"></i>&nbsp;View My Applications
                 </a>
               </div>
 
-              <!-- ✅ NEW BUTTON: View Order History -->
               <div class="control">
                 <a href="{% url 'driver_order_history' %}" class="button is-primary">
                   <span class="icon"><i class="fas fa-receipt"></i></span>
                   <span>View Order History</span>
+                </a>
+              </div>
+
+              <div class="control">
+                <a href="{% url 'driver_points_breakdown' %}" class="button is-danger">
+                  <span class="icon"><i class="fas fa-chart-line"></i></span>
+                  <span>View Points Breakdown</span>
+                </a>
+              </div>
+
+              <!-- NEW BUTTON: View Organizations -->
+              <div class="control">
+                <a href="{% url 'driver_organizations' %}" class="button is-info">
+                  <span class="icon"><i class="fas fa-building"></i></span>
+                  <span>View Organizations</span>
+                </a>
+              </div>
+
+            </div>
+          </div>
+          {% endif %}
+
+          <!-- Sponsor Dashboard -->
+          {% if user_info.account_type == 'sponsor' %}
+          <div class="box has-background-primary-light">
+            <h2 class="subtitle">
+              <span class="icon has-text-primary"><i class="fas fa-user-tie"></i></span>
+              Sponsor Dashboard
+            </h2>
+            <div class="field is-grouped">
+              <div class="control">
+                <a href="{% url 'sponsor_home' %}" class="button is-primary">
+                  <span class="icon"><i class="fas fa-home"></i></span>
+                  <span>Sponsor Home</span>
                 </a>
               </div>
             </div>
@@ -334,6 +331,7 @@ S || Jill | Sponsor | jill@example.com
               <div class="control"><a href="{% url 'homepage' %}" class="button is-primary"><i class="fas fa-home"></i>&nbsp;Back to Home</a></div>
             </div>
           </div>
+
         </div>
         {% else %}
         <div class="notification is-warning">
@@ -345,3 +343,4 @@ S || Jill | Sponsor | jill@example.com
   </div>
 </div>
 {% endblock %}
+

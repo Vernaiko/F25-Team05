@@ -1,35 +1,23 @@
-{% extends 'base.html' %}
-{% block content %}
-<div class="container mt-4">
-    <h2>Order History</h2>
+<h2>Your Points Breakdown</h2>
 
-    {% if orders %}
-    <table class="table table-striped mt-3">
-        <thead>
-            <tr>
-                <th>Order ID</th>
-                <th>Product</th>
-                <th>Date</th>
-                <th>Points Used</th>
-                <th>Status</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for order in orders %}
-            <tr>
-                <td>{{ order.order_id }}</td>
-                <td>{{ order.product_name }}</td>
-                <td>{{ order.order_date }}</td>
-                <td>{{ order.points_used }}</td>
-                <td>{{ order.status }}</td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-    {% else %}
-    <p>No order history available.</p>
-    {% endif %}
+<table class="table">
+    <thead>
+        <tr>
+            <th>Sponsor Organization</th>
+            <th>Total Points Given</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for s in sponsors %}
+        <tr>
+            <td>{{ s.sponsor_name }}</td>
+            <td>{{ s.total_points }}</td>
+        </tr>
+        {% empty %}
+        <tr>
+            <td colspan="2">You do not belong to any sponsor organizations yet.</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
 
-    <a href="{% url 'driver_home' %}" class="btn btn-secondary mt-3">Back to Home</a>
-</div>
-{% endblock %}
