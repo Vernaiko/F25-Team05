@@ -2472,13 +2472,43 @@ def adjust_catalogue(request):
 
         # GET -> build form: preferred categories + available categories from API
         try:
-            resp = requests.get('https://fakestoreapi.com/products/categories', timeout=5)
-            resp.raise_for_status()
-            all_categories = resp.json()
+            import time
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept': 'application/json, text/plain, */*',
+                'Accept-Language': 'en-US,en;q=0.9',
+                'Connection': 'keep-alive',
+            }
+            
+            # Retry logic for categories
+            all_categories = None
+            for attempt in range(2):
+                try:
+                    session = requests.Session()
+                    session.headers.update(headers)
+                    resp = session.get('https://fakestoreapi.com/products/categories', timeout=10)
+                    if resp.status_code == 200:
+                        all_categories = resp.json()
+                        break
+                    elif attempt == 0:
+                        time.sleep(1)
+                except Exception:
+                    if attempt == 0:
+                        time.sleep(1)
+            
+            if not all_categories:
+                raise Exception("API unavailable")
+                
         except Exception:
             # Fallback: fetch products and derive categories
             try:
-                resp = requests.get('https://fakestoreapi.com/products', timeout=5)
+                headers = {
+                    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                    'Accept': 'application/json',
+                }
+                session = requests.Session()
+                session.headers.update(headers)
+                resp = session.get('https://fakestoreapi.com/products', timeout=10)
                 resp.raise_for_status()
                 products = resp.json()
                 all_categories = sorted(list({p.get('category') for p in products if p.get('category')}))
@@ -2619,21 +2649,63 @@ def view_products(request):
     search_query = request.GET.get('search', '').strip()
 
     try:
-        # Fetch products from the Fake Store API
+        # Fetch products from the Fake Store API with retry logic
+        import time
+        
         headers = {
             'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
             'Accept': 'application/json, text/plain, */*',
             'Accept-Language': 'en-US,en;q=0.9',
             'Referer': 'https://fakestoreapi.com/',
-            'Origin': 'https://fakestoreapi.com',
             'Connection': 'keep-alive',
+            'Cache-Control': 'no-cache',
+            'DNT': '1',
         }
-        response = requests.get('https://fakestoreapi.com/products', headers=headers, timeout=10)
-        if response.status_code == 403:
-            # Log for server diagnostics; UI will show a friendly message below
-            print('Fake Store API returned 403 Forbidden on /products')
-        response.raise_for_status()
-        products = response.json()
+        
+        # Try multiple strategies with retry and backoff
+        max_retries = 3
+        products = None
+        last_error = None
+        
+        for attempt in range(max_retries):
+            try:
+                # Use a session for better connection handling
+                session = requests.Session()
+                session.headers.update(headers)
+                
+                # Try without Origin header first (some CDNs block cross-origin)
+                if attempt > 0:
+                    session.headers.pop('Origin', None)
+                    session.headers.pop('Referer', None)
+                
+                response = session.get('https://fakestoreapi.com/products', timeout=15)
+                
+                if response.status_code == 403:
+                    print(f'Fake Store API returned 403 on attempt {attempt + 1}')
+                    if attempt < max_retries - 1:
+                        # Exponential backoff: wait 1s, 2s, 4s
+                        wait_time = 2 ** attempt
+                        time.sleep(wait_time)
+                        continue
+                
+                response.raise_for_status()
+                products = response.json()
+                break  # Success!
+                
+            except requests.RequestException as e:
+                last_error = e
+                if attempt < max_retries - 1:
+                    time.sleep(2 ** attempt)
+                continue
+        
+        # If all retries failed, raise the last error
+        if products is None:
+            if last_error:
+                raise last_error
+            else:
+                raise requests.RequestException('Failed to fetch products after retries')
+        
+        # Products successfully fetched
 
         # Sort products if requested
         if sort_order == 'price_asc':
