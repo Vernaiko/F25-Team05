@@ -2472,6 +2472,7 @@ def adjust_catalogue(request):
 
         # GET -> build form: preferred categories + available categories from API
         try:
+            from .product_cache import get_cached_categories
             import time
             
             # Retry logic for categories - use minimal headers per API spec
@@ -2496,17 +2497,17 @@ def adjust_catalogue(request):
                         time.sleep(1)
             
             if not all_categories:
-                raise Exception("API unavailable")
+                # Try cache before giving up
+                all_categories = get_cached_categories()
+                if not all_categories:
+                    raise Exception("API unavailable")
                 
         except Exception:
-            # Fallback: fetch products and derive categories
-            try:
-                resp = requests.get('https://fakestoreapi.com/products', timeout=10)
-                resp.raise_for_status()
-                products = resp.json()
-                all_categories = sorted(list({p.get('category') for p in products if p.get('category')}))
-            except Exception:
-                all_categories = []
+            # Fallback: try to derive from cached products
+            all_categories = get_cached_categories()
+            if not all_categories:
+                # Ultimate fallback: hardcoded common categories
+                all_categories = ['electronics', 'jewelery', "men's clothing", "women's clothing"]
 
         # Load current selection
         cursor.execute("SELECT categories FROM sponsor_catalogue_preferences WHERE sponsor_user_id = %s", [sponsor_id])
@@ -2638,6 +2639,8 @@ def review_driver_status(request):
 
 def view_products(request):
     """Display products from Fake Store API with optional sorting, search, and point conversion."""
+    from .product_cache import get_cached_products, save_products_to_cache
+    
     sort_order = request.GET.get('sort', '')
     search_query = request.GET.get('search', '').strip()
 
@@ -2677,14 +2680,23 @@ def view_products(request):
                     time.sleep(1)
                 continue
         
-        # If all retries failed, raise the last error
+        # If all retries failed, try cache fallback
         if products is None:
-            if last_error:
-                raise last_error
+            print('API failed, attempting cache fallback')
+            products = get_cached_products()
+            if products:
+                messages.warning(request, "Showing cached product catalog. Live data temporarily unavailable.")
             else:
-                raise requests.RequestException('Failed to fetch products after retries')
+                # No cache available, raise error
+                if last_error:
+                    raise last_error
+                else:
+                    raise requests.RequestException('Failed to fetch products after retries')
+        else:
+            # Save successful fetch to cache
+            save_products_to_cache(products)
         
-        # Products successfully fetched
+        # Products successfully fetched (or loaded from cache)
 
         # Sort products if requested
         if sort_order == 'price_asc':
