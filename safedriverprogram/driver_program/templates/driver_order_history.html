@@ -1,44 +1,23 @@
-{% extends 'base.html' %}
-{% load humanize %}
-{% block content %}
-<div class="container mt-4">
-    <h2>Order History</h2>
+<h2>Your Points Breakdown</h2>
 
-    {% if orders %}
-    <table class="table table-striped mt-3">
-        <thead>
-            <tr>
-                <th>Order ID</th>
-                <th>Products</th>
-                <th>Date</th>
-                <th>Points Used</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for order in orders %}
-            <tr>
-                <td>{{ order.id }}</td>
+<table class="table">
+    <thead>
+        <tr>
+            <th>Sponsor Organization</th>
+            <th>Total Points Given</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for s in sponsors %}
+        <tr>
+            <td>{{ s.sponsor_name }}</td>
+            <td>{{ s.total_points }}</td>
+        </tr>
+        {% empty %}
+        <tr>
+            <td colspan="2">You do not belong to any sponsor organizations yet.</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
 
-                <!-- Display product names in a list -->
-                <td>
-                    <ul class="mb-0">
-                        {% for item in order.items %}
-                        <li>
-                            {{ item.title }} (x{{ item.quantity }})
-                        </li>
-                        {% endfor %}
-                    </ul>
-                </td>
-
-                <td>{{ order.created_at }}</td>
-                <td>{{ order.total_points|intcomma }}</td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-
-    {% else %}
-    <p>No order history available.</p>
-    {% endif %}
-</div>
-{% endblock %}

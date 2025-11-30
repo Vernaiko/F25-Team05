@@ -82,8 +82,8 @@ urlpatterns = [
     path('sponsor/application/<int:application_id>/', views.sponsor_view_application, name='sponsor_view_application'),
     path('sponsor-application-action/<int:application_id>/', views.sponsor_application_action, name='sponsor_application_action'),
     path('sponsor/drivers/<int:driver_id>/delete/', views.sponsor_delete_driver, name='sponsor_delete_driver'),
-   path('sponsor/organization/', views.sponsor_organization_management, name='sponsor_organization_management'),
-   path('sponsor/drivers/<int:driver_id>/notes/add/', views.sponsor_add_driver_note, name='sponsor_add_driver_note'), #Testing
+    path('sponsor/organization/', views.sponsor_organization_management, name='sponsor_organization_management'),
+    path('sponsor/drivers/<int:driver_id>/notes/add/', views.sponsor_add_driver_note, name='sponsor_add_driver_note'), #Testing
 
 
     # Wallet history pages
@@ -127,4 +127,8 @@ urlpatterns = [
     path('sponsor/driver-point-report/', views.generate_driver_point_report, name='generate_driver_point_report'),
     path('driver/order-history/', views.driver_order_history, name='driver_order_history'),
     path('admin/review-all-accounts/', views.review_all_accounts, name='review_all_accounts'),
+    path("driver/points-breakdown/", views.driver_points_breakdown, name="driver_points_breakdown"),
+    path('approve_driver/<int:application_id>/', views.approve_driver_application, name='approve_driver'),
+    path('driver/organizations/', views.driver_organizations, name='driver_organizations'),
+    path('apply-sponsor/', views.apply_sponsor, name='apply_sponsor'), 
 ]

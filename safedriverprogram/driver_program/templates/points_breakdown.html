@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>Points Breakdown by Sponsor</h2>
+
+<table>
+    <tr>
+        <th>Sponsor</th>
+        <th>Total Points Given</th>
+    </tr>
+
+    {% for s in sponsors %}
+    <tr>
+        <td>{{ s.sponsor_name }}</td>
+        <td>{{ s.total_points }}</td>
+    </tr>
+    {% endfor %}
+</table>
+{% endblock %}

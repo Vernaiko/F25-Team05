@@ -1,239 +1,205 @@
 {% extends 'base.html' %}
 
-{% block title %}Manage Drivers - Safe Driver Program{% endblock %}
+{% block title %}Account - Safe Driver Program{% endblock %}
 
 {% block content %}
 <div class="container">
-  <div class="box">
-    <h1 class="title has-text-centered">
-      <span class="icon is-large has-text-primary">
-        <i class="fas fa-users fa-2x"></i>
-      </span>
-      <br>
-      My Sponsored Drivers
-    </h1>
+  <div class="columns is-centered">
+    <div class="column is-two-thirds">
+      <div class="box">
+        <h1 class="title has-text-centered">
+          <span class="icon is-large">
+            <i class="fas fa-user-circle fa-2x"></i>
+          </span>
+          <br>
+          My Account
+        </h1>
+        
+        {% if user_info %}
+        <div class="content">
+          {% if user_info.avatar_image %}
+            <div class="has-text-centered" style="margin-bottom:1rem;">
+              <figure class="image is-128x128 is-inline-block">
+                <img src="{{ MEDIA_URL }}{{ user_info.avatar_image }}" alt="Avatar" style="width:128px;height:128px;object-fit:cover;border-radius:50%;">
+              </figure>
+            </div>
+          {% endif %}
 
-    <!-- Statistics -->
-    <div class="level">
-      <div class="level-item has-text-centered">
-        <div>
-          <p class="heading">Total Drivers</p>
-          <p class="title">{{ total_drivers }}</p>
-        </div>
-      </div>
-      <div class="level-item has-text-centered">
-        <div>
-          <p class="heading">Active Relationships</p>
-          <p class="title">{{ active_drivers }}</p>
-        </div>
-      </div>
-      <div class="level-item has-text-centered">
-        <div>
-          <p class="heading">Pending Applications</p>
-          <p class="title">{{ pending_applications|length }}</p>
-        </div>
-      </div>
-      <div class="level-item has-text-centered">
-        <div>
-          <p class="heading">Total Outstanding Points</p>
-          <p class="title has-text-success">{{ total_outstanding_points|default:0 }}</p>
-        </div>
-      </div>
-    </div>
-
-    <!-- Quick Action Buttons -->
-    <div class="buttons is-centered mb-4">
-      <a href="{% url 'sponsor_wallet_history' %}" class="button is-success">
-        <span class="icon"><i class="fas fa-wallet"></i></span>
-        <span>View Wallet History</span>
-      </a>
-      <a href="{% url 'sponsor_home' %}" class="button is-light">
-        <span class="icon"><i class="fas fa-home"></i></span>
-        <span>Back to Dashboard</span>
-      </a>
-    </div>
-
-    <!-- Single points form (select driver then record points) -->
-    <div class="has-text-centered" style="margin-top:1rem; margin-bottom:1rem;">
-      <form method="post" action="{% url 'sponsor_adjust_points' %}" style="display:inline-block; min-width:320px; max-width:720px; width:100%;">
-        {% csrf_token %}
-        <div class="box" style="padding:1rem;">
-          <div class="field">
-            <label class="label">Select Driver</label>
-            <div class="control">
-              <div class="select is-fullwidth">
-                <select name="driver_user_id" required>
-                  <option value="" disabled selected>Choose a driver...</option>
-                  {% for driver in sponsored_drivers %}
-                  <option value="{{ driver.user_id }}">{{ driver.first_name }} {{ driver.last_name }} (@{{ driver.username }})</option>
-                  {% endfor %}
-                </select>
+          <!-- Personal Information -->
+          <div class="box has-background-light">
+            <h2 class="subtitle">
+              <span class="icon has-text-primary">
+                <i class="fas fa-user"></i>
+              </span>
+              Personal Information
+            </h2>
+            
+            <div class="columns">
+              <div class="column">
+                <table class="table is-fullwidth">
+                  <tbody>
+                    <tr><td><strong>User ID:</strong></td><td>{{ user_info.userID }}</td></tr>
+                    <tr><td><strong>Username:</strong></td><td>{{ user_info.username|default:"Not set" }}</td></tr>
+                    <tr><td><strong>Email:</strong></td><td>{{ user_info.email|default:"Not set" }}</td></tr>
+                    <tr><td><strong>First Name:</strong></td><td>{{ user_info.first_name|default:"Not set" }}</td></tr>
+                    <tr><td><strong>Last Name:</strong></td><td>{{ user_info.last_name|default:"Not set" }}</td></tr>
+                    <tr><td><strong>Phone Number:</strong></td><td>{{ user_info.phone_number|default:"Not set" }}</td></tr>
+                    <tr><td><strong>Address:</strong></td><td>{{ user_info.address|default:"Not set" }}</td></tr>
+                    <tr>
+                      <td><strong>Delivery Address:</strong></td>
+                      <td>
+                        {% if user_info.delivery_address %}
+                          {{ user_info.delivery_address }}
+                        {% else %}
+                          <span class="tag is-warning">Not set</span>
+                          <br>
+                          <a href="{% url 'manage_addresses' %}" class="button is-info is-small" style="margin-top: 0.5rem;">
+                            <span class="icon"><i class="fas fa-map-marker-alt"></i></span>
+                            <span>Manage Delivery Addresses</span>
+                          </a>
+                        {% endif %}
+                      </td>
+                    </tr>
+                    <tr>
+                      <td><strong>Account Type:</strong></td>
+                      <td>
+                        {% if user_info.account_type == 'sponsor' %}
+                          <span class="tag is-primary is-large"><i class="fas fa-user-tie"></i>&nbsp;Sponsor</span>
+                        {% elif user_info.account_type == 'driver' %}
+                          <span class="tag is-success is-large"><i class="fas fa-car"></i>&nbsp;Driver</span>
+                        {% elif user_info.account_type == 'admin' %}
+                          <span class="tag is-danger is-large"><i class="fas fa-user-shield"></i>&nbsp;Administrator</span>
+                        {% endif %}
+                      </td>
+                    </tr>
+                    <tr><td><strong>Member Since:</strong></td><td>{{ user_info.created_at|date:"F d, Y"|default:"Unknown" }}</td></tr>
+                  </tbody>
+                </table>
               </div>
             </div>
           </div>
 
-          <div class="field has-addons" style="margin-top:0.75rem; gap:0.5rem;">
-            <div class="control">
-              <input class="input" type="number" name="points" placeholder="Points (e.g. 10 or -5)" required>
-            </div>
-            <div class="control is-expanded">
-              <input class="input" type="text" name="message" placeholder="Reason or message (optional)">
-            </div>
-            <div class="control">
-              <button class="button is-primary" type="submit">Record</button>
+          <!-- Sponsor Dashboard -->
+          {% if user_info.account_type == 'sponsor' %}
+          <div class="box has-background-light" style="margin-top: 2rem;">
+            <h2 class="subtitle is-4 has-text-centered">
+              <span class="icon has-text-primary"><i class="fas fa-user-tie"></i></span>
+              Pending Driver Applications
+            </h2>
+
+            {% if pending_driver_list %}
+            <table class="table is-fullwidth is-striped is-hoverable">
+              <thead>
+                <tr>
+                  <th>Driver Name</th>
+                  <th>Email</th>
+                  <th>Application Date</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for driver in pending_driver_list %}
+                <tr>
+                  <td>{{ driver.first_name }} {{ driver.last_name }}</td>
+                  <td>{{ driver.email }}</td>
+                  <td>{{ driver.application_date }}</td>
+                  <td>
+                    <a href="{% url 'approve_driver' driver.application_id %}" class="button is-success is-small">
+                      Approve
+                    </a>
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+            {% else %}
+            <p class="has-text-centered">No pending driver applications at this time.</p>
+            {% endif %}
+          </div>
+          {% endif %}
+          
+          <!-- ========================= -->
+          <!-- 🚗 DRIVER DASHBOARD -->
+          <!-- ========================= -->
+          {% if user_info.account_type == 'driver' %}
+          <div class="box has-background-success-light">
+            <h2 class="subtitle">
+              <span class="icon has-text-success"><i class="fas fa-car"></i></span>
+              Driver Dashboard
+            </h2>
+            <p class="mb-4">Apply for sponsors, manage your profile, and view your history.</p>
+            
+            <div class="field is-grouped is-grouped-multiline">
+
+              <div class="control">
+                <a href="{% url 'sponsor_application' %}" class="button is-success">
+                  <i class="fas fa-plus-circle"></i>&nbsp;Apply for Sponsor
+                </a>
+              </div>
+              
+              <div class="control">
+                <a href="{% url 'sponsor_change_request' %}" class="button is-warning">
+                  <i class="fas fa-exchange-alt"></i>&nbsp;Request Sponsor Change
+                </a>
+              </div>
+
+              <div class="control">
+                <a href="{% url 'view_sponsor_requests' %}" class="button is-info">
+                  <i class="fas fa-history"></i>&nbsp;View My Applications
+                </a>
+              </div>
+
+              <div class="control">
+                <a href="{% url 'driver_order_history' %}" class="button is-primary">
+                  <span class="icon"><i class="fas fa-receipt"></i></span>
+                  <span>View Order History</span>
+                </a>
+              </div>
+
+              <div class="control">
+                <a href="{% url 'driver_points_breakdown' %}" class="button is-danger">
+                  <span class="icon"><i class="fas fa-chart-line"></i></span>
+                  <span>View Points Breakdown</span>
+                </a>
+              </div>
+
+              <div class="control">
+                <a href="{% url 'driver_organizations' %}" class="button is-info">
+                  <span class="icon"><i class="fas fa-building"></i></span>
+                  <span>View Organizations</span>
+                </a>
+              </div>
+
             </div>
           </div>
+          {% endif %}
+          
+          <!-- Account Management -->
+          <div class="box">
+            <h2 class="subtitle"><i class="fas fa-cogs has-text-warning"></i> Account Management</h2>
+            <div class="field is-grouped is-grouped-multiline">
+              <div class="control"><a href="{% url 'edit_account' %}" class="button is-info"><i class="fas fa-edit"></i>&nbsp;Edit Profile</a></div>
+              <div class="control"><a href="{% url 'change_password' %}" class="button is-warning"><i class="fas fa-key"></i>&nbsp;Change Password</a></div>
+              <div class="control"><a href="{% url 'manage_addresses' %}" class="button is-light"><i class="fas fa-map-marker-alt"></i>&nbsp;Manage Addresses</a></div>
+            </div>
+          </div>
+          
+          <!-- System Information -->
+          <div class="box has-background-grey-lighter">
+            <h2 class="subtitle"><i class="fas fa-info has-text-grey"></i> System Information</h2>
+            <div class="field is-grouped">
+              <div class="control"><a href="{% url 'database_status' %}" class="button is-light"><i class="fas fa-database"></i>&nbsp;Database Status</a></div>
+              <div class="control"><a href="{% url 'homepage' %}" class="button is-primary"><i class="fas fa-home"></i>&nbsp;Back to Home</a></div>
+            </div>
+          </div>
+
         </div>
-      </form>
-    </div>
-
-    {% if sponsored_drivers %}
-    <h2 class="subtitle">Current Drivers</h2>
-    <div class="table-container">
-      <table class="table is-fullwidth is-striped">
-        <thead>
-          <tr>
-            <th>Driver</th>
-            <th>Contact</th>
-            <th>Status</th>
-            <th>Start Date</th>
-            <th>Streak</th>
-            <th>Trips</th>
-            <th>Points</th>
-            <th>Recent Transactions</th>
-            <th style="width: 1%; white-space: nowrap;">Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for driver in sponsored_drivers %}
-          <tr>
-            <td>
-              <strong>{{ driver.first_name }} {{ driver.last_name }}</strong>
-              <br>
-              <small>@{{ driver.username }}</small>
-            </td>
-            <td>{{ driver.email }}</td>
-            <td>
-              <span class="tag {% if driver.relationship_status == 'active' %}is-success{% else %}is-warning{% endif %}">
-                {{ driver.relationship_status|capfirst }}
-              </span>
-            </td>
-            <td>{{ driver.relationship_start_date|date:"M d, Y" }}</td>
-            <td>{{ driver.safe_driving_streak_days }} days</td>
-            <td>{{ driver.total_trips_logged }}</td>
-            <td><span class="tag is-info">{{ driver.points|default:0 }}</span></td>
-            <td>
-              {% if driver.transactions %}
-              <ul style="margin:0; padding-left:1rem;">
-                {% for t in driver.transactions %}
-                <li style="margin-bottom:0.25rem;">
-                  {% if t.points > 0 %}
-                    <span class="tag is-success">+{{ t.points }}</span>
-                  {% else %}
-                    <span class="tag is-danger">{{ t.points }}</span>
-                  {% endif %}
-                  &nbsp;{{ t.message|default:"(no message)" }}
-                  <br>
-                  <small class="has-text-grey">{{ t.created_at|date:"M d, Y H:i" }}</small>
-                </li>
-                {% endfor %}
-              </ul>
-              {% else %}
-                <small class="has-text-grey">No recent transactions</small>
-              {% endif %}
-            </td>
-            <td>
-              <!-- Add Note (inline, collapsible) -->
-              <details style="margin-bottom: 0.4rem;">
-                <summary class="button is-warning is-light is-small">
-                  <span class="icon"><i class="fas fa-sticky-note"></i></span>
-                  <span>Add Note</span>
-                </summary>
-                <div class="box" style="margin-top:0.5rem; padding:0.75rem;">
-                  <form method="post" action="{% url 'sponsor_add_driver_note' driver.user_id %}">
-                    {% csrf_token %}
-                    <div class="field">
-                      <div class="control">
-                        <textarea class="textarea" name="note_text" rows="3" maxlength="4000" placeholder="Write a private note about this driver..." required></textarea>
-                      </div>
-                    </div>
-                    <div class="field is-grouped is-justify-content-flex-end">
-                      <div class="control">
-                        <button type="submit" class="button is-warning is-small">
-                          <span class="icon"><i class="fas fa-save"></i></span>
-                          <span>Save</span>
-                        </button>
-                      </div>
-                    </div>
-                  </form>
-                </div>
-              </details>
-
-              <!-- ✅ Show recent notes right here -->
-              {% if driver.notes %}
-                <div class="content" style="margin-top:0.5rem;">
-                  <p class="has-text-weight-semibold" style="margin-bottom:0.25rem;">Recent Notes</p>
-                  <ul style="margin:0; padding-left:1rem;">
-                    {% for n in driver.notes %}
-                      <li style="margin-bottom:0.25rem;">
-                        {{ n.note_text }}
-                        <br>
-                        <small class="has-text-grey">{{ n.created_at|date:"M d, Y H:i" }}</small>
-                      </li>
-                    {% endfor %}
-                  </ul>
-                </div>
-              {% endif %}
-
-              <!-- Existing delete button -->
-              <form method="post" action="{% url 'sponsor_delete_driver' driver.user_id %}" onsubmit="return confirm('Remove this driver from your organization?');">
-                {% csrf_token %}
-                <button class="button is-danger is-light is-small" type="submit" title="Remove driver">
-                  <span class="icon"><i class="fas fa-trash"></i></span>
-                  <span>Delete</span>
-                </button>
-              </form>
-            </td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
-    {% else %}
-    <div class="notification is-info">
-      <span class="icon">
-        <i class="fas fa-info-circle"></i>
-      </span>
-      You don't have any sponsored drivers yet.
-    </div>
-    {% endif %}
-
-    <!-- Summary Section -->
-    {% if sponsored_drivers %}
-    <div class="box has-background-light" style="margin-top: 2rem; padding: 1.5rem;">
-      <div class="has-text-centered">
-        <h3 class="title is-5" style="margin-bottom: 1rem;">
-          <span class="icon has-text-success">
-            <i class="fas fa-coins"></i>
-          </span>
-          Points Summary
-        </h3>
-        <div class="content">
-          <p class="heading" style="margin-bottom: 0.5rem;">Total Outstanding Points</p>
-          <p class="title is-2 has-text-success" style="margin-bottom: 0.5rem;">{{ total_outstanding_points|default:0 }}</p>
-          <p class="subtitle is-6 has-text-grey">Across all {{ total_drivers }} driver{{ total_drivers|pluralize }}</p>
+        {% else %}
+        <div class="notification is-warning">
+          <p>Please log in to view your account information.</p>
         </div>
+        {% endif %}
       </div>
-    </div>
-    {% endif %}
-
-    <div class="has-text-centered" style="margin-top: 2rem;">
-      <a href="{% url 'sponsor_home' %}" class="button is-primary">
-        <span class="icon">
-          <i class="fas fa-home"></i>
-        </span>
-        <span>Back to Dashboard</span>
-      </a>
     </div>
   </div>
 </div>

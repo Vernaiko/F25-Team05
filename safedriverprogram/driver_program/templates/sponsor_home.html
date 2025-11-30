@@ -35,8 +35,8 @@
                 <div class="notification is-light">
                   <p class="mb-2"><strong>Format:</strong> &lt;user type&gt; || First Name | Last Name | email</p>
                   <pre class="has-background-light p-3" style="white-space: pre-wrap;">
-            D || Joe | Driver | joe@example.com
-            S || Jill | Sponsor | jill@example.com
+D || Joe | Driver | joe@example.com
+S || Jill | Sponsor | jill@example.com
                   </pre>
                 </div>
 
@@ -143,6 +143,40 @@
           <span>Generate Driver Point History Report by Date Range</span>
         </a>
       </div>
+    </div>
+
+    <!-- Pending Driver Applications Section -->
+    <div class="box" style="margin-top: 2rem;">
+      <h2 class="title is-4 has-text-centered">Pending Driver Applications</h2>
+
+      {% if pending_driver_list %}
+      <table class="table is-fullwidth is-striped is-hoverable">
+        <thead>
+          <tr>
+            <th>Driver Name</th>
+            <th>Email</th>
+            <th>Application Date</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for driver in pending_driver_list %}
+          <tr>
+            <td>{{ driver.first_name }} {{ driver.last_name }}</td>
+            <td>{{ driver.email }}</td>
+            <td>{{ driver.application_date }}</td>
+            <td>
+              <a href="{% url 'approve_driver' driver.application_id %}" class="button is-success is-small">
+                Approve
+              </a>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p class="has-text-centered">No pending driver applications at this time.</p>
+      {% endif %}
     </div>
 
   </div>

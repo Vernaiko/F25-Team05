@@ -2472,18 +2472,42 @@ def adjust_catalogue(request):
 
         # GET -> build form: preferred categories + available categories from API
         try:
-            resp = requests.get('https://fakestoreapi.com/products/categories', timeout=5)
-            resp.raise_for_status()
-            all_categories = resp.json()
+            from .product_cache import get_cached_categories
+            import time
+            
+            # Retry logic for categories - use minimal headers per API spec
+            all_categories = None
+            for attempt in range(2):
+                try:
+                    if attempt == 0:
+                        # Bare request first
+                        resp = requests.get('https://fakestoreapi.com/products/categories', timeout=10)
+                    else:
+                        # Retry with minimal header
+                        resp = requests.get('https://fakestoreapi.com/products/categories', 
+                                          headers={'Accept': 'application/json'}, timeout=10)
+                    
+                    if resp.status_code == 200:
+                        all_categories = resp.json()
+                        break
+                    elif attempt == 0:
+                        time.sleep(1)
+                except Exception:
+                    if attempt == 0:
+                        time.sleep(1)
+            
+            if not all_categories:
+                # Try cache before giving up
+                all_categories = get_cached_categories()
+                if not all_categories:
+                    raise Exception("API unavailable")
+                
         except Exception:
-            # Fallback: fetch products and derive categories
-            try:
-                resp = requests.get('https://fakestoreapi.com/products', timeout=5)
-                resp.raise_for_status()
-                products = resp.json()
-                all_categories = sorted(list({p.get('category') for p in products if p.get('category')}))
-            except Exception:
-                all_categories = []
+            # Fallback: try to derive from cached products
+            all_categories = get_cached_categories()
+            if not all_categories:
+                # Ultimate fallback: hardcoded common categories
+                all_categories = ['electronics', 'jewelery', "men's clothing", "women's clothing"]
 
         # Load current selection
         cursor.execute("SELECT categories FROM sponsor_catalogue_preferences WHERE sponsor_user_id = %s", [sponsor_id])
@@ -2615,14 +2639,62 @@ def review_driver_status(request):
 
 def view_products(request):
     """Display products from Fake Store API with optional sorting, search, and point conversion."""
+    from .product_cache import get_cached_products, save_products_to_cache
+    
     sort_order = request.GET.get('sort', '')
     search_query = request.GET.get('search', '').strip()
 
     try:
         # Fetch products from the Fake Store API
-        response = requests.get('https://fakestoreapi.com/products')
-        response.raise_for_status()
-        products = response.json()
+        # Per official API spec, use minimal request - complex headers may trigger 403
+        import time
+        
+        max_retries = 3
+        products = None
+        last_error = None
+        
+        for attempt in range(max_retries):
+            try:
+                # Strategy: Start with bare request (per API spec), add minimal headers only on retry
+                if attempt == 0:
+                    # First attempt: bare request exactly like official Python example
+                    response = requests.get('https://fakestoreapi.com/products', timeout=10)
+                else:
+                    # Retry with only essential Accept header
+                    headers = {'Accept': 'application/json'}
+                    response = requests.get('https://fakestoreapi.com/products', headers=headers, timeout=10)
+                
+                if response.status_code == 403:
+                    print(f'Fake Store API returned 403 on attempt {attempt + 1}')
+                    if attempt < max_retries - 1:
+                        time.sleep(1)  # Brief pause before retry
+                        continue
+                
+                response.raise_for_status()
+                products = response.json()
+                break  # Success!
+                
+            except requests.RequestException as e:
+                last_error = e
+                if attempt < max_retries - 1:
+                    time.sleep(1)
+                continue
+        
+        # If all retries failed, try cache fallback
+        if products is None:
+            print('API failed, attempting cache fallback')
+            products = get_cached_products()
+            if not products:
+                # No cache available, raise error
+                if last_error:
+                    raise last_error
+                else:
+                    raise requests.RequestException('Failed to fetch products after retries')
+        else:
+            # Save successful fetch to cache
+            save_products_to_cache(products)
+        
+        # Products successfully fetched (or loaded from cache)
 
         # Sort products if requested
         if sort_order == 'price_asc':
@@ -2677,8 +2749,19 @@ def view_products(request):
         })
 
     except requests.RequestException as e:
+        # Provide a clearer message for 403 responses; fall back to generic otherwise
+        error_message = f"Failed to fetch products: {str(e)}"
+        try:
+            if isinstance(e, requests.HTTPError) and getattr(e.response, 'status_code', None) == 403:
+                error_message = (
+                    "The catalogue service returned 403 Forbidden. "
+                    "Please try again shortly."
+                )
+        except Exception:
+            pass
+
         return render(request, 'products.html', {
-            'error_message': f"Failed to fetch products: {str(e)}",
+            'error_message': error_message,
             'products': [],
             'search_query': search_query,
             'total_products': 0
@@ -3901,6 +3984,8 @@ def review_driver_points(request):
 @db_login_required
 def view_cart(request):
     """Display the logged-in driver's shopping cart."""
+    from .product_cache import get_cached_products
+    
     # Check login and driver role
     if not request.session.get('is_authenticated'):
         messages.error(request, "Please log in to view your cart.")
@@ -3934,23 +4019,38 @@ def view_cart(request):
 
         cart_items = []
         total = 0.0
+        using_cache = False
 
-        # Get live product info from API
+        # Try to get cached products as fallback
+        cached_products = get_cached_products()
+        cached_by_id = {p['id']: p for p in cached_products} if cached_products else {}
+
+        # Get product info from API or cache
         for product_id, qty in rows:
+            product = None
             try:
                 response = requests.get(f"https://fakestoreapi.com/products/{product_id}", timeout=5)
                 if response.status_code == 200:
                     product = response.json()
-                    product['quantity'] = qty
-                    product['subtotal'] = product['price'] * qty
-                    total += product['subtotal']
-
-                    # 💡 Add points conversion for each item
-                    product['price_points'] = int(product['price'] * 100)
-                    product['subtotal_points'] = int(product['subtotal'] * 100)
-                    cart_items.append(product)
             except Exception as e:
-                print(f"Error fetching product {product_id}: {e}")
+                print(f"API error fetching product {product_id}: {e}")
+            
+            # Fall back to cache if API failed
+            if not product and product_id in cached_by_id:
+                product = cached_by_id[product_id]
+                using_cache = True
+            
+            if product:
+                product['quantity'] = qty
+                product['subtotal'] = product['price'] * qty
+                total += product['subtotal']
+
+                # 💡 Add points conversion for each item
+                product['price_points'] = int(product['price'] * 100)
+                product['subtotal_points'] = int(product['subtotal'] * 100)
+                cart_items.append(product)
+            else:
+                print(f"Product {product_id} not found in API or cache")
 
         if not cart_items:
             messages.info(request, "Your cart is empty.")
@@ -4047,6 +4147,8 @@ def remove_from_cart(request, product_id):
 @db_login_required
 def checkout_page(request):
     """Display checkout summary and current points balance."""
+    from .product_cache import get_cached_products
+    
     if not request.session.get('is_authenticated'):
         messages.error(request, "Please log in to proceed to checkout.")
         return redirect('login_page')
@@ -4071,19 +4173,34 @@ def checkout_page(request):
 
         cart_items = []
         total = 0
+        using_cache = False
+
+        # Try to get cached products as fallback
+        cached_products = get_cached_products()
+        cached_by_id = {p['id']: p for p in cached_products} if cached_products else {}
 
         for product_id, qty in rows:
+            product = None
             try:
                 response = requests.get(f"https://fakestoreapi.com/products/{product_id}", timeout=5)
                 if response.status_code == 200:
                     product = response.json()
-                    product['quantity'] = qty
-                    product['subtotal'] = product['price'] * qty
-                    total += product['subtotal']
-                    product['subtotal_points'] = int(product['subtotal'] * 100)
-                    cart_items.append(product)
             except Exception as e:
-                print(f"Error loading product {product_id}: {e}")
+                print(f"API error loading product {product_id}: {e}")
+            
+            # Fall back to cache if API failed
+            if not product and product_id in cached_by_id:
+                product = cached_by_id[product_id]
+                using_cache = True
+            
+            if product:
+                product['quantity'] = qty
+                product['subtotal'] = product['price'] * qty
+                total += product['subtotal']
+                product['subtotal_points'] = int(product['subtotal'] * 100)
+                cart_items.append(product)
+            else:
+                print(f"Product {product_id} not found in API or cache")
 
         points_total = int(total * 100)
 
@@ -4187,6 +4304,8 @@ def confirm_checkout(request):
 @db_login_required
 def confirm_checkout(request):
     """Finalize checkout: deduct points and record purchase."""
+    from .product_cache import get_cached_products
+    
     if request.method != "POST":
         messages.error(request, "Invalid request method.")
         return redirect('checkout_page')
@@ -4208,11 +4327,25 @@ def confirm_checkout(request):
         total_points = 0
         products = []
 
-        # Calculate total from API
+        # Try to get cached products as fallback
+        cached_products = get_cached_products()
+        cached_by_id = {p['id']: p for p in cached_products} if cached_products else {}
+
+        # Calculate total from API or cache
         for product_id, qty in rows:
-            resp = requests.get(f"https://fakestoreapi.com/products/{product_id}", timeout=5)
-            if resp.status_code == 200:
-                product = resp.json()
+            product = None
+            try:
+                resp = requests.get(f"https://fakestoreapi.com/products/{product_id}", timeout=5)
+                if resp.status_code == 200:
+                    product = resp.json()
+            except Exception as e:
+                print(f"API error during checkout for product {product_id}: {e}")
+            
+            # Fall back to cache if API failed
+            if not product and product_id in cached_by_id:
+                product = cached_by_id[product_id]
+            
+            if product:
                 subtotal_pts = int(float(product['price']) * qty * 100)
                 total_points += subtotal_pts
                 products.append({
@@ -4221,6 +4354,9 @@ def confirm_checkout(request):
                     "quantity": qty,
                     "subtotal_pts": subtotal_pts
                 })
+            else:
+                messages.error(request, f"Could not load product {product_id}. Please try again later.")
+                return redirect('checkout_page')
 
         # --- Get current balance from driver_points_transactions ---
         cursor.execute("""
@@ -6088,3 +6224,134 @@ def admin_bulk_upload(request):
             pass
 
     return redirect('account_page')
+
+@db_login_required
+def driver_points_breakdown(request):
+    if request.session.get('account_type') != 'driver':
+        messages.error(request, "Access restricted to drivers.")
+        return redirect('login_page')
+
+    driver_id = request.session.get('user_id')
+    cursor = connection.cursor()
+
+    # Step 1: Get sponsors this driver belongs to
+    cursor.execute("""
+        SELECT s.userID, s.organization
+        FROM sponsor_driver_relationships sr
+        JOIN users s ON s.userID = sr.sponsor_user_id
+        WHERE sr.driver_user_id = %s
+          AND sr.relationship_status = 'active';
+    """, [driver_id])
+
+    sponsor_rows = cursor.fetchall()
+
+    sponsors = []
+
+    for sponsor_id, sponsor_name in sponsor_rows:
+
+        # Step 2: Sum points given by this sponsor
+        cursor.execute("""
+            SELECT COALESCE(SUM(points_amount), 0)
+            FROM wallet_transaction_history
+            WHERE driver_id = %s
+              AND sponsor_id = %s
+              AND transaction_type IN ('reward', 'bonus', 'sponsor_reward');
+        """, [driver_id, sponsor_id])
+
+        total_points = cursor.fetchone()[0]
+
+        sponsors.append({
+            "sponsor_name": sponsor_name,
+            "total_points": total_points
+        })
+
+    return render(request, "driver/points_breakdown.html", {
+        "sponsors": sponsors
+    })
+
+def approve_driver_application(request, application_id):
+    if request.session.get('account_type') != 'sponsor':
+        messages.error(request, "Only sponsors can approve applications.")
+        return redirect('homepage')
+
+    cursor = connection.cursor()
+    try:
+        # Update the sponsor-driver relationship to active
+        cursor.execute("""
+            UPDATE sponsor_driver_relationships
+            SET relationship_status = 'active'
+            WHERE application_id = %s
+        """, [application_id])
+        
+        # Commit the change
+        connection.commit()
+        messages.success(request, "Driver application approved successfully!")
+    except Exception as e:
+        messages.error(request, f"Error approving application: {e}")
+    finally:
+        cursor.close()
+
+    return redirect('account_page')
+
+
+def driver_organizations(request):
+    # Only allow drivers
+    if request.session.get('account_type') != 'driver':
+        messages.error(request, "Only drivers can view organizations.")
+        return redirect('homepage')
+
+    driver_id = request.session.get('user_id')
+    
+    with connection.cursor() as cursor:
+        # Get current active organizations
+        cursor.execute("""
+            SELECT s.userID, s.username, s.email, s.organization
+            FROM sponsor_driver_relationships r
+            JOIN users s ON r.sponsor_user_id = s.userID
+            WHERE r.driver_user_id = %s AND r.relationship_status = 'active'
+        """, [driver_id])
+        organizations = dictfetchall(cursor)
+
+        # Get all available sponsors that the driver has not applied to yet
+        cursor.execute("""
+            SELECT userID, username, organization
+            FROM users
+            WHERE account_type='sponsor'
+              AND userID NOT IN (
+                  SELECT sponsor_user_id
+                  FROM sponsor_driver_relationships
+                  WHERE driver_user_id=%s
+              )
+        """, [driver_id])
+        all_sponsors = dictfetchall(cursor)
+
+    context = {
+        'organizations': organizations,
+        'all_sponsors': all_sponsors,  # For the "Apply" dropdown
+    }
+
+    return render(request, 'driver_organizations.html', context)
+
+
+def apply_sponsor(request):
+    if request.method == 'POST':
+        driver_id = request.session.get('user_id')
+        sponsor_id = request.POST.get('sponsor_id')
+
+        with connection.cursor() as cursor:
+            cursor.execute("""
+                INSERT INTO sponsor_driver_relationships 
+                (sponsor_user_id, driver_user_id, application_id, relationship_status, relationship_start_date)
+                VALUES (%s, %s, NULL, 'pending', NOW())
+            """, [sponsor_id, driver_id])
+
+        messages.success(request, "Application submitted successfully!")
+        return redirect('driver_organizations')
+    return redirect('driver_organizations')
+
+
+# Helper function to return query results as dict
+def dictfetchall(cursor):
+    """Return all rows from a cursor as a dict"""
+    columns = [col[0] for col in cursor.description]
+    return [dict(zip(columns, row)) for row in cursor.fetchall()]

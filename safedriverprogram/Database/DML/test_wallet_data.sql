@@ -1,4 +1,18 @@
 -- ============================================================================
+-- DRIVER POINTS BREAKDOWN BY SPONSOR (NEW QUERY)
+-- ============================================================================
+SELECT 
+    s.organization AS sponsor_org,
+    SUM(wth.points_amount) AS total_points
+FROM wallet_transaction_history wth
+JOIN users s ON s.userID = wth.sponsor_id
+WHERE wth.driver_id = %s
+  AND wth.transaction_type IN ('reward', 'bonus')
+GROUP BY s.organization
+ORDER BY total_points DESC;
+
+
+-- ============================================================================
 -- TEST WALLET DATA FOR DRIVERS 50, 52, 54
 -- ============================================================================
 -- This file contains INSERT statements to populate test data for the driver
